@@ -40,6 +40,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             entity.ToTable("Users");
             entity.Property(user => user.FullName).HasMaxLength(100).IsRequired();
             entity.Property(user => user.Email).HasMaxLength(256).IsRequired();
+            entity.Property(user => user.AvatarUrl).HasMaxLength(2048);
             entity.Property(user => user.LockedReason).HasMaxLength(500);
             entity.HasIndex(user => user.Email).IsUnique();
         });

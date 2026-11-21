@@ -7,7 +7,7 @@ namespace backend.Helpers;
 public static class UserMapping
 {
     public static UserResponse ToResponse(this ApplicationUser user, IEnumerable<string> roles) =>
-        new(user.Id, user.FullName, user.Email ?? string.Empty, user.PhoneNumber, roles.ToList(),
+        new(user.Id, user.FullName, user.Email ?? string.Empty, user.PhoneNumber, user.AvatarUrl, roles.ToList(),
             user.CreatedAt, user.LastLoginAt);
 
     public static string Describe(this IdentityResult result) =>

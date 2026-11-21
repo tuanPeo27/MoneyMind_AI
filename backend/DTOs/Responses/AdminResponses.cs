@@ -6,6 +6,7 @@ public sealed record AdminUserResponse(
     Guid Id,
     string FullName,
     string Email,
+    string? AvatarUrl,
     bool IsActive,
     DateTime? LockedAt,
     string? LockedReason,

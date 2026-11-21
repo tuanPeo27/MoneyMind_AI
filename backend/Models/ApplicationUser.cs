@@ -10,6 +10,7 @@ public sealed class ApplicationUser : IdentityUser<Guid>
     }
 
     public string FullName { get; set; } = string.Empty;
+    public string? AvatarUrl { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime? LockedAt { get; set; }
     public string? LockedReason { get; set; }

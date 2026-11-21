@@ -5,6 +5,7 @@ public sealed record UserResponse(
     string FullName,
     string Email,
     string? PhoneNumber,
+    string? AvatarUrl,
     IReadOnlyList<string> Roles,
     DateTime CreatedAt,
     DateTime? LastLoginAt);

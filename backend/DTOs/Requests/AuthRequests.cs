@@ -23,7 +23,8 @@ public sealed record ResetPasswordRequest(
 
 public sealed record UpdateProfileRequest(
     [Required, StringLength(100)] string FullName,
-    [Phone, StringLength(30)] string? PhoneNumber);
+    [Phone, StringLength(30)] string? PhoneNumber,
+    [Url, StringLength(2048)] string? AvatarUrl = null);
 
 public sealed record ChangePasswordRequest(
     [Required] string CurrentPassword,

@@ -115,6 +115,6 @@ public sealed class AdminUserService(
     }
 
     private static AdminUserResponse Map(ApplicationUser u, IEnumerable<string> roles) =>
-        new(u.Id, u.FullName, u.Email ?? string.Empty, u.IsActive, u.LockedAt, u.LockedReason, u.LastLoginAt,
+        new(u.Id, u.FullName, u.Email ?? string.Empty, u.AvatarUrl, u.IsActive, u.LockedAt, u.LockedReason, u.LastLoginAt,
             u.CreatedAt, roles.ToList());
 }

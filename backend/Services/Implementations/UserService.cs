@@ -23,6 +23,7 @@ public sealed class UserService(UserManager<ApplicationUser> userManager, AppDbC
         var user = await FindAsync(userId);
         user.FullName = request.FullName.Trim();
         user.PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim();
+        user.AvatarUrl = NormalizeAvatarUrl(request.AvatarUrl);
         user.UpdatedAt = DateTime.UtcNow;
 
         var result = await userManager.UpdateAsync(user);
@@ -46,6 +47,18 @@ public sealed class UserService(UserManager<ApplicationUser> userManager, AppDbC
         await db.RefreshTokens
             .Where(token => token.UserId == userId && token.RevokedAt == null)
             .ExecuteUpdateAsync(setters => setters.SetProperty(token => token.RevokedAt, now), cancellationToken);
+    }
+
+    /// <summary>Empty clears the avatar. Only absolute http/https URLs are accepted.</summary>
+    private static string? NormalizeAvatarUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            throw new BadRequestException("Avatar URL phải là địa chỉ http hoặc https hợp lệ.");
+
+        return uri.AbsoluteUri;
     }
 
     private async Task<ApplicationUser> FindAsync(Guid userId)
