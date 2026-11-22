@@ -1,0 +1,10 @@
+{
+  "description": "No end-user application functionality is specified; the requested work only bootstraps an imported project and configures deployment and preview verification.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

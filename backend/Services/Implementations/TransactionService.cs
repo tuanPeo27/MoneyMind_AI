@@ -30,11 +30,11 @@ public sealed class TransactionService(
         }
 
         var total = await source.CountAsync(cancellationToken);
-        var items = await Project(source)
+        var ordered = source
             .OrderByDescending(t => t.TransactionDate).ThenByDescending(t => t.CreatedAt)
             .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
-            .ToListAsync(cancellationToken);
+            .Take(query.PageSize);
+        var items = await Project(ordered).ToListAsync(cancellationToken);
 
         return new PagedResult<TransactionResponse>(items, query.Page, query.PageSize, total);
     }
