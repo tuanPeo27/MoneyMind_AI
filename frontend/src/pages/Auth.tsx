@@ -2,7 +2,8 @@ import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { ChartNoAxesCombined, Eye, EyeOff, Loader2, Mail, Lock, User, AlertCircle, CheckCircle2, ShieldCheck, Sparkles, PiggyBank, ArrowLeft, MailCheck } from 'lucide-react';
 import { useLanguage } from '../i18n';
 import { Button, fieldClass } from '../components/ui';
-import { ApiError, forgotPassword, login, register, resetPassword } from '../lib/auth';
+import { ApiError, forgotPassword, login, loginWithGoogle, register, resetPassword } from '../lib/auth';
+import { GoogleButton, googleSignInEnabled } from '../components/GoogleButton';
 
 export const authPaths = ['/login', '/register', '/forgot-password', '/reset-password'];
 type Navigate = (path: string, replace?: boolean) => void;
@@ -118,6 +119,24 @@ function Submit({ busy, children }: { busy: boolean; children: ReactNode }) {
   return <Button type="submit" disabled={busy} className="w-full !min-h-12 shadow-sm shadow-brand/20">{busy && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}{children}</Button>;
 }
 
+/** or divider + Google button. Signs in or creates the account, then routes admins to /admin. */
+function GoogleSignIn({ navigate, context, onError }: { navigate: Navigate; context: 'signin' | 'signup'; onError: (message: string) => void }) {
+  const { t, language } = useLanguage();
+  const errorText = useErrorText();
+  const [busy, setBusy] = useState(false);
+  if (!googleSignInEnabled) return null;
+  const root = document.documentElement.dataset.theme;
+  const theme = root === 'dark' || (!root && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  return <div className={busy ? 'pointer-events-none opacity-60' : ''} aria-busy={busy}>
+    <div className="my-5 flex items-center gap-3 text-xs text-muted"><span className="h-px flex-1 bg-line" />{t('or')}<span className="h-px flex-1 bg-line" /></div>
+    <GoogleButton context={context} theme={theme} locale={language === 'vi' ? 'vi' : 'en'} onCredential={async idToken => {
+      setBusy(true); onError('');
+      try { const session = await loginWithGoogle(idToken); navigate(session.user.roles.includes('Admin') ? '/admin' : '/', true); }
+      catch (error) { onError(errorText(error)); setBusy(false); }
+    }} />
+  </div>;
+}
+
 function AuthLink({ to, navigate, children }: { to: string; navigate: Navigate; children: ReactNode }) {
   return <a href={to} onClick={e => { e.preventDefault(); navigate(to); }} className="rounded font-medium text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">{children}</a>;
 }
@@ -137,7 +156,7 @@ export function LoginPage({ navigate }: { navigate: Navigate }) {
     setErrors(next); setFormError('');
     if (next.email || next.password) return;
     setBusy(true);
-    try { await login(email.trim(), password); navigate('/', true); }
+    try { const session = await login(email.trim(), password); navigate(session.user.roles.includes('Admin') ? '/admin' : '/', true); }
     catch (error) { setFormError(errorText(error)); }
     finally { setBusy(false); }
   }
@@ -153,6 +172,7 @@ export function LoginPage({ navigate }: { navigate: Navigate }) {
       </div>
       <Submit busy={busy}>{busy ? t('Signing in...') : t('Sign in')}</Submit>
     </form>
+    <GoogleSignIn navigate={navigate} context="signin" onError={setFormError} />
   </AuthShell>;
 }
 
@@ -188,6 +208,7 @@ export function RegisterPage({ navigate }: { navigate: Navigate }) {
       <PasswordField label={t('Confirm password')} name="confirm" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} error={errors.confirm} />
       <Submit busy={busy}>{busy ? t('Creating account...') : t('Create account')}</Submit>
     </form>
+    <GoogleSignIn navigate={navigate} context="signup" onError={setFormError} />
   </AuthShell>;
 }
 

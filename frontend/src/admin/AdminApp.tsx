@@ -1,28 +1,46 @@
 import { useLanguage } from '../i18n';
-import { useState } from 'react';
-import { ChartNoAxesCombined, LayoutDashboard, Users, ArrowLeftRight, Shapes, Sparkles, Settings, ArrowLeft, ChevronRight, Menu, X, ShieldCheck, Activity, Check } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { ChartNoAxesCombined, LayoutDashboard, Users, ArrowLeftRight, Shapes, Sparkles, Settings, LogOut, ChevronRight, Menu, X, ShieldCheck, Activity, Check } from 'lucide-react';
 import { useLocal } from '../hooks/useLocal';
-import { initialUsers, platformTransactions, systemCategories, adminNav, type PlatformUser, type SystemCategory } from './data';
-import { AdminOverview, UserManagement, TransactionMonitoring, CategoryManagement, AIAnalytics, type ConfirmAction } from './AdminPages';
+import { initialUsers, platformTransactions, systemCategories, adminNav, type SystemCategory } from './data';
+import { AdminOverview, UserManagement, TransactionMonitoring, CategoryManagement, AIAnalytics, type AdminUserStats, type ConfirmAction } from './AdminPages';
+import { adminUsersApi, useSession } from '../services';
 import { Button, Card, Badge, Field, IconButton, Modal, SectionHead, fieldClass } from '../components/ui';
 
 const icons = { overview: LayoutDashboard, users: Users, transactions: ArrowLeftRight, categories: Shapes, ai: Sparkles, settings: Settings };
-export function AdminApp({ path, navigate, onReturn, users, setUsers }: {
-  path: string; navigate: (path: string) => void; onReturn: () => void;
-  users: PlatformUser[]; setUsers: (users: PlatformUser[]) => void;
+export function AdminApp({ path, navigate, onSignOut, onStats }: {
+  path: string; navigate: (path: string) => void; onSignOut: () => void;
+  /** Reports the account counts so the AI assistant can talk about them. */
+  onStats?: (stats: AdminUserStats) => void;
 }) {
   const { t } = useLanguage();
   const [mobile, setMobile] = useState(false), [confirmation, setConfirmation] = useState<ConfirmAction | null>(null);
   const [categories, setCategories, categoryError] = useLocal<SystemCategory[]>('mm-system-categories-v1', systemCategories);
   const [events, setEvents] = useLocal<{ time: string; text: string }[]>('mm-admin-audit-v1', []);
   const current = adminNav.find(p => p.path === path) || adminNav[0];
+  const { session } = useSession();
+  const me = session?.user;
+  const initials = (me?.fullName ?? 'Admin').split(' ').filter(Boolean).slice(-2).map(w => w[0]).join('').toUpperCase();
+  // Account numbers for the overview: two count-only requests plus the newest 100 accounts for the growth chart.
+  const [stats, setStats] = useState<AdminUserStats | null>(null);
+  const [statsError, setStatsError] = useState(false);
+  const loadStats = useCallback(async () => {
+    try {
+      const [recent, active] = await Promise.all([
+        adminUsersApi.listUsers({ page: 1, pageSize: 100 }),
+        adminUsersApi.listUsers({ page: 1, pageSize: 1, isActive: true }),
+      ]);
+      const next = { total: recent.totalCount, active: active.totalCount, recent: recent.items };
+      setStats(next); setStatsError(false); onStats?.(next);
+    } catch { setStatsError(true); }
+  }, [onStats]);
+  useEffect(() => { void loadStats(); }, [loadStats]);
   function audit(text: string) {
     setEvents(old => [{ time: new Date().toISOString(), text }, ...old].slice(0, 20));
   }
-  function changeUser(user: PlatformUser) { setUsers(users.map(u => u.id === user.id ? user : u)); audit(`Updated ${user.email}: ${user.role}, ${user.active ? 'active' : 'inactive'}.`); }
   return <div className="min-h-screen overflow-x-clip text-sm text-ink">
     {mobile && <button className="fixed inset-0 z-40 bg-black/60 md:hidden" aria-label="Close administration navigation" onClick={() => setMobile(false)} />}
-    <aside className={`fixed inset-y-0 z-40 flex w-[220px] flex-col border-r border-white/60 bg-surface backdrop-blur-2xl dark:border-white/10 transition-transform duration-300 md:translate-x-0 ${mobile ? '' : '-translate-x-full'}`}>
+    <aside className={`fixed inset-y-0 z-40 flex w-[220px] flex-col border-r border-white/60 bg-surface backdrop-blur-2xl no-dark-blur dark:border-white/10 transition-transform duration-300 md:translate-x-0 ${mobile ? '' : '-translate-x-full'}`}>
       <a href="/admin" onClick={e => { e.preventDefault(); navigate('/admin'); }} className="flex h-[76px] items-center gap-2.5 px-5"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand"><ChartNoAxesCombined className="h-5 w-5 text-on-brand" /></span><span className="text-lg font-semibold tracking-tight">MoneyMind <span className="text-xs text-muted">AI</span></span></a>
       <div className="mx-4 mb-8 flex items-center gap-2 rounded-lg border border-line bg-base px-3 py-3"><ShieldCheck className="h-4 w-4 text-brand" /><span className="text-sm font-medium">Administration</span></div>
       <p className="mb-3 px-6 text-xs tracking-widest text-muted">PLATFORM</p>
@@ -30,16 +48,17 @@ export function AdminApp({ path, navigate, onReturn, users, setUsers }: {
         const Icon = icons[item.icon];
         return <a key={item.path} href={item.path} onClick={e => { e.preventDefault(); navigate(item.path); setMobile(false); }} aria-current={path === item.path ? 'page' : undefined} className={`flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-brand ${current.path === item.path ? 'bg-brand/10 text-brand' : 'text-muted hover:bg-line hover:text-ink'}`}><Icon className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />{item.label}</a>;
       })}</nav>
-      <button onClick={onReturn} className="mx-4 mb-4 flex min-h-11 items-center gap-2 rounded-lg border border-line px-3 text-sm text-muted hover:bg-line hover:text-ink"><ArrowLeft className="h-4 w-4" />User dashboard</button>
-      <div className="flex items-center gap-3 border-t border-line px-5 py-5"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-xs text-brand">QM</span><div><p className="text-sm font-medium">Quang Minh</p><div className="mt-1"><Badge tone="blue">ADMIN · DEMO</Badge></div></div></div>
+      <button onClick={onSignOut} className="mx-4 mb-4 flex min-h-11 items-center gap-2 rounded-lg border border-line px-3 text-sm text-muted hover:bg-line hover:text-ink"><LogOut className="h-4 w-4" />Sign out</button>
+      <div className="flex items-center gap-3 border-t border-line px-5 py-5"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/15 text-xs text-brand">{initials}</span><div className="min-w-0"><p className="truncate text-sm font-medium">{me?.fullName ?? "Administrator"}</p><div className="mt-1"><Badge tone="blue">ADMIN</Badge></div></div></div>
     </aside>
     <div className="min-w-0 md:ml-[220px]"><header className="flex min-h-[76px] items-center justify-between gap-4 border-b border-line px-5 lg:px-8"><div className="flex items-center gap-3"><span className="md:hidden"><IconButton icon={Menu} label="Open administration navigation" onClick={() => setMobile(true)} /></span><span className="text-muted">Admin</span><ChevronRight className="h-3.5 w-3.5 text-muted" /><span>{current.label}</span></div><Badge tone="positive"><Activity className="h-3 w-3" />Local sandbox</Badge></header>
       <main className="mx-auto max-w-[1640px] px-5 pb-32 pt-8 lg:px-8"><div className="mb-6 flex flex-wrap items-center justify-between gap-3"><div><p className="mb-2 text-xs font-medium tracking-[0.13em] text-muted">PLATFORM OPERATIONS</p><h1 className="text-[27px] font-semibold tracking-[-0.04em]">{current.label}</h1></div><span className="text-sm text-muted">{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
-        <div className="mb-6 flex items-start gap-3 rounded-lg border border-line bg-surface px-4 py-3"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand" /><p className="text-sm leading-6 text-muted">Demo administration. Platform sample data is separate from your finances. Role protection is frontend-only; production requires backend authorization.</p></div>
+        <div className="mb-6 flex items-start gap-3 rounded-lg border border-line bg-surface px-4 py-3"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand" /><p className="text-sm leading-6 text-muted">User accounts are live data from the server, and every admin request is authorized by the backend. Transactions, categories, AI analytics and settings on these pages are still sample data.</p></div>
         {categoryError && <p role="alert" className="mb-4 text-sm text-negative">Browser storage unavailable. Category changes will not survive a refresh.</p>}
-        {current.path === '/admin' && <AdminOverview users={users} transactions={platformTransactions} />}
-        {current.path === '/admin/users' && <UserManagement users={users} transactions={platformTransactions} onChange={changeUser} confirm={setConfirmation} />}
-        {current.path === '/admin/transactions' && <TransactionMonitoring transactions={platformTransactions} users={users} categories={categories} />}
+        {statsError && current.path === '/admin' && <p role="alert" className="mb-4 text-sm text-negative">Could not load account statistics. <button className="underline" onClick={() => void loadStats()}>Try again</button></p>}
+        {current.path === '/admin' && <AdminOverview stats={stats} transactions={platformTransactions} />}
+        {current.path === '/admin/users' && <UserManagement currentUserId={me?.id} onChanged={() => void loadStats()} />}
+        {current.path === '/admin/transactions' && <TransactionMonitoring transactions={platformTransactions} users={initialUsers} categories={categories} />}
         {current.path === '/admin/categories' && <CategoryManagement categories={categories} transactions={platformTransactions} confirm={setConfirmation} onSave={category => { setCategories(old => old.some(c => c.id === category.id) ? old.map(c => c.id === category.id ? category : c) : [...old, category]); audit(`Saved system category ${category.name}.`); }} onDelete={id => { setCategories(old => old.filter(c => c.id !== id)); audit(`Deleted unused system category ${id}.`); }} />}
         {current.path === '/admin/ai' && <AIAnalytics />}
         {current.path === '/admin/settings' && <SystemSettings onSave={audit} />}

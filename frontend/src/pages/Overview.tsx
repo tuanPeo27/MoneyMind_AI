@@ -1,5 +1,5 @@
 import { useLanguage } from '../i18n';
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ArrowUpRight, ArrowRight, Wallet, TrendingUp, TrendingDown, Landmark, Sparkles, ChevronRight, Maximize2, Eye, EyeOff } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { type Transaction, type Budget, type Category, money, dateLabel } from '../data';
@@ -15,14 +15,21 @@ export type Totals = { income: number; expense: number; savings: number; balance
 export function getTotals(rows: Transaction[]): Totals {
   const income = rows.filter(t => t.type === 'Income').reduce((s, t) => s + t.amount, 0);
   const expense = rows.filter(t => t.type === 'Expense').reduce((s, t) => s + t.amount, 0);
-  return { income, expense, savings: income - expense, balance: 31000000 + income - expense, rate: income ? (income - expense) / income * 100 : 0 };
+  // alance here is only the period's net. The real account balance comes from BalanceContext (see SummaryCards).
+  return { income, expense, savings: income - expense, balance: income - expense, rate: income ? (income - expense) / income * 100 : 0 };
 }
+/**
+ * Real account balance (opening balances of the user's accounts + every transaction up to the date):
+ * current at the end of the selected period, previous at the end of the period before it. Provided by App.
+ */
+export const BalanceContext = createContext<{ current: number; previous: number } | null>(null);
 export const percentChange = (current: number, previous: number) => previous ? (current - previous) / previous * 100 : 0;
 export function SummaryCards({ totals, previous, hidden = false, onToggleHidden, layout = 'row' }: { totals: Totals; previous: Totals; hidden?: boolean; onToggleHidden?: (next: boolean) => void; layout?: 'row' | 'grid' }) {
   const { t } = useLanguage();
   const { highlight, openAssistant } = useAmbientAI();
+  const balance = useContext(BalanceContext);
   const cards = [
-    { label: 'Total balance', value: totals.balance, previous: previous.balance, icon: Wallet },
+    { label: 'Total balance', value: balance?.current ?? totals.balance, previous: balance?.previous ?? previous.balance, icon: Wallet },
     { label: 'Total income', value: totals.income, previous: previous.income, icon: TrendingUp },
     { label: 'Total expenses', value: totals.expense, previous: previous.expense, icon: TrendingDown, inverse: true },
     { label: 'Savings', value: totals.savings, previous: previous.savings, icon: Landmark },

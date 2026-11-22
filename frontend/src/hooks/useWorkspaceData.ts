@@ -82,6 +82,9 @@ export function useWorkspaceData(userId: string | undefined) {
 
   const categories = useMemo(() => categoryList.filter(c => c.isActive).map(toCategory), [categoryList]);
   const accountNames = useMemo(() => accounts.filter(a => !a.isArchived).map(a => a.name), [accounts]);
+  // Sum of the accounts' starting balances. The backend computes balance = initialBalance + income - expense per
+  // account, so the total balance at any date is this plus the net of all transactions up to that date.
+  const openingBalance = useMemo(() => accounts.reduce((s, a) => s + a.initialBalance, 0), [accounts]);
 
   const saveTransaction = useCallback(async (t: Transaction, editing: boolean) => {
     const account = accounts.find(a => a.name === t.account);
@@ -140,7 +143,7 @@ export function useWorkspaceData(userId: string | undefined) {
   }, []);
 
   return {
-    rows, budgets, categories, accountNames, loading, error, reload: load,
+    rows, budgets, categories, accountNames, openingBalance, loading, error, reload: load,
     saveTransaction, removeTransaction, saveCategory, removeCategory, saveBudget, removeBudget,
   };
 }

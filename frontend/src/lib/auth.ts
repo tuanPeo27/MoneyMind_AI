@@ -2,4 +2,4 @@
 export { ApiError } from '../services/client';
 export { getSession, setSession, useSession } from '../services/session';
 export type { AuthSession, AuthUser } from '../services/session';
-export { login, register, logout, forgotPassword, resetPassword } from '../services/auth';
+export { login, loginWithGoogle, register, logout, forgotPassword, resetPassword } from '../services/auth';

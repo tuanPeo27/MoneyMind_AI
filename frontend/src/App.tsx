@@ -6,7 +6,7 @@ import {
 import { Button, Field, Modal, fieldClass } from './components/ui';
 import { Select } from './components/Select';
 import { TransactionForm } from './components/transactions';
-import Overview, { getTotals } from './pages/Overview';
+import Overview, { BalanceContext, getTotals } from './pages/Overview';
 import { Transactions, Budgets, Categories, Reports, BudgetForm, CategoryForm } from './pages/Management';
 import { Insights } from './pages/Intelligence';
 import SettingsPage from './pages/Settings';
@@ -26,7 +26,8 @@ import { AuthPages, authPaths, useErrorText } from './pages/Auth';
 import { useSession } from './lib/auth';
 import { usersApi } from './services';
 import { useWorkspaceData } from './hooks/useWorkspaceData';
-import { initialUsers, adminNav, platformTransactions, aiUsage, type PlatformUser } from './admin/data';
+import { adminNav, platformTransactions, aiUsage } from './admin/data';
+import type { AdminUserStats } from './admin/AdminPages';
 
 type Dialog =
   | { kind: 'transaction'; value?: Transaction }
@@ -43,18 +44,21 @@ function Workspace() {
   const { theme, setTheme } = useTheme();
   const { session, signOut } = useSession();
   const errorText = useErrorText();
+  // The role comes from the signed-in account. The backend enforces it on every admin endpoint.
+  const role: DemoRole = session?.user.roles.includes('Admin') ? 'ADMIN' : 'USER';
+  // Admin accounts only use the administration area, so they never load personal finance data or notifications.
+  const personalId = role === 'ADMIN' ? undefined : session?.user.id;
   // Transactions, budgets and categories live on the server. Only UI preferences stay in local storage.
-  const data = useWorkspaceData(session?.user.id);
+  const data = useWorkspaceData(personalId);
   const { rows, budgets, categories } = data;
   const [storedProfile, setProfile] = useLocal<Profile>('mm-profile-v1', { name: '', email: '', notifications: true, insights: true });
   const profile = useMemo<Profile>(() => session
     ? { ...storedProfile, name: session.user.fullName, email: session.user.email, phone: session.user.phoneNumber ?? undefined }
     : storedProfile, [storedProfile, session]);
-  // The role comes from the signed-in account. The backend enforces it on every admin endpoint.
-  const role: DemoRole = session?.user.roles.includes('Admin') ? 'ADMIN' : 'USER';
-  const [platformUsers, setPlatformUsers] = useLocal<PlatformUser[]>('mm-platform-users-v1', initialUsers);
+  // Account counts reported by the admin area (from /api/admin/users), shared with the AI assistant context.
+  const [userStats, setUserStats] = useState<AdminUserStats | null>(null);
   const [hidden, setHidden] = useLocal('mm-balance-hidden-v1', false);
-  const notifications = useNotifications(session?.user.id);
+  const notifications = useNotifications(personalId);
   const { path: rawPath, navigate: goTo } = useRoute();
   const { setContext, registerNavigator, openAssistant, closeAssistant, open: assistantOpen } = useAmbientAI();
   // The AI assistant is its own page at /assistant. The workspace stays mounted behind it, on the page the user came from.
@@ -81,28 +85,36 @@ function Workspace() {
       : new Date(prevEnd.getTime() - (end.getTime() - start.getTime()));
     return rows.filter(t => t.date >= localDate(prevStart) && t.date <= localDate(prevEnd));
   }, [rows, range.start, range.end, period]);
+  // Real balance = account opening balances + net of every transaction up to the date (not just the period's rows).
+  const balances = useMemo(() => {
+    const at = (date: string) => rows.reduce((s, t) => t.date <= date ? s + (t.type === 'Income' ? t.amount : -t.amount) : s, data.openingBalance);
+    const before = new Date(range.start + 'T12:00:00'); before.setDate(before.getDate() - 1);
+    return { current: at(range.end), previous: at(localDate(before)) };
+  }, [rows, data.openingBalance, range.start, range.end]);
   const financial = useMemo<FinancialContext>(() => ({
     route: path,
     page: admin ? adminNav.find(item => item.path === path)?.label || 'Admin Overview' : page,
     period: admin ? 'Platform demo sample' : period, range,
     rows: admin ? [] : filtered, previous: admin ? [] : previous,
     budgets: admin ? [] : budgets, selection: admin ? undefined : selection,
-    metrics: admin ? undefined : getTotals(filtered),
+    metrics: admin ? undefined : { ...getTotals(filtered), balance: balances.current },
     platform: admin ? {
-      users: platformUsers.length, active: platformUsers.filter(u => u.active).length,
+      users: userStats?.total ?? 0, active: userStats?.active ?? 0,
       requests: aiUsage.reduce((s, d) => s + d.requests, 0),
       volume: platformTransactions.reduce((s, t) => s + t.amount, 0),
     } : undefined,
-  }), [path, admin, page, period, range.start, range.end, filtered, previous, budgets, selection, platformUsers]);
+  }), [path, admin, page, period, range.start, range.end, filtered, previous, budgets, selection, userStats, balances]);
   useEffect(() => { setContext(financial); }, [financial, setContext]);
   // Everything except the auth pages needs a signed-in account.
   useEffect(() => {
     if (!session && !authPage) goTo('/login', true);
-    else if (session && (path === '/login' || path === '/register')) goTo('/', true);
-  }, [session, authPage, path, goTo]);
+    else if (session && (path === '/login' || path === '/register')) goTo(role === 'ADMIN' ? '/admin' : '/', true);
+  }, [session, authPage, path, role, goTo]);
   useEffect(() => {
     if (authPage || !session) return;
-    if (admin && role !== 'ADMIN') {
+    // Admin accounts are confined to /admin; user accounts are kept out of it.
+    if (!admin && role === 'ADMIN') goTo('/admin', true);
+    else if (admin && role !== 'ADMIN') {
       goTo('/', true);
       setToast({ message: 'Administrator access is required. Returned to your dashboard.' });
     } else if (admin && !adminNav.some(item => item.path === path)) goTo('/admin', true);
@@ -110,6 +122,7 @@ function Workspace() {
   }, [authPage, session, admin, role, path, goTo]);
   useEffect(() => {
     registerNavigator((target: Highlight) => {
+      if (role === 'ADMIN') return; // highlights point at the personal dashboard, which admins do not have
       goTo('/');
       setDialog(null);
       requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -119,7 +132,7 @@ function Workspace() {
         });
       }));
     });
-  }, [goTo, registerNavigator]);
+  }, [goTo, registerNavigator, role]);
   // Keep the URL and the assistant's open state in sync (button/Ctrl+K, back button, deep link).
   const pushedAssistant = useRef(false), wasOpen = useRef(assistantOpen);
   useEffect(() => {
@@ -184,15 +197,16 @@ function Workspace() {
   }
   if (authPage) return <div className="min-h-screen overflow-x-clip font-sans text-sm text-ink antialiased"><AuthPages path={path} navigate={goTo} /></div>;
   if (!session) return null; // redirecting to /login
+  if (role === 'ADMIN' && !admin) return null; // redirecting to /admin
   const close = () => setDialog(null);
   const nowMonth = new Date().toLocaleDateString(locale, { month: 'long', year: 'numeric' });
   const firstName = profile.name.trim().split(' ').pop() || 'Chương';
   return <div className="min-h-screen overflow-x-clip font-sans text-sm text-ink antialiased">
     <AmbientShell>
       {admin && role === 'ADMIN' ? <AdminApp
-        path={path} navigate={goTo} onReturn={() => goTo('/')}
-        users={platformUsers} setUsers={setPlatformUsers}
-      /> : <UserLayout
+        path={path} navigate={goTo} onSignOut={() => { void signOut().then(() => goTo('/login')); }}
+        onStats={setUserStats}
+      /> : <BalanceContext.Provider value={balances}><UserLayout
         page={page} profile={profile} onNavigate={navigate} search={search} setSearch={setSearch} transactions={rows} categories={categories}
         onExport={() => exportRows(filtered)} role={role} onAdmin={() => { if (role === 'ADMIN') goTo('/admin'); }}
         onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} theme={theme} setTheme={setTheme}
@@ -254,7 +268,7 @@ function Workspace() {
         }} totals={getTotals(filtered)} previous={getTotals(previous)} hidden={hidden} setHidden={setHidden} signedIn role={role} />}
         {page === 'Notifications' && <NotificationsPage items={notifications.items} onMarkAllRead={notifications.markAllRead} onMarkRead={notifications.markRead} onRemove={notifications.remove} onClear={notifications.clear} />}
         {page === 'Settings' && <SettingsPage profile={profile} onSave={p => { setProfile({ ...storedProfile, notifications: p.notifications, insights: p.insights }); notify('Preferences saved on this browser.'); }} onExport={() => exportRows(rows)} role={role} theme={theme} setTheme={setTheme} />}
-      </UserLayout>}
+      </UserLayout></BalanceContext.Provider>}
     </AmbientShell>
     {dialog?.kind === 'transaction' && <TransactionForm transaction={dialog.value} categories={categories} accounts={data.accountNames} onClose={close}
       onAnalyze={dialog.value ? () => { close(); openAssistant('Explain this selected transaction.'); } : undefined}

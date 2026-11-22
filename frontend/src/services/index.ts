@@ -12,3 +12,4 @@ export * as budgetsApi from './budgets';
 export * as goalsApi from './goals';
 export * as dashboardApi from './dashboard';
 export * as notificationsApi from './notifications';
+export * as adminUsersApi from './adminUsers';

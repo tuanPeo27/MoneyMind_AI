@@ -471,4 +471,5 @@ export const vi: Record<string, string> = {
   'Current password': 'Mật khẩu hiện tại',
   'New password (8 or more characters)': 'Mật khẩu mới (từ 8 ký tự)',
   'Confirm new password': 'Xác nhận mật khẩu mới',
+  'or': 'hoặc',
 };

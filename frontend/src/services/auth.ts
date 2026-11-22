@@ -14,6 +14,13 @@ export async function register(fullName: string, email: string, password: string
   return session;
 }
 
+/** Sign in (or sign up) with the ID token Google Identity Services returned. The backend verifies it. */
+export async function loginWithGoogle(idToken: string) {
+  const session = await getData(http.post<AuthResponse>('/auth/google', { idToken }));
+  setSession(session);
+  return session;
+}
+
 /** Clear the local session and revoke the refresh token on the server (best effort). */
 export async function logout() {
   const current = getSession();

@@ -1,5 +1,6 @@
 import { useLanguage } from '../i18n';
 import { useEffect, useId, useRef, type ReactNode, type ButtonHTMLAttributes } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ArrowUpRight, ArrowDownRight, type LucideIcon } from 'lucide-react';
 import { LiquidButton } from './LiquidButton';
 
@@ -58,7 +59,9 @@ export function Modal({ title, children, onClose, footer, wide = false }: { titl
     document.addEventListener('keydown', key);
     return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', key); previous?.focus(); };
   }, []);
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1b0f2a]/35 p-3 backdrop-blur-md sm:p-6" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+  // Rendered into <body>: an ancestor with a transform (e.g. a .glass card) would otherwise become the containing
+  // block of `position: fixed`, so the dialog would be centred and blurred inside that card instead of the screen.
+  return createPortal(<div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#1b0f2a]/35 p-3 backdrop-blur-md sm:p-6" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
     <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId} className={`flex max-h-[calc(100dvh-24px)] w-full flex-col overflow-hidden glass-strong rounded-3xl text-ink sm:max-h-[min(90dvh,800px)] ${wide ? 'max-w-xl' : 'max-w-lg'}`}>
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-line px-5 py-3 sm:px-6">
         <h2 id={titleId} className="text-lg font-semibold tracking-tight text-ink">{t(title)}</h2>
@@ -67,7 +70,7 @@ export function Modal({ title, children, onClose, footer, wide = false }: { titl
       <div className="min-h-0 overflow-y-auto overscroll-contain px-5 py-5 [scrollbar-color:var(--color-line)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-line [&::-webkit-scrollbar-track]:bg-transparent sm:px-6 sm:py-6">{children}</div>
       {footer && <div className="shrink-0 border-t border-line px-5 py-4 sm:px-6">{footer}</div>}
     </div>
-  </div>;
+  </div>, document.body);
 }
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="block space-y-2 text-sm font-medium"><span>{label}</span>{children}</label>;

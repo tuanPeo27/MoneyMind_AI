@@ -41,14 +41,25 @@ function PromptChips({ limit = 4 }: { limit?: number }) {
   return <div className="flex flex-wrap justify-center gap-2">{prompts.slice(0, limit).map(prompt => <button key={prompt} onClick={() => send(prompt)} disabled={busy} className="flex min-h-11 items-center gap-2 glass rounded-xl px-3.5 py-2 text-left text-sm text-muted transition-[translate,box-shadow,color] duration-300 hover:-translate-y-0.5 hover:text-ink hover:shadow-[0_8px_30px_-12px_#8B5CF6] focus-visible:ring-2 focus-visible:ring-ai disabled:cursor-not-allowed motion-reduce:transform-none">{prompt}<ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /></button>)}</div>;
 }
 /** Floating button in the bottom-right corner (`data-ai-trigger`). The AI page grows out of its shape and shrinks back into it. */
+/** Fired by the overlay once its closing animation has fully finished (it has become the button again). */
+const AI_CLOSED_EVENT = 'mm-ai-closed';
 export function AmbientAIFab() {
   const { t } = useLanguage();
   const { open, openAssistant } = useAmbientAI();
   const reduce = useReducedMotion();
-  return <div aria-hidden={open || undefined} className={`group/fab fixed bottom-24 right-4 z-30 hover:-translate-y-1 md:bottom-6 md:right-6 ${open ? 'pointer-events-none opacity-0' : 'opacity-100 transition-[opacity,translate] delay-300 duration-300 ease-out'}`}>
+  // The button and the AI page are one object and never on screen together: the button disappears the instant the
+  // page starts opening and only comes back when the closing page has shrunk all the way into it.
+  const [hidden, setHidden] = useState(open);
+  useEffect(() => {
+    if (open) { setHidden(true); return; }
+    const show = () => setHidden(false);
+    window.addEventListener(AI_CLOSED_EVENT, show);
+    return () => window.removeEventListener(AI_CLOSED_EVENT, show);
+  }, [open]);
+  return <div aria-hidden={hidden || undefined} className={`group/fab fixed bottom-24 right-4 z-30 hover:-translate-y-1 md:bottom-6 md:right-6 ${hidden ? 'pointer-events-none invisible' : 'transition-[translate] duration-300 ease-out'}`}>
     <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-full transition-opacity duration-300 group-hover/fab:opacity-0 group-focus-within/fab:opacity-0 motion-safe:animate-[fab-ring_2.8s_ease-out_infinite]" />
     <motion.button style={{ borderRadius: 28 }} transition={reduce ? { duration: 0 } : MORPH_SPRING}
-      data-ai-trigger tabIndex={open ? -1 : 0} onClick={() => openAssistant()} aria-label={t('Ask AI Assistant')} title={`${t('Ask AI Assistant')} (${/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'} K)`}
+      data-ai-trigger tabIndex={hidden ? -1 : 0} onClick={() => openAssistant()} aria-label={t('Ask AI Assistant')} title={`${t('Ask AI Assistant')} (${/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'} K)`}
       className="relative grid h-14 grid-cols-[auto_0fr] items-center bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] px-4 text-white shadow-[0_0_30px_-4px_rgba(139,92,246,0.7)] transition-[grid-template-columns,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/fab:grid-cols-[auto_1fr] group-hover/fab:shadow-[0_0_38px_-2px_rgba(236,72,153,0.7)] focus-visible:grid-cols-[auto_1fr] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai focus-visible:ring-offset-2 focus-visible:ring-offset-transparent active:scale-95">
       <Sparkles className="h-6 w-6 shrink-0 transition-transform duration-500 group-hover/fab:rotate-12 group-hover/fab:scale-110" aria-hidden="true" />
       <span className="min-w-0 overflow-hidden"><span className="block whitespace-nowrap pl-3 pr-1 text-sm font-semibold opacity-0 transition-opacity duration-300 group-hover/fab:opacity-100 group-focus-within/fab:opacity-100">{t('Ask AI Assistant')}</span></span>
@@ -82,7 +93,9 @@ export function AmbientAIOverlay() {
   const { t } = useLanguage();
   const { open, closeAssistant, financial, messages, busy, clear, storageError, send } = useAmbientAI();
   const zoom = useViewportZoom();
-  return <AnimatePresence>{open && <FocusedAssistant key="ai" onClose={closeAssistant}>
+  // `custom` reaches the exiting surface at the moment of closing, so it shrinks into where the button is now
+  // (at rest), not where it was when the assistant opened (possibly lifted by hover or pressed in).
+  return <AnimatePresence custom={open ? undefined : aiButtonShape(true)} onExitComplete={() => window.dispatchEvent(new Event(AI_CLOSED_EVENT))}>{open && <FocusedAssistant key="ai" onClose={closeAssistant}>
     <EdgeGlow />
     <div style={{ zoom, height: `calc(100dvh / ${zoom})` }} className={`relative z-10 mx-auto flex w-full max-w-[780px] flex-col px-5 pb-5 pt-5 sm:px-8 sm:py-8`}>
       <div className="ai-rise mb-5 flex shrink-0 items-center justify-between gap-3"><span className="flex items-center gap-2 text-sm font-medium"><IconButton icon={ArrowLeft} label={t("Back")} onClick={closeAssistant} /><Sparkles className="h-4 w-4 text-ai" />MoneyMind<span className="text-muted">/</span><span className="text-muted">{t("AI Assistant")}</span></span><div className="flex items-center gap-2">{messages.length > 0 && <IconButton icon={Plus} label={t("Start a new conversation")} onClick={clear} disabled={busy} />}<span className="hidden text-xs text-muted sm:block">esc</span></div></div>
@@ -92,18 +105,32 @@ export function AmbientAIOverlay() {
     </div>
   </FocusedAssistant>}</AnimatePresence>;
 }
+/**
+ * `clip-path` matching the floating AI button: its box with fully rounded ends (circle, or pill when expanded).
+ * The size comes from offsetWidth/offsetHeight, which ignore the `active:scale-95` press, so a click does not
+ * shrink the shape. `collapsed` uses the resting circle (square, aligned to the right edge) for closing.
+ */
+type ButtonShape = { clip: string; left: number; top: number; width: number; height: number };
+function aiButtonShape(collapsed: boolean): ButtonShape {
+  const el = document.querySelector<HTMLElement>('[data-ai-trigger]');
+  // The overlay is `fixed inset-0`, so it spans the viewport *without* the scrollbar (reserved by scrollbar-gutter).
+  // innerWidth includes the scrollbar and would push the right inset ~15px too far, notching the circle.
+  const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
+  const box = el?.getBoundingClientRect();
+  const height = el?.offsetHeight || 56, width = collapsed ? height : (el?.offsetWidth || 56);
+  // Centre of the button as drawn (includes the hover lift), then the unscaled size around it.
+  const cy = box?.width ? box.top + box.height / 2 : h - 52;
+  const right = box?.width ? box.left + box.width / 2 + (el!.offsetWidth / 2) : w - 24;
+  const top = cy - height / 2, left = right - width;
+  return { clip: `inset(${top}px ${w - right}px ${h - (top + height)}px ${left}px round ${height / 2}px)`, left, top, width, height };
+}
 function FocusedAssistant({ children, onClose }: { children: ReactNode; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
   // The surface is clipped to the button's own box with rounded corners (a circle, or a pill while the button is
-  // expanded on hover) and opens into the full-screen rectangle. Closing reverses it into the collapsed circle.
-  const [shape] = useState(() => {
-    const box = document.querySelector('[data-ai-trigger]')?.getBoundingClientRect();
-    const w = window.innerWidth, h = window.innerHeight;
-    const b = box?.width ? box : { top: h - 80, right: w - 24, bottom: h - 24, left: w - 80, height: 56 };
-    const clip = (left: number) => `inset(${b.top}px ${w - b.right}px ${h - b.bottom}px ${left}px round ${b.height / 2}px)`;
-    return { open: clip(b.left), closed: clip(b.right - b.height), full: 'inset(0px 0px 0px 0px round 0px)' };
-  });
+  // expanded on hover) and opens into the full-screen rectangle. Closing reverses it into the button's circle.
+  const [openFrom] = useState(() => aiButtonShape(false));
+  const full = 'inset(0px 0px 0px 0px round 0px)';
   const ease = [0.22, 1, 0.36, 1] as const;
   useEffect(() => {
     const oldOverflow = document.body.style.overflow;
@@ -126,11 +153,23 @@ function FocusedAssistant({ children, onClose }: { children: ReactNode; onClose:
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} />
     {/* the surface: circle/pill at the button -> full-screen rectangle, and back into the circle on close */}
     <motion.div aria-hidden="true" className="ai-backdrop absolute inset-0" style={{ willChange: 'clip-path' }}
-      initial={{ clipPath: shape.open }} animate={{ clipPath: shape.full, transition: reduce ? { duration: 0 } : { duration: 0.55, ease } }}
-      exit={{ clipPath: shape.closed, transition: reduce ? { duration: 0 } : { delay: 0.1, duration: 0.45, ease } }}>
-      {/* begins in the button's gradient so the button itself appears to open up */}
-      <motion.div className="absolute inset-0 bg-gradient-to-br from-[#8B5CF6] to-[#EC4899]" initial={{ opacity: 1 }}
-        animate={{ opacity: 0, transition: reduce ? { duration: 0 } : { duration: 0.35, delay: 0.05 } }} />
+      initial={{ clipPath: openFrom.clip }} animate={{ clipPath: full, transition: reduce ? { duration: 0 } : { duration: 0.55, ease } }}
+      variants={{ closed: (to?: ButtonShape) => ({ clipPath: (to ?? aiButtonShape(true)).clip, transition: reduce ? { duration: 0 } : { delay: 0.1, duration: 0.45, ease } }) }}
+      exit="closed">
+      {/* A copy of the button (gradient + icon) sitting exactly on it. It is gone within the first ~5% of opening
+          (0.03s of 0.55s) and fades back in during the last part of closing, so the page turns into the button. */}
+      <motion.div className="absolute flex items-center justify-center bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] text-white"
+        style={{ left: openFrom.left, top: openFrom.top, width: openFrom.width, height: openFrom.height, borderRadius: 9999 }}
+        initial={{ opacity: 1 }} animate={{ opacity: 0, transition: { duration: reduce ? 0 : 0.03 } }}
+        variants={{ closed: (to?: ButtonShape) => {
+          const b = to ?? aiButtonShape(true);
+          const jump = { duration: 0 };
+          return { opacity: 1, left: b.left, top: b.top, width: b.width, height: b.height,
+            transition: { left: jump, top: jump, width: jump, height: jump, opacity: reduce ? jump : { delay: 0.3, duration: 0.25 } } };
+        } }}
+        exit="closed">
+        <Sparkles className="h-6 w-6" aria-hidden="true" />
+      </motion.div>
     </motion.div>
     {/* Opening is the close played backwards: the surface first grows out of the button to full screen, and only
         then the page fades in (closing fades the page out first, then shrinks the surface). The staggered

@@ -65,10 +65,20 @@
   animation: ai-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+/* scrollbar-gutter keeps the scrollbar's space reserved while overlays lock scrolling (body overflow: hidden),
+   so the page does not shift sideways when the AI page, a modal or an expanded card opens or closes. */
+html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; scrollbar-gutter: stable; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 :root[data-theme='light'] { color-scheme: light; }
 :root[data-theme='dark'] { color-scheme: dark; }
+/* Dark mode: no backdrop blur on cards and sidebars. Chromium (Chrome, Edge, Brave) re-renders backdrop-filter in
+   tiles when something nearby repaints on hover, and the tile edges show up as bright streaks on dark surfaces.
+   These surfaces only sit over the page's already-blurred ambient glow (no content scrolls beneath them), so the
+   blur adds nothing visible there. Popovers, menus, the sticky header and dialogs keep their blur. */
+:root[data-theme='dark'] :is(.glass, .no-dark-blur) { -webkit-backdrop-filter: none; backdrop-filter: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) :is(.glass, .no-dark-blur) { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
 
 ::selection {
   background: var(--color-brand);

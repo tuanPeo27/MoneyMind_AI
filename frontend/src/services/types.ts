@@ -87,3 +87,11 @@ export type TransactionQuery = {
   accountId?: string; categoryId?: string; type?: TransactionType; search?: string;
 };
 export type NotificationQuery = { page?: number; pageSize?: number; unreadOnly?: boolean };
+
+// --- Admin: users (AdminUsersController / IAdminUserService) ---
+export type AdminUserResponse = {
+  id: string; fullName: string; email: string; avatarUrl?: string | null; isActive: boolean;
+  lockedAt?: string | null; lockedReason?: string | null; lastLoginAt?: string | null; createdAt: string; roles: string[];
+};
+/** `search` matches full name or email. `isActive` false = locked accounts. */
+export type AdminUserQuery = { page?: number; pageSize?: number; search?: string; isActive?: boolean };
