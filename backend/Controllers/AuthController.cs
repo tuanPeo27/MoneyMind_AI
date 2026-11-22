@@ -22,6 +22,12 @@ public sealed class AuthController(IAuthService authService, ICurrentUserService
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request, CancellationToken ct) =>
         Ok(await authService.LoginAsync(request, ct));
 
+    /// <summary>Signs in (or registers) with a Google ID token from Google Identity Services.</summary>
+    [HttpPost("google")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthResponse>> Google(GoogleLoginRequest request, CancellationToken ct) =>
+        Ok(await authService.GoogleLoginAsync(request, ct));
+
     [HttpPost("refresh")]
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponse>> Refresh(RefreshTokenRequest request, CancellationToken ct) =>
