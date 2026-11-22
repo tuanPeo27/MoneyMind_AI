@@ -35,6 +35,14 @@ public sealed class SeedOptions
     public string AdminFullName { get; set; } = "System Admin";
 }
 
+public sealed class GoogleOptions
+{
+    public const string SectionName = "Google";
+
+    /// <summary>OAuth Client ID (Web application). It is public, not a secret.</summary>
+    public string ClientId { get; set; } = string.Empty;
+}
+
 public sealed class SmtpOptions
 {
     public const string SectionName = "Smtp";

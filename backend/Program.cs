@@ -40,6 +40,7 @@ builder.Services.AddOptions<AppOptions>()
     .ValidateOnStart();
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
 builder.Services.Configure<SeedOptions>(builder.Configuration.GetSection(SeedOptions.SectionName));
+builder.Services.Configure<GoogleOptions>(builder.Configuration.GetSection(GoogleOptions.SectionName));
 
 // Identity
 builder.Services

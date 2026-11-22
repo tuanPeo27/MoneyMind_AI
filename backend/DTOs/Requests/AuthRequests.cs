@@ -11,6 +11,9 @@ public sealed record LoginRequest(
     [Required, EmailAddress] string Email,
     [Required] string Password);
 
+/// <param name="IdToken">The Google ID token (JWT) returned by Google Identity Services on the client.</param>
+public sealed record GoogleLoginRequest([Required] string IdToken);
+
 public sealed record RefreshTokenRequest([Required] string RefreshToken);
 
 public sealed record LogoutRequest([Required] string RefreshToken);

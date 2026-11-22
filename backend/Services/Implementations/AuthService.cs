@@ -5,6 +5,7 @@ using backend.Helpers;
 using backend.Models;
 using backend.Options;
 using backend.Services.Interfaces;
+using Google.Apis.Auth;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -19,6 +20,7 @@ public sealed class AuthService(
     IEmailService emailService,
     ICurrentUserService currentUser,
     IOptions<AppOptions> appOptions,
+    IOptions<GoogleOptions> googleOptions,
     ILogger<AuthService> logger) : IAuthService
 {
     private const string InvalidCredentials = "Email hoặc mật khẩu không đúng.";
@@ -77,6 +79,82 @@ public sealed class AuthService(
         await userManager.UpdateAsync(user);
         return await IssueTokensAsync(user, cancellationToken);
     }
+
+    public async Task<AuthResponse> GoogleLoginAsync(GoogleLoginRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        const string provider = "Google";
+
+        var clientId = googleOptions.Value.ClientId;
+        if (string.IsNullOrWhiteSpace(clientId))
+            throw new ServiceUnavailableException("Đăng nhập bằng Google chưa được cấu hình.");
+
+        // Checks signature, expiry, issuer and that the token was issued for our Client ID.
+        GoogleJsonWebSignature.Payload payload;
+        try
+        {
+            payload = await GoogleJsonWebSignature.ValidateAsync(request.IdToken,
+                new GoogleJsonWebSignature.ValidationSettings { Audience = [clientId] });
+        }
+        catch (InvalidJwtException)
+        {
+            throw new UnauthorizedAppException("Token Google không hợp lệ.");
+        }
+
+        if (!payload.EmailVerified || string.IsNullOrWhiteSpace(payload.Email))
+            throw new UnauthorizedAppException("Email Google chưa được xác minh.");
+
+        var email = NormalizeEmail(payload.Email);
+
+        // 1) Known Google account, 2) existing account with the same email, 3) new account.
+        var user = await userManager.FindByLoginAsync(provider, payload.Subject);
+        if (user is null)
+        {
+            user = await userManager.FindByEmailAsync(email);
+            if (user is null)
+            {
+                user = new ApplicationUser
+                {
+                    FullName = string.IsNullOrWhiteSpace(payload.Name) ? email : payload.Name.Trim(),
+                    Email = email,
+                    UserName = email,
+                    EmailConfirmed = true,
+                    AvatarUrl = SafeAvatarUrl(payload.Picture)
+                };
+
+                var created = await userManager.CreateAsync(user);
+                if (!created.Succeeded) throw new BadRequestException(created.Describe());
+
+                if (!await roleManager.RoleExistsAsync(Roles.User))
+                    await roleManager.CreateAsync(new IdentityRole<Guid>(Roles.User));
+
+                var roleResult = await userManager.AddToRoleAsync(user, Roles.User);
+                if (!roleResult.Succeeded)
+                {
+                    await userManager.DeleteAsync(user);
+                    logger.LogError("Could not assign role to new Google user: {Errors}", roleResult.Describe());
+                    throw new InvalidOperationException("Could not complete registration.");
+                }
+            }
+
+            var linked = await userManager.AddLoginAsync(user,
+                new UserLoginInfo(provider, payload.Subject, provider));
+            if (!linked.Succeeded) throw new BadRequestException(linked.Describe());
+        }
+
+        EnsureActive(user);
+
+        // Fill the avatar only when the user has none, so a chosen avatar is never overwritten.
+        if (string.IsNullOrEmpty(user.AvatarUrl)) user.AvatarUrl = SafeAvatarUrl(payload.Picture);
+        user.LastLoginAt = DateTime.UtcNow;
+        await userManager.UpdateAsync(user);
+        return await IssueTokensAsync(user, cancellationToken);
+    }
+
+    private static string? SafeAvatarUrl(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && url!.Length <= 2048
+            ? uri.AbsoluteUri
+            : null;
 
     public async Task<AuthResponse> RefreshAsync(RefreshTokenRequest request, CancellationToken cancellationToken = default)
     {
