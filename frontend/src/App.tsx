@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, CalendarDays, ChevronDown, Check, X, ArrowUpRight } from 'lucide-react';
 import {
-  type Page, type Transaction, type Budget, type Category, seedTransactions,
-  initialBudgets, initialCategories, today, localDate, usePeriodRange, dateLabel,
+  type Page, type Transaction, type Budget, type Category, today, localDate, usePeriodRange, dateLabel,
 } from './data';
 import { Button, Field, Modal, fieldClass } from './components/ui';
 import { Select } from './components/Select';
@@ -13,18 +12,20 @@ import { Insights } from './pages/Intelligence';
 import SettingsPage from './pages/Settings';
 import WorkspacePage from './pages/Workspace';
 import NotificationsPage from './pages/Notifications';
-import { useNotifications, type NotificationKind } from './hooks/useNotifications';
+import { useNotifications } from './hooks/useNotifications';
 import { UserLayout, type Profile } from './components/layout/UserLayout';
 import { useLocal } from './hooks/useLocal';
 import { useTheme } from './hooks/useTheme';
-import { useRoute, pagePaths, demoRole } from './routing';
+import { useRoute, pagePaths, type DemoRole } from './routing';
 import { LanguageProvider, useLanguage } from './i18n';
 import { AmbientAIProvider, useAmbientAI } from './components/ambient-ai/AmbientAIProvider';
 import { AmbientShell, AmbientAIOverlay, AmbientAIFab, AssistantHome } from './components/ambient-ai/AmbientAI';
 import { type FinancialContext, type Highlight } from './components/ambient-ai/mockAssistant';
 import { AdminApp } from './admin/AdminApp';
-import { AuthPages, authPaths } from './pages/Auth';
+import { AuthPages, authPaths, useErrorText } from './pages/Auth';
 import { useSession } from './lib/auth';
+import { usersApi } from './services';
+import { useWorkspaceData } from './hooks/useWorkspaceData';
 import { initialUsers, adminNav, platformTransactions, aiUsage, type PlatformUser } from './admin/data';
 
 type Dialog =
@@ -40,19 +41,20 @@ export default function App() {
 function Workspace() {
   const { t, locale } = useLanguage();
   const { theme, setTheme } = useTheme();
-  // Existing personal data keys and CRUD behavior are intentionally retained.
-  const [rows, setRows, storageError] = useLocal<Transaction[]>('mm-transactions-v1', seedTransactions);
-  const [budgets, setBudgets, budgetStorageError] = useLocal<Budget[]>('mm-budgets-v1', initialBudgets);
-  const [categories, setCategories, categoryStorageError] = useLocal<Category[]>('mm-categories-v1', initialCategories);
-  const [storedProfile, setProfile] = useLocal<Profile>('mm-profile-v1', {
-    name: 'Nguyễn Minh Chương', email: 'chuong.nguyen@gmail.com', notifications: true, insights: true,
-  });
   const { session, signOut } = useSession();
-  const profile = useMemo<Profile>(() => session ? { ...storedProfile, name: session.user.fullName, email: session.user.email } : storedProfile, [storedProfile, session]);
-  const role = demoRole;
+  const errorText = useErrorText();
+  // Transactions, budgets and categories live on the server. Only UI preferences stay in local storage.
+  const data = useWorkspaceData(session?.user.id);
+  const { rows, budgets, categories } = data;
+  const [storedProfile, setProfile] = useLocal<Profile>('mm-profile-v1', { name: '', email: '', notifications: true, insights: true });
+  const profile = useMemo<Profile>(() => session
+    ? { ...storedProfile, name: session.user.fullName, email: session.user.email, phone: session.user.phoneNumber ?? undefined }
+    : storedProfile, [storedProfile, session]);
+  // The role comes from the signed-in account. The backend enforces it on every admin endpoint.
+  const role: DemoRole = session?.user.roles.includes('Admin') ? 'ADMIN' : 'USER';
   const [platformUsers, setPlatformUsers] = useLocal<PlatformUser[]>('mm-platform-users-v1', initialUsers);
   const [hidden, setHidden] = useLocal('mm-balance-hidden-v1', false);
-  const notifications = useNotifications();
+  const notifications = useNotifications(session?.user.id);
   const { path: rawPath, navigate: goTo } = useRoute();
   const { setContext, registerNavigator, openAssistant, closeAssistant, open: assistantOpen } = useAmbientAI();
   // The AI assistant is its own page at /assistant. The workspace stays mounted behind it, on the page the user came from.
@@ -93,14 +95,19 @@ function Workspace() {
     } : undefined,
   }), [path, admin, page, period, range.start, range.end, filtered, previous, budgets, selection, platformUsers]);
   useEffect(() => { setContext(financial); }, [financial, setContext]);
+  // Everything except the auth pages needs a signed-in account.
   useEffect(() => {
-    if (authPage) return;
+    if (!session && !authPage) goTo('/login', true);
+    else if (session && (path === '/login' || path === '/register')) goTo('/', true);
+  }, [session, authPage, path, goTo]);
+  useEffect(() => {
+    if (authPage || !session) return;
     if (admin && role !== 'ADMIN') {
       goTo('/', true);
-      setToast({ message: 'Admin access requires the ADMIN demo role. Returned to your dashboard.' });
+      setToast({ message: 'Administrator access is required. Returned to your dashboard.' });
     } else if (admin && !adminNav.some(item => item.path === path)) goTo('/admin', true);
     else if (!admin && !Object.values(pagePaths).includes(path)) goTo('/', true);
-  }, [authPage, admin, role, path, goTo]);
+  }, [authPage, session, admin, role, path, goTo]);
   useEffect(() => {
     registerNavigator((target: Highlight) => {
       goTo('/');
@@ -131,10 +138,16 @@ function Workspace() {
   const notify = useCallback((message: string, values?: Record<string, string | number>) => {
     setToast({ message, values }); clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(undefined), 5000);
-    const lower = message.toLowerCase();
-    const kind: NotificationKind = lower.includes('budget') ? 'budget' : lower.includes('categor') ? 'category' : lower.includes('transaction') ? 'transaction' : lower.includes('export') ? 'data' : 'system';
-    notifications.add(message, kind, values);
-  }, [notifications]);
+  }, []);
+  /** Run a server call; on failure show the error and report false so dialogs stay open. */
+  const attempt = useCallback(async (action: () => Promise<unknown>, success?: string, values?: Record<string, string | number>) => {
+    try {
+      await action();
+      if (success) notify(success, values);
+      void notifications.refresh(); // budget alerts are created server-side when transactions change
+      return true;
+    } catch (e) { notify(errorText(e)); return false; }
+  }, [notify, errorText, notifications.refresh]); // eslint-disable-line react-hooks/exhaustive-deps
   function navigate(next: Page) {
     setSelection(undefined);
     goTo(pagePaths[next]);
@@ -157,23 +170,20 @@ function Workspace() {
   function deleteTransaction(transaction: Transaction) {
     setDialog({
       kind: 'delete', title: 'Delete transaction?',
-      text: t('“{name}” will be removed from this browser. This cannot be undone.', { name: transaction.description }),
+      text: t('“{name}” will be permanently deleted. This cannot be undone.', { name: transaction.description }),
       action: () => {
-        setRows(old => old.filter(r => r.id !== transaction.id));
-        setSelection(undefined); notify('Transaction deleted.');
+        setSelection(undefined);
+        void attempt(() => data.removeTransaction(transaction.id), 'Transaction deleted.');
       },
     });
   }
-  function saveCategory(category: Category) {
+  async function saveCategory(category: Category) {
     const oldName = dialog?.kind === 'category' ? dialog.value?.name : undefined;
-    setCategories(old => oldName ? old.map(c => c.name === oldName ? category : c) : [...old, category]);
-    if (oldName) {
-      setRows(old => old.map(t => t.category === oldName ? { ...t, category: category.name } : t));
-      setBudgets(old => old.map(b => b.category === oldName ? { ...b, category: category.name } : b));
-    }
-    setSelection(undefined); setDialog(null); notify('Category saved on this browser.');
+    if (!await attempt(() => data.saveCategory(category, oldName), 'Category saved.')) return;
+    setSelection(undefined); setDialog(null);
   }
   if (authPage) return <div className="min-h-screen overflow-x-clip font-sans text-sm text-ink antialiased"><AuthPages path={path} navigate={goTo} /></div>;
+  if (!session) return null; // redirecting to /login
   const close = () => setDialog(null);
   const nowMonth = new Date().toLocaleDateString(locale, { month: 'long', year: 'numeric' });
   const firstName = profile.name.trim().split(' ').pop() || 'Chương';
@@ -186,7 +196,7 @@ function Workspace() {
         page={page} profile={profile} onNavigate={navigate} search={search} setSearch={setSearch} transactions={rows} categories={categories}
         onExport={() => exportRows(filtered)} role={role} onAdmin={() => { if (role === 'ADMIN') goTo('/admin'); }}
         onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} theme={theme} setTheme={setTheme}
-        signedIn={!!session} onSignIn={() => goTo('/login')} onSignOut={() => { void signOut().then(() => goTo('/login')); }} unreadCount={notifications.unread}
+        signedIn onSignIn={() => goTo('/login')} onSignOut={() => { void signOut().then(() => goTo('/login')); }} unreadCount={notifications.unread}
       >
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -212,7 +222,8 @@ function Workspace() {
             {page === 'Overview' && <span className="hidden md:block"><Button onClick={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }}><Plus className="h-4 w-4" />{t("Add transaction")}</Button></span>}
           </div>
         </div>
-        {(storageError || budgetStorageError || categoryStorageError) && <p role="alert" className="mb-4 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative">{t("Browser storage is unavailable. Changes will last until you reload.")}</p>}
+        {data.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(data.error)}</span><Button secondary onClick={() => void data.reload()}>{t('Try again')}</Button></p>}
+        {data.loading && !rows.length && <p role="status" className="mb-4 text-sm text-muted">{t('Loading your data...')}</p>}
         {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} onNavigate={navigate} onEdit={editTransaction} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} />}
         {page === 'Transactions' && <Transactions rows={filtered} categories={categories} search={search} setSearch={setSearch} onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} onEdit={editTransaction} onDelete={deleteTransaction} onExport={exportRows} />}
         {page === 'Budgets' && <Budgets budgets={budgets} rows={filtered} categories={categories}
@@ -220,7 +231,7 @@ function Workspace() {
           onEdit={b => { setSelection({ category: b.category }); setDialog({ kind: 'budget', value: b }); }}
           onDelete={b => setDialog({
             kind: 'delete', title: 'Delete this budget?', text: t('Remove the {name} budget? Transactions will not be affected.', { name: b.category }),
-            action: () => { setBudgets(old => old.filter(item => item.id !== b.id)); notify('Budget deleted.'); },
+            action: () => { void attempt(() => data.removeBudget(b.id), 'Budget deleted.'); },
           })}
         />}
         {page === 'Categories' && <Categories rows={filtered} categories={categories}
@@ -231,27 +242,33 @@ function Workspace() {
               notify('This category is in use. Reassign transactions and delete its budget first.'); return;
             }
             setDialog({ kind: 'delete', title: 'Delete category?', text: t('Remove “{name}” from your workspace?', { name: c.name }), action: () => {
-              setCategories(old => old.filter(item => item.name !== c.name)); notify('Category deleted.');
+              void attempt(() => data.removeCategory(c), 'Category deleted.');
             } });
           }}
         />}
         {page === 'Reports' && <Reports rows={filtered} allRows={rows} previous={previous} categories={categories} onExport={exportRows} hidden={hidden} />}
         {page === 'AI Financial Assistant' && <AssistantHome />}
         {page === 'Smart Insights' && <Insights rows={filtered} previous={previous} budgets={budgets} onNavigate={next => next === 'AI Financial Assistant' ? openAssistant() : navigate(next)} />}
-        {page === 'Workspace' && <WorkspacePage profile={profile} onSave={p => { setProfile({ ...storedProfile, phone: p.phone, avatar: p.avatar, ...(session ? {} : { name: p.name, email: p.email }) }); notify('Profile saved on this browser.'); }} totals={getTotals(filtered)} previous={getTotals(previous)} hidden={hidden} setHidden={setHidden} signedIn={!!session} role={role} />}
+        {page === 'Workspace' && <WorkspacePage profile={profile} onSave={async p => {
+          if (await attempt(() => usersApi.updateProfile({ fullName: p.name, phoneNumber: p.phone || null }), 'Profile saved.')) setProfile({ ...storedProfile, avatar: p.avatar });
+        }} totals={getTotals(filtered)} previous={getTotals(previous)} hidden={hidden} setHidden={setHidden} signedIn role={role} />}
         {page === 'Notifications' && <NotificationsPage items={notifications.items} onMarkAllRead={notifications.markAllRead} onMarkRead={notifications.markRead} onRemove={notifications.remove} onClear={notifications.clear} />}
         {page === 'Settings' && <SettingsPage profile={profile} onSave={p => { setProfile({ ...storedProfile, notifications: p.notifications, insights: p.insights }); notify('Preferences saved on this browser.'); }} onExport={() => exportRows(rows)} role={role} theme={theme} setTheme={setTheme} />}
       </UserLayout>}
     </AmbientShell>
-    {dialog?.kind === 'transaction' && <TransactionForm transaction={dialog.value} categories={categories} onClose={close}
+    {dialog?.kind === 'transaction' && <TransactionForm transaction={dialog.value} categories={categories} accounts={data.accountNames} onClose={close}
       onAnalyze={dialog.value ? () => { close(); openAssistant('Explain this selected transaction.'); } : undefined}
-      onSave={t => {
-        setRows(old => old.some(r => r.id === t.id) ? old.map(r => r.id === t.id ? t : r) : [t, ...old]);
-        setSelection({ transaction: t, category: t.category }); close(); notify('Transaction saved on this browser.');
+      onSave={async t => {
+        const editing = !!dialog.value;
+        let saved: Transaction | undefined;
+        if (!await attempt(async () => { saved = await data.saveTransaction(t, editing); }, 'Transaction saved.')) return;
+        if (saved) setSelection({ transaction: saved, category: saved.category });
+        close();
       }}
     />}
-    {dialog?.kind === 'budget' && <BudgetForm budget={dialog.value} categories={categories} budgets={budgets} onClose={close} onSave={b => {
-      setBudgets(old => old.some(r => r.id === b.id) ? old.map(r => r.id === b.id ? b : r) : [...old, b]); close(); notify('Budget saved on this browser.');
+    {dialog?.kind === 'budget' && <BudgetForm budget={dialog.value} categories={categories} budgets={budgets} onClose={close} onSave={async b => {
+      const editing = !!dialog.value;
+      if (await attempt(() => data.saveBudget({ ...dialog.value, ...b }, editing), 'Budget saved.')) close();
     }} />}
     {dialog?.kind === 'category' && <CategoryForm category={dialog.value} categories={categories} onClose={close} onSave={saveCategory} />}
     {dialog?.kind === 'delete' && <Modal title={dialog.title} onClose={close}>

@@ -14,8 +14,6 @@ export const pagePaths: Record<Page, string> = {
   Notifications: '/notifications',
 };
 export type DemoRole = 'USER' | 'ADMIN';
-// A local development fixture, not authorization. Never trust a browser-stored role.
-export const demoRole: DemoRole = import.meta.env.DEV && import.meta.env.VITE_MONEYMIND_DEMO_ROLE === 'ADMIN' ? 'ADMIN' : 'USER';
 export function useRoute() {
   const [path, setPath] = useState(window.location.pathname.replace(/\/$/, '') || '/');
   useEffect(() => {

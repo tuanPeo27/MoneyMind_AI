@@ -61,36 +61,41 @@ export function TransactionTable({ rows, categories, onEdit, onDelete, compact: 
   </div>;
 }
 
-export function TransactionForm({ transaction, categories, onSave, onClose, onAnalyze }: {
-  transaction?: Transaction; categories: Category[];
-  onSave: (transaction: Transaction) => void; onClose: () => void; onAnalyze?: () => void;
+export function TransactionForm({ transaction, categories, accounts, onSave, onClose, onAnalyze }: {
+  transaction?: Transaction; categories: Category[]; accounts: string[];
+  onSave: (transaction: Transaction) => void | Promise<void>; onClose: () => void; onAnalyze?: () => void;
 }) {
   const { t, language } = useLanguage();
   const formId = useId();
   const [type, setType] = useState<Transaction['type']>(transaction?.type || 'Expense');
   const [category, setCategory] = useState(transaction?.category || categories.find(c => c.type === type)?.name || '');
-  const [account, setAccount] = useState(transaction?.account || 'Vietcombank');
+  const [account, setAccount] = useState(transaction?.account || accounts[0] || '');
   const [error, setError] = useState('');
-  const accountNames = [...new Set(['Vietcombank', 'MoMo', 'Tiền mặt', ...(transaction ? [transaction.account] : [])])];
+  const [saving, setSaving] = useState(false);
+  const accountNames = [...new Set([...accounts, ...(transaction ? [transaction.account] : [])])];
   const available = categories.filter(item => item.type === type);
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const description = String(data.get('description')).trim();
     if (!description) { setError('Please enter a description.'); return; }
     if (!available.some(item => item.name === category)) { setError('Choose a category to continue.'); return; }
-    onSave({
-      id: transaction?.id || crypto.randomUUID(), description,
-      amount: Number(data.get('amount')), type, category, account,
-      date: String(data.get('date')), notes: String(data.get('notes')).trim(),
-    });
+    if (!account) { setError('Choose an account to continue.'); return; }
+    setSaving(true); setError('');
+    try {
+      await onSave({
+        id: transaction?.id || '', description,
+        amount: Number(data.get('amount')), type, category, account,
+        date: String(data.get('date')), notes: String(data.get('notes')).trim(),
+      });
+    } finally { setSaving(false); }
   }
   return <Modal wide title={t(transaction ? 'Edit transaction' : 'Add transaction')} onClose={onClose} footer={
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <span className="flex items-center gap-1.5 text-xs text-muted"><span className="size-1.5 rounded-full bg-positive" />{t('Saved locally on this browser')}</span>
+      <span className="flex items-center gap-1.5 text-xs text-muted"><span className="size-1.5 rounded-full bg-positive" />{t('Saved to your account')}</span>
       <div className="flex items-center gap-2.5">
         <Button type="button" secondary onClick={onClose}>{t('Cancel')}</Button>
-        <Button type="submit" form={formId} disabled={!available.length}>{t('Save transaction')}</Button>
+        <Button type="submit" form={formId} disabled={!available.length || !account || saving}>{t('Save transaction')}</Button>
       </div>
     </div>
   }>
@@ -133,7 +138,7 @@ export function TransactionForm({ transaction, categories, onSave, onClose, onAn
       </div>
       <Field label={t('Date')}><input required name="date" type="date" lang={language} defaultValue={transaction?.date || today} className={fieldClass} /></Field>
       <Field label={t('Notes (optional)')}>
-        <textarea name="notes" rows={2} maxLength={500} defaultValue={transaction?.notes} placeholder={t('Add a note...')} className={`${fieldClass} block min-h-[80px] resize-none py-3 placeholder:text-muted/75`} />
+        <textarea name="notes" rows={2} maxLength={340} defaultValue={transaction?.notes} placeholder={t('Add a note...')} className={`${fieldClass} block min-h-[80px] resize-none py-3 placeholder:text-muted/75`} />
       </Field>
       {error && <p role="alert" className="text-sm text-negative">{t(error)}</p>}
       {onAnalyze && <button type="button" onClick={onAnalyze} className="flex min-h-11 items-center gap-2 rounded-lg text-sm text-ai focus-visible:ring-2 focus-visible:ring-ai"><Sparkles aria-hidden="true" className="size-4" />{t('Analyze this transaction with AI')}</button>}

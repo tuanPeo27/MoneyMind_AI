@@ -40,14 +40,14 @@ function PromptChips({ limit = 4 }: { limit?: number }) {
   const { prompts, send, busy } = useAmbientAI();
   return <div className="flex flex-wrap justify-center gap-2">{prompts.slice(0, limit).map(prompt => <button key={prompt} onClick={() => send(prompt)} disabled={busy} className="flex min-h-11 items-center gap-2 glass rounded-xl px-3.5 py-2 text-left text-sm text-muted transition-[translate,box-shadow,color] duration-300 hover:-translate-y-0.5 hover:text-ink hover:shadow-[0_8px_30px_-12px_#8B5CF6] focus-visible:ring-2 focus-visible:ring-ai disabled:cursor-not-allowed motion-reduce:transform-none">{prompt}<ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /></button>)}</div>;
 }
-/** Floating button in the bottom-right corner. It morphs into the AI page (layoutId "ai-morph") and back. */
+/** Floating button in the bottom-right corner (`data-ai-trigger`). The AI page grows out of its shape and shrinks back into it. */
 export function AmbientAIFab() {
   const { t } = useLanguage();
   const { open, openAssistant } = useAmbientAI();
   const reduce = useReducedMotion();
   return <div aria-hidden={open || undefined} className={`group/fab fixed bottom-24 right-4 z-30 hover:-translate-y-1 md:bottom-6 md:right-6 ${open ? 'pointer-events-none opacity-0' : 'opacity-100 transition-[opacity,translate] delay-300 duration-300 ease-out'}`}>
     <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-full transition-opacity duration-300 group-hover/fab:opacity-0 group-focus-within/fab:opacity-0 motion-safe:animate-[fab-ring_2.8s_ease-out_infinite]" />
-    <motion.button layoutId="ai-morph" style={{ borderRadius: 28 }} transition={reduce ? { duration: 0 } : MORPH_SPRING}
+    <motion.button style={{ borderRadius: 28 }} transition={reduce ? { duration: 0 } : MORPH_SPRING}
       data-ai-trigger tabIndex={open ? -1 : 0} onClick={() => openAssistant()} aria-label={t('Ask AI Assistant')} title={`${t('Ask AI Assistant')} (${/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'} K)`}
       className="relative grid h-14 grid-cols-[auto_0fr] items-center bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] px-4 text-white shadow-[0_0_30px_-4px_rgba(139,92,246,0.7)] transition-[grid-template-columns,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/fab:grid-cols-[auto_1fr] group-hover/fab:shadow-[0_0_38px_-2px_rgba(236,72,153,0.7)] focus-visible:grid-cols-[auto_1fr] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai focus-visible:ring-offset-2 focus-visible:ring-offset-transparent active:scale-95">
       <Sparkles className="h-6 w-6 shrink-0 transition-transform duration-500 group-hover/fab:rotate-12 group-hover/fab:scale-110" aria-hidden="true" />
@@ -95,7 +95,16 @@ export function AmbientAIOverlay() {
 function FocusedAssistant({ children, onClose }: { children: ReactNode; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
-  const spring = reduce ? { duration: 0 } : MORPH_SPRING;
+  // The surface is clipped to the button's own box with rounded corners (a circle, or a pill while the button is
+  // expanded on hover) and opens into the full-screen rectangle. Closing reverses it into the collapsed circle.
+  const [shape] = useState(() => {
+    const box = document.querySelector('[data-ai-trigger]')?.getBoundingClientRect();
+    const w = window.innerWidth, h = window.innerHeight;
+    const b = box?.width ? box : { top: h - 80, right: w - 24, bottom: h - 24, left: w - 80, height: 56 };
+    const clip = (left: number) => `inset(${b.top}px ${w - b.right}px ${h - b.bottom}px ${left}px round ${b.height / 2}px)`;
+    return { open: clip(b.left), closed: clip(b.right - b.height), full: 'inset(0px 0px 0px 0px round 0px)' };
+  });
+  const ease = [0.22, 1, 0.36, 1] as const;
   useEffect(() => {
     const oldOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -115,10 +124,18 @@ function FocusedAssistant({ children, onClose }: { children: ReactNode; onClose:
     {/* dims and blurs the dashboard that is shrinking behind */}
     <motion.div aria-hidden="true" className="absolute inset-0 backdrop-blur-md" style={{ background: 'light-dark(rgba(40, 25, 60, 0.45), rgba(11, 15, 25, 0.8))' }}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} />
-    {/* the shared surface: grows out of the floating button and settles into the full screen */}
-    <motion.div aria-hidden="true" layoutId="ai-morph" style={{ borderRadius: 0 }} transition={spring} exit={{ opacity: 0.99 }} className="ai-backdrop absolute inset-0" />
-    {/* the page itself fades in once the surface has opened up, and leaves first */}
-    <motion.div className="absolute inset-0 overflow-y-auto ai-scroll" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: 0.16, duration: 0.28 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>{children}</motion.div>
+    {/* the surface: circle/pill at the button -> full-screen rectangle, and back into the circle on close */}
+    <motion.div aria-hidden="true" className="ai-backdrop absolute inset-0" style={{ willChange: 'clip-path' }}
+      initial={{ clipPath: shape.open }} animate={{ clipPath: shape.full, transition: reduce ? { duration: 0 } : { duration: 0.55, ease } }}
+      exit={{ clipPath: shape.closed, transition: reduce ? { duration: 0 } : { delay: 0.1, duration: 0.45, ease } }}>
+      {/* begins in the button's gradient so the button itself appears to open up */}
+      <motion.div className="absolute inset-0 bg-gradient-to-br from-[#8B5CF6] to-[#EC4899]" initial={{ opacity: 1 }}
+        animate={{ opacity: 0, transition: reduce ? { duration: 0 } : { duration: 0.35, delay: 0.05 } }} />
+    </motion.div>
+    {/* Opening is the close played backwards: the surface first grows out of the button to full screen, and only
+        then the page fades in (closing fades the page out first, then shrinks the surface). The staggered
+        ai-rise entrance is switched off here so the content does not scale up on its own while the surface grows. */}
+    <motion.div className="absolute inset-0 overflow-y-auto ai-scroll [&_.ai-rise]:![animation:none] [&_.ai-rise]:!opacity-100" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: reduce ? 0 : 0.4, duration: 0.1 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>{children}</motion.div>
   </motion.div>;
 }function Conversation() {
   const { t } = useLanguage();

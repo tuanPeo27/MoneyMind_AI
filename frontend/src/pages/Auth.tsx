@@ -8,7 +8,7 @@ export const authPaths = ['/login', '/register', '/forgot-password', '/reset-pas
 type Navigate = (path: string, replace?: boolean) => void;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function useErrorText() {
+export function useErrorText() {
   const { t } = useLanguage();
   return (error: unknown) => {
     if (error instanceof ApiError) {
@@ -122,11 +122,6 @@ function AuthLink({ to, navigate, children }: { to: string; navigate: Navigate; 
   return <a href={to} onClick={e => { e.preventDefault(); navigate(to); }} className="rounded font-medium text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">{children}</a>;
 }
 
-function DemoLink({ navigate }: { navigate: Navigate }) {
-  const { t } = useLanguage();
-  return <p className="mt-3"><a href="/" onClick={e => { e.preventDefault(); navigate('/'); }} className="text-xs text-muted hover:text-ink hover:underline">{t('Continue without an account (local demo)')}</a></p>;
-}
-
 export function LoginPage({ navigate }: { navigate: Navigate }) {
   const { t } = useLanguage();
   const errorText = useErrorText();
@@ -147,7 +142,7 @@ export function LoginPage({ navigate }: { navigate: Navigate }) {
     finally { setBusy(false); }
   }
   return <AuthShell title={t('Welcome back')} subtitle={t('Sign in to continue managing your money.')}
-    footer={<>{t("Don't have an account?")} <AuthLink to="/register" navigate={navigate}>{t('Create account')}</AuthLink><DemoLink navigate={navigate} /></>}>
+    footer={<>{t("Don't have an account?")} <AuthLink to="/register" navigate={navigate}>{t('Create account')}</AuthLink></>}>
     <form onSubmit={submit} noValidate className="space-y-5">
       {formError && <FormAlert>{formError}</FormAlert>}
       <TextField label={t('Email')} icon={Mail} type="email" name="email" autoComplete="email" inputMode="email" placeholder="ban@example.com" autoFocus

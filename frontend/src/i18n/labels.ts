@@ -17,6 +17,14 @@ const categoryNames: Record<string, string> = {
   'Thể thao': 'Fitness',
   'Thú cưng': 'Pets',
   'Tiết kiệm': 'Savings',
+  // Default categories seeded by the backend.
+  'Hóa đơn & tiện ích': 'Bills & utilities',
+  'Quà tặng & từ thiện': 'Gifts & charity',
+  'Chi tiêu khác': 'Other expenses',
+  'Thưởng': 'Bonus',
+  'Kinh doanh': 'Business',
+  'Được tặng': 'Gifts received',
+  'Thu nhập khác': 'Other income',
 };
 
 // Display aliases only: stored names, filters and relationships remain unchanged.

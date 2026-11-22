@@ -5,8 +5,13 @@ export type Transaction = {
   id: string; description: string; amount: number; type: 'Income' | 'Expense';
   category: string; account: string; date: string; notes: string;
 };
-export type Budget = { id: string; category: string; limit: number };
-export type Category = { name: string; type: 'Income' | 'Expense'; color: string; icon?: CategoryIconId };
+// `category` and `account` hold display names; the API ids are resolved by name when saving.
+export type Budget = {
+  id: string; category: string; limit: number;
+  /** Date range and alert level kept from the server so edits do not reset them. */
+  startDate?: string; endDate?: string; alertThreshold?: number;
+};
+export type Category = { id?: string; name: string; type: 'Income' | 'Expense'; color: string; icon?: CategoryIconId; isSystem?: boolean };
 export const money = (value: number) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value) + ' ₫';
 export const compact = (value: number) => `${new Intl.NumberFormat('en', { maximumFractionDigits: 1 }).format(value / 1000000)}M`;
 export const dateLabel = (value: string, locale = 'en-GB') => new Date(value + 'T12:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });

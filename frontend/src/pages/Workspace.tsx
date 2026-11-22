@@ -13,7 +13,7 @@ const MAX_AVATAR_BYTES = 1024 * 1024; // 1 MB keeps the data URL small enough fo
 
 /** Personal workspace: who you are (editable, with avatar) and the four headline numbers. */
 export default function WorkspacePage({ profile, onSave, totals, previous, hidden, setHidden, signedIn, role }: {
-  profile: Profile; onSave: (profile: Profile) => void; totals: Totals; previous: Totals;
+  profile: Profile; onSave: (profile: Profile) => void | Promise<void>; totals: Totals; previous: Totals;
   hidden: boolean; setHidden: (value: boolean) => void; signedIn: boolean; role: DemoRole;
 }) {
   const { t } = useLanguage();
@@ -72,10 +72,10 @@ export default function WorkspacePage({ profile, onSave, totals, previous, hidde
       </div>
       {errors.avatar && <p role="alert" className="mb-4 text-xs text-negative">{errors.avatar}</p>}
       <form onSubmit={submit} noValidate className="space-y-4">
-        {field(t('Full name'), User, errors.name, cls => <input name="name" autoComplete="name" maxLength={100} value={name} onChange={e => setName(e.target.value)} readOnly={signedIn} className={cls} />)}
+        {field(t('Full name'), User, errors.name, cls => <input name="name" autoComplete="name" maxLength={100} value={name} onChange={e => setName(e.target.value)} className={cls} />)}
         {field(t('Email address'), Mail, errors.email, cls => <input name="email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} readOnly={signedIn} className={cls} />)}
         {field(t('Phone number'), Phone, errors.phone, cls => <input name="phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="0901 234 567" value={phone} onChange={e => setPhone(e.target.value)} className={cls} />)}
-        {signedIn && <p className="text-xs text-muted">{t('Name and email come from your signed-in account.')}</p>}
+        {signedIn && <p className="text-xs text-muted">{t('Your email comes from your signed-in account.')}</p>}
         <div className="flex justify-end pt-1"><Button type="submit" disabled={!changed}>{t('Save changes')}</Button></div>
       </form>
     </Card>

@@ -61,6 +61,10 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
   const [chartPeriod, setChartPeriod] = useState('Monthly');
   const [index, setIndex] = useState(0), [cardW, setCardW] = useState(760);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+  const tabPill = useRef<HTMLSpanElement>(null);
+  const tabList = useRef<HTMLDivElement>(null);
+  const dotPill = useRef<HTMLSpanElement>(null);
+  const dots = useRef<(HTMLButtonElement | null)[]>([]);
   const scroller = useRef<HTMLDivElement>(null);
   const cards = useRef<(HTMLDivElement | null)[]>([]);
   const indexRef = useRef(0), frame = useRef(0), wheelLock = useRef(false), wheelSum = useRef(0), wheelAt = useRef(0);
@@ -95,16 +99,54 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
     if (!el) return;
     const mid = el.scrollLeft + el.clientWidth / 2;
     let best = 0, bestDistance = Infinity;
+    const centers: number[] = [];
     cards.current.forEach((card, i) => {
       if (!card) return;
-      const dist = card.offsetLeft + card.offsetWidth / 2 - mid;
+      centers[i] = card.offsetLeft + card.offsetWidth / 2;
+      const dist = centers[i] - mid;
       const d = Math.min(1, Math.abs(dist) / (card.offsetWidth + 24));
       card.style.transform = `scale(${1 - 0.15 * d}) rotateY(${(dist < 0 ? 1 : -1) * 18 * d}deg)`;
       card.style.opacity = String(1 - 0.5 * d);
       if (Math.abs(dist) < bestDistance) { bestDistance = Math.abs(dist); best = i; }
     });
     if (best !== indexRef.current) { indexRef.current = best; setIndex(best); }
-  }, []);
+    // Sliding pill: a fractional position (e.g. 1.4 = 40% of the way from card 1 to card 2) drives both indicators,
+    // so they glide with the scroll instead of jumping when the active index changes.
+    let from = 0, frac = 0;
+    for (let i = 0; i < centers.length - 1; i++) {
+      if (mid >= centers[i] && mid <= centers[i + 1]) { from = i; frac = (mid - centers[i]) / (centers[i + 1] - centers[i] || 1); break; }
+      if (mid > centers[i + 1]) { from = i + 1; frac = 0; }
+    }
+    const to = Math.min(centers.length - 1, from + 1);
+    // Small dead zone at both ends: when the carousel rests a pixel or two off-centre (scroll snapping rounds to
+    // whole pixels) the pill still sits exactly on its tab instead of leaning toward the next one.
+    const f = Math.min(1, Math.max(0, (frac - 0.06) / 0.88));
+    const a = tabs.current[from], b = tabs.current[to], pill = tabPill.current;
+    if (a && b && pill) {
+      const left = a.offsetLeft + (b.offsetLeft - a.offsetLeft) * f;
+      const width = a.offsetWidth + (b.offsetWidth - a.offsetWidth) * f;
+      pill.style.transform = `translateX(${left}px)`;
+      pill.style.width = `${width}px`;
+      pill.style.opacity = '1';
+      // On narrow screens the tab bar is wider than the viewport: keep the pill centred in it, frame by frame,
+      // so the active label is never cut off. The browser clamps scrollLeft at both ends.
+      const list = tabList.current;
+      if (list && list.scrollWidth > list.clientWidth) list.scrollLeft = left + width / 2 - list.clientWidth / 2;
+    }
+    // Dots: the active dot widens to the pill's size and the others keep 8px, so neighbours are pushed aside
+    // instead of being covered. The two dots involved share the extra 16px, so the row's total width never changes.
+    const GAP = 8, DOT = 8, EXTRA = 16;
+    const widths = dots.current.map((_, i) => DOT + EXTRA * (i === from ? 1 - f : i === to && to !== from ? f : 0));
+    dots.current.forEach((d, i) => { if (d) d.style.width = `${widths[i]}px`; });
+    const x = (i: number) => widths.slice(0, i).reduce((s, w) => s + w + GAP, 0);
+    const dot = dotPill.current;
+    if (dot) {
+      const stretch = Math.sin(Math.PI * f) * 6; // a slight liquid stretch mid-way
+      const left = x(from) + (x(to) - x(from)) * f;
+      const width = widths[from] + (widths[to] - widths[from]) * f;
+      dot.style.transform = `translateX(${left - stretch / 2}px)`;
+      dot.style.width = `${width + stretch}px`;
+    }  }, []);
   const go = useCallback((target: number, instantly = false) => {
     const el = scroller.current, next = Math.max(0, Math.min(COUNT - 1, target)), card = cards.current[next];
     if (!el || !card) return;
@@ -118,7 +160,10 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
     measure();
     const observer = new ResizeObserver(() => { measure(); cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(() => { go(indexRef.current, true); applyFocus(); }); });
     observer.observe(el);
-    return () => { observer.disconnect(); cancelAnimationFrame(frame.current); };
+    // Tab widths change with the language and once web fonts load; keep the pill measured against them.
+    const tabObserver = new ResizeObserver(() => applyFocus());
+    if (tabList.current) tabObserver.observe(tabList.current);
+    return () => { observer.disconnect(); tabObserver.disconnect(); cancelAnimationFrame(frame.current); };
   }, [applyFocus, go]);
   useLayoutEffect(() => { go(indexRef.current, true); applyFocus(); }, [cardW, applyFocus, go]);
   // Vertical wheel -> one card per gesture. At the first/last card the page scrolls normally.
@@ -213,9 +258,12 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
   return <div className="space-y-5">
     <SummaryCards totals={totals} previous={past} hidden={hidden} onToggleHidden={setHidden} />
     <section aria-label={t("Overview sections")}>
-      <div role="tablist" aria-label={t("Overview sections")} onKeyDown={onTabKey} className="mx-auto mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl bg-surface p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{slides.map((s, i) =>
+      <div ref={tabList} role="tablist" aria-label={t("Overview sections")} onKeyDown={onTabKey} className="relative isolate mx-auto mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl bg-surface p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {/* Position and width are written by applyFocus on every scroll frame. */}
+        <span ref={tabPill} aria-hidden="true" style={{ opacity: 0 }} className="pointer-events-none absolute inset-y-1 left-0 -z-10 rounded-xl bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] shadow-md shadow-[#8B5CF6]/30 will-change-transform" />
+        {slides.map((s, i) =>
         <button key={s.id} ref={el => { tabs.current[i] = el; }} role="tab" id={`${uid}-tab-${s.id}`} aria-selected={i === index} aria-controls={`${uid}-panel-${s.id}`} tabIndex={i === index ? 0 : -1} onClick={() => go(i)}
-          className={`min-h-9 shrink-0 rounded-xl px-3.5 text-sm transition-all duration-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${i === index ? 'bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] font-semibold text-white shadow-md shadow-[#8B5CF6]/30' : 'text-muted hover:text-ink'}`}>{t(s.label)}</button>)}</div>
+          className={`min-h-9 shrink-0 rounded-xl px-3.5 text-sm font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${i === index ? 'text-white' : 'text-muted hover:text-ink'}`}>{t(s.label)}</button>)}</div>
       <div ref={scroller} onScroll={() => { cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(applyFocus); }}
         style={{ ['--card-w' as string]: `${cardW}px`, perspective: '1400px', paddingInline: 'calc(50% - var(--card-w) / 2)' }}
         className="relative flex snap-x snap-mandatory items-stretch gap-6 overflow-x-auto overflow-y-hidden overscroll-x-contain py-3 sm:py-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -233,8 +281,10 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
         </div>)}
       </div>
       <ExpandedCard id={expanded} title={open ? t(open.label) : ''} closeLabel={t('Close')} onClose={() => setExpanded(null)}>{expanded ? details[expanded] : null}</ExpandedCard>
-      <div className="mt-2 flex items-center justify-center gap-2" aria-hidden="true">{slides.map((s, i) =>
-        <button key={s.id} type="button" tabIndex={-1} onClick={() => go(i)} className={`h-2 rounded-full transition-all duration-500 ease-[cubic-bezier(0.65,0,0.35,1)] ${i === index ? 'w-8 bg-gradient-to-r from-[#8B5CF6] to-[#EC4899] shadow-[0_0_14px_2px_rgba(139,92,246,0.55)]' : 'w-2 bg-ink/25 hover:bg-ink/45'}`} />)}</div>
+      <div className="mt-2 flex justify-center" aria-hidden="true"><div className="relative flex items-center gap-2">
+        {slides.map((s, i) => <button key={s.id} ref={el => { dots.current[i] = el; }} type="button" tabIndex={-1} onClick={() => go(i)} className="h-2 w-2 shrink-0 rounded-full bg-ink/25 transition-colors hover:bg-ink/45" />)}
+        <span ref={dotPill} className="pointer-events-none absolute left-0 top-0 h-2 w-6 rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#EC4899] shadow-[0_0_14px_2px_rgba(139,92,246,0.55)] will-change-transform" />
+      </div></div>
     </section>    {showInsight && <div className="glass flex flex-wrap items-center gap-4 rounded-2xl px-5 py-4">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#8B5CF6]/20 bg-[#8B5CF6]/10"><Sparkles className="h-4 w-4 text-ai" aria-hidden="true" /></span>
       <div className="min-w-0 flex-1"><p className="mb-1 text-xs font-medium text-ai">{t("A SMALL INSIGHT")}</p><p className="text-sm">{oldDining ? t(diningChange >= 0 ? 'Dining expenses increased {change}% this period.' : 'Dining expenses decreased {change}% this period.', { change: Math.abs(diningChange).toFixed(0) }) : t("A clearer picture starts with your spending.")} <span className="ml-1 text-muted">{money(dining)}</span></p></div>

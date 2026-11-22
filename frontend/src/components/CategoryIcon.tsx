@@ -39,8 +39,15 @@ const defaults: Record<string, CategoryIconId> = {
 };
 const iconIds = Object.keys(categoryIcons) as CategoryIconId[];
 
+// Icon names the backend seeds for its system categories.
+const serverIcons: Record<string, CategoryIconId> = {
+  utensils: 'Utensils', car: 'Car', home: 'Home', receipt: 'Zap', 'shopping-bag': 'ShoppingBag',
+  'gamepad-2': 'Film', 'heart-pulse': 'HeartPulse', 'graduation-cap': 'GraduationCap', plane: 'Plane',
+  gift: 'Gift', ellipsis: 'Tag', wallet: 'Wallet', award: 'Briefcase', 'trending-up': 'TrendingUp', briefcase: 'Briefcase',
+};
 export function getCategoryIcon(name: string, icon?: string): CategoryIconId {
   if (icon && Object.prototype.hasOwnProperty.call(categoryIcons, icon)) return icon as CategoryIconId;
+  if (icon && Object.prototype.hasOwnProperty.call(serverIcons, icon)) return serverIcons[icon];
   const suggested = defaults[name.trim().toLowerCase()];
   return iconIds.includes(suggested) ? suggested : 'Tag';
 }

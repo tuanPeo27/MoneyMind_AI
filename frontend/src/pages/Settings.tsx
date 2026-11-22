@@ -59,6 +59,6 @@ export default function SettingsPage({ profile, onSave, onExport, role, theme, s
       <div className="flex justify-end"><Button type="submit">{t("Save changes")}</Button></div>
     </form>
     <AccountSecurity role={role} />
-    <Card className="p-6"><SectionHead title={t("Your data belongs to you")} subtitle={t("Saved in this browser’s local storage. No bank or AI provider is connected.")} /><div className="flex flex-wrap items-center justify-between gap-4"><p className="max-w-lg text-sm leading-6 text-muted">{t("Export your transactions at any time. Clearing browser storage removes locally saved data and conversations.")}</p><Button secondary onClick={onExport}><Download className="h-4 w-4" />{t("Export transactions")}</Button></div></Card>
+    <Card className="p-6"><SectionHead title={t("Your data belongs to you")} subtitle={t("Stored in your MoneyMind account. No bank or AI provider is connected.")} /><div className="flex flex-wrap items-center justify-between gap-4"><p className="max-w-lg text-sm leading-6 text-muted">{t("Export your transactions at any time. Clearing browser storage removes your preferences and AI conversations.")}</p><Button secondary onClick={onExport}><Download className="h-4 w-4" />{t("Export transactions")}</Button></div></Card>
   </div>;
 }
