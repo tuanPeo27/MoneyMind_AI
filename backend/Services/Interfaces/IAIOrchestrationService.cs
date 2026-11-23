@@ -11,7 +11,7 @@ public interface IAIOrchestrationService
 {
     /// <exception cref="backend.Helpers.ServiceUnavailableException">The AI service failed.</exception>
     Task<AIChatResult> ChatAsync(Guid userId, string message, IReadOnlyList<AIChatTurn> history,
-        CancellationToken cancellationToken = default);
+        string? language = null, CancellationToken cancellationToken = default);
 
     /// <returns>null when the AI service failed (the failure is logged).</returns>
     Task<AICategorizeResult?> CategorizeAsync(Guid userId, string description, decimal? amount, TransactionType type,

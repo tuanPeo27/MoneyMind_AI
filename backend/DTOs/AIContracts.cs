@@ -4,7 +4,9 @@ namespace backend.DTOs;
 
 public sealed record AIChatTurn(string Role, string Content);
 
-public sealed record AIChatPayload(string Message, IReadOnlyList<AIChatTurn> History, string FinancialContext);
+/// <param name="Language">`vi` or `en`: the language the answer must be written in. null = follow the user.</param>
+public sealed record AIChatPayload(string Message, IReadOnlyList<AIChatTurn> History, string FinancialContext,
+    string? Language = null);
 
 public sealed record AIChatResult(string Content, string? Intent, int? TokenUsage, string? Provider);
 

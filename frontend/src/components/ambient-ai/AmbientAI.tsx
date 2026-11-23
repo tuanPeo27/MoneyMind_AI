@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Sparkles, ArrowUp, ArrowUpRight, ArrowLeft, Plus, ShieldCheck, ChevronRight, History, Trash2 } from 'lucide-react';
 import { useAmbientAI, type AIMessageData } from './AmbientAIProvider';
 import { type Highlight } from './mockAssistant';
-import { Button, IconButton } from '../ui';
+import { Button, IconButton, Modal } from '../ui';
 import { LiquidButton } from '../LiquidButton';
 
 /** Android-style spring shared by every container transform. */
@@ -73,7 +73,7 @@ export function AmbientAIFab() {
     <p className="break-words text-sm leading-7 text-ink">{message.text}</p>
     {message.metrics && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{message.metrics.map(metric => <div key={metric.label} className="glass rounded-xl px-4 py-3"><p className="text-xs text-muted">{metric.label}</p><p className="mt-1 text-[1rem] font-semibold tabular-nums">{metric.value}</p></div>)}</div>}
     {message.role === 'assistant' && message.highlight && <button onClick={() => inspect(message.highlight!)} className="flex min-h-11 items-center gap-2 text-sm font-medium text-ai hover:text-ink focus-visible:ring-2 focus-visible:ring-ai">{t("Show me in my dashboard")}<ArrowUpRight className="h-4 w-4 shrink-0" /></button>}
-    {message.role === 'assistant' && <p className="text-xs text-muted">{message.context}</p>}
+    {message.role === 'assistant' && message.context && <p className="text-xs text-muted">{t(message.context)}</p>}
   </article>;
 }
 export function EdgeGlow() {
@@ -93,23 +93,35 @@ export function AmbientAIOverlay() {
   const { t } = useLanguage();
   const { open, closeAssistant, financial, messages, conversations, conversationId, historyBusy, selectConversation, removeConversation, busy, clear, storageError, send } = useAmbientAI();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const zoom = useViewportZoom();
   // `custom` reaches the exiting surface at the moment of closing, so it shrinks into where the button is now
   // (at rest), not where it was when the assistant opened (possibly lifted by hover or pressed in).
   return <AnimatePresence custom={open ? undefined : aiButtonShape(true)} onExitComplete={() => window.dispatchEvent(new Event(AI_CLOSED_EVENT))}>{open && <FocusedAssistant key="ai" onClose={closeAssistant}>
     <EdgeGlow />
     <div style={{ zoom, height: `calc(100dvh / ${zoom})` }} className={`relative z-10 mx-auto flex w-full max-w-[780px] flex-col px-5 pb-5 pt-5 sm:px-8 sm:py-8`}>
-      <div className="ai-rise mb-5 flex shrink-0 items-center justify-between gap-3"><span className="flex items-center gap-2 text-sm font-medium"><IconButton icon={ArrowLeft} label={t("Back")} onClick={closeAssistant} /><Sparkles className="h-4 w-4 text-ai" />MoneyMind<span className="text-muted">/</span><span className="text-muted">{t("AI Assistant")}</span></span><div className="flex items-center gap-2"><IconButton icon={History} label={t("Chat history")} onClick={() => setHistoryOpen(value => !value)} disabled={busy} /><IconButton icon={Plus} label={t("Start a new conversation")} onClick={() => { clear(); setHistoryOpen(false); }} disabled={busy} /><span className="hidden text-xs text-muted sm:block">esc</span></div></div>
+      <div className="ai-rise mb-5 flex shrink-0 items-center justify-between gap-3"><span className="flex items-center gap-2 text-sm font-medium"><IconButton icon={ArrowLeft} label={t("Back")} onClick={closeAssistant} /><kbd className="-ml-1 mr-1 hidden rounded-md border border-line px-1.5 py-0.5 font-sans text-[11px] font-normal text-muted sm:block">esc</kbd><Sparkles className="h-4 w-4 text-ai" />MoneyMind<span className="text-muted">/</span><span className="text-muted">{t("AI Assistant")}</span></span><div className="flex items-center gap-2"><IconButton icon={History} label={t("Chat history")} onClick={() => setHistoryOpen(value => !value)} disabled={busy} /><IconButton icon={Plus} label={t("Start a new conversation")} onClick={() => { clear(); setHistoryOpen(false); }} disabled={busy} /></div></div>
       {historyOpen && <div className="mb-4 max-h-60 shrink-0 overflow-y-auto rounded-2xl border border-line bg-surface/80 p-2 backdrop-blur-xl">
         <div className="flex items-center justify-between px-2 py-2"><p className="text-sm font-semibold">{t('Chat history')}</p><span className="text-xs text-muted">{conversations.length}</span></div>
         {!conversations.length ? <p className="px-2 py-4 text-sm text-muted">{t('No saved conversations yet.')}</p> : <div className="space-y-1">{conversations.map(item => <div key={item.id} className={`flex items-center gap-2 rounded-xl ${item.id === conversationId ? 'bg-brand/15' : 'hover:bg-base/60'}`}>
           <button type="button" disabled={historyBusy} onClick={() => void selectConversation(item.id).then(() => setHistoryOpen(false))} className="min-w-0 flex-1 px-3 py-3 text-left text-sm focus-visible:ring-2 focus-visible:ring-ai"><span className="block truncate font-medium">{item.title}</span></button>
-          <button type="button" disabled={historyBusy} aria-label={t('Delete conversation')} onClick={() => { if (window.confirm(t('Delete this conversation?'))) void removeConversation(item.id); }} className="mr-2 flex size-10 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-negative/10 hover:text-negative focus-visible:ring-2 focus-visible:ring-negative"><Trash2 className="size-4" /></button>
+          <button type="button" disabled={historyBusy} aria-label={t('Delete conversation')} onClick={() => setPendingDelete({ id: item.id, title: item.title })} className="mr-2 flex size-10 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-negative/10 hover:text-negative focus-visible:ring-2 focus-visible:ring-negative"><Trash2 className="size-4" /></button>
         </div>)}</div>}
       </div>}
-      <div style={{ animationDelay: '70ms' }} className="ai-rise mb-4 flex shrink-0 flex-wrap items-center justify-center gap-2 text-xs text-muted"><span className="h-1.5 w-1.5 rounded-full bg-positive" />{financial.page}<ChevronRight className="h-3 w-3" /><span>{financial.period}</span>{financial.selection?.transaction && <span>· {financial.selection.transaction.description}</span>}</div>
+      <div style={{ animationDelay: '70ms' }} className="ai-rise mb-4 flex shrink-0 flex-wrap items-center justify-center gap-2 text-xs text-muted"><span className="h-1.5 w-1.5 rounded-full bg-positive" />{t(financial.page)}<ChevronRight className="h-3 w-3" /><span>{t(financial.period)}</span>{financial.selection?.transaction && <span>· {financial.selection.transaction.description}</span>}</div>
       {!messages.length ? <div className="flex min-h-0 flex-1 flex-col justify-center"><div style={{ animationDelay: '140ms' }} className="ai-rise mb-8 text-center"><div className="glass mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl !border-[#8B5CF6]/30 bg-gradient-to-br from-[#8B5CF6]/20 to-[#EC4899]/15"><Sparkles className="h-7 w-7 text-ai" /></div><p className="mb-3 text-xs font-medium tracking-[0.16em] text-ai">{t("A LITTLE CLARITY GOES A LONG WAY")}</p><h2 id="ambient-title" className="text-[26px] font-medium leading-tight tracking-[-0.04em] sm:text-[32px]">{t("How can I help with")}<br className="hidden sm:block" />{' ' + t("your finances today?")}</h2><p className="mt-4 text-sm text-muted">{t("Your numbers. Your context. A clearer perspective.")}</p></div><div style={{ animationDelay: '260ms' }} className="ai-rise mb-5"><AIInput onSubmit={send} busy={busy} /></div><div style={{ animationDelay: '380ms' }} className="ai-rise"><PromptChips /></div></div> : <><h2 id="ambient-title" className="sr-only">{t("Your financial conversation")}</h2><Conversation /><div className="shrink-0 space-y-3 pt-4"><PromptChips limit={2} /><AIInput onSubmit={send} busy={busy} /></div></>}
       <p style={{ animationDelay: '480ms' }} className="ai-rise mt-5 flex shrink-0 items-center justify-center gap-2 text-center text-xs leading-5 text-muted"><ShieldCheck className="h-3.5 w-3.5 shrink-0" />{storageError ? t("Storage unavailable · Conversation lasts until refresh.") : t("Gemini AI · Encrypted chat history · Not financial advice")}</p>
+      {pendingDelete && <Modal title={t('Delete this conversation?')} onClose={() => !deleting && setPendingDelete(null)}>
+        <p className="text-sm leading-6 text-muted">{t('“{title}” and all of its messages will be deleted permanently. This cannot be undone.', { title: pendingDelete.title })}</p>
+        <div className="mt-6 flex justify-end gap-3">
+          <Button secondary disabled={deleting} onClick={() => setPendingDelete(null)}>{t('Cancel')}</Button>
+          <Button className="!bg-negative !text-on-negative" disabled={deleting} onClick={() => {
+            setDeleting(true);
+            void removeConversation(pendingDelete.id).finally(() => { setDeleting(false); setPendingDelete(null); });
+          }}>{t('Delete')}</Button>
+        </div>
+      </Modal>}
     </div>
   </FocusedAssistant>}</AnimatePresence>;
 }
@@ -146,6 +158,8 @@ function FocusedAssistant({ children, onClose }: { children: ReactNode; onClose:
     const focusable = () => Array.from(ref.current!.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [tabindex="0"]'));
     (ref.current?.querySelector('input') as HTMLInputElement)?.focus();
     const key = (e: KeyboardEvent) => {
+      // A confirm dialog opened on top of the assistant handles its own Escape and Tab.
+      if ([...document.querySelectorAll('[aria-modal="true"]')].some(el => el !== ref.current)) return;
       if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
       if (e.key !== 'Tab') return;
       const all = focusable(), first = all[0], last = all[all.length - 1];

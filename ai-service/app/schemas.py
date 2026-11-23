@@ -19,6 +19,8 @@ class ChatRequest(ApiModel):
     message: str = Field(min_length=1, max_length=4000)
     history: list[ChatTurn] = Field(default_factory=list, max_length=30)
     financial_context: str = Field(default="{}", max_length=30_000)
+    # UI language of the user. When set, the answer must be written in it, whatever language the question uses.
+    language: Literal["vi", "en"] | None = None
 
 
 class GeminiChatOutput(BaseModel):

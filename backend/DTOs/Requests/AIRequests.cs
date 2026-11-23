@@ -3,9 +3,11 @@ using backend.Models;
 
 namespace backend.DTOs.Requests;
 
+/// <param name="Language">UI language of the user (`vi` or `en`); the assistant answers in it. Optional.</param>
 public sealed record SendChatMessageRequest(
     Guid? ConversationId,
-    [Required, StringLength(4000)] string Message);
+    [Required, StringLength(4000)] string Message,
+    [RegularExpression("^(vi|en)$", ErrorMessage = "Language must be 'vi' or 'en'.")] string? Language = null);
 
 public sealed record RenameConversationRequest([Required, StringLength(200)] string Title);
 

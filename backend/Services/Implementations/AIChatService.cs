@@ -106,7 +106,7 @@ public sealed class AIChatService(
         AIChatResult result;
         try
         {
-            result = await orchestration.ChatAsync(userId, text, history, cancellationToken);
+            result = await orchestration.ChatAsync(userId, text, history, request.Language, cancellationToken);
         }
         catch
         {

@@ -13,14 +13,14 @@ public sealed class AIOrchestrationService(
     ILogger<AIOrchestrationService> logger) : IAIOrchestrationService
 {
     public async Task<AIChatResult> ChatAsync(Guid userId, string message, IReadOnlyList<AIChatTurn> history,
-        CancellationToken cancellationToken = default)
+        string? language = null, CancellationToken cancellationToken = default)
     {
         var requestId = Guid.NewGuid();
         var watch = Stopwatch.StartNew();
         try
         {
             var context = await analysis.BuildContextAsync(userId, cancellationToken);
-            var result = await client.ChatAsync(new AIChatPayload(message, history, context), cancellationToken);
+            var result = await client.ChatAsync(new AIChatPayload(message, history, context, language), cancellationToken);
             await LogSafelyAsync(userId, requestId, "Chat", result.Provider, watch, AIProcessingStatus.Completed,
                 null, result.TokenUsage, cancellationToken);
             return result;

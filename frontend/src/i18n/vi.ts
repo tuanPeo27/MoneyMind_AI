@@ -524,4 +524,8 @@ export const vi: Record<string, string> = {
   'Account deleted.': 'Đã xóa tài khoản.',
   'Account archived. Its transactions are kept.': 'Đã lưu trữ tài khoản. Các giao dịch vẫn được giữ.',
   'Account restored.': 'Đã khôi phục tài khoản.',
+  // AI assistant
+  'Request failed': 'Yêu cầu thất bại',
+  'Gemini · Encrypted history': 'Gemini · Lịch sử được mã hóa',
+  '“{title}” and all of its messages will be deleted permanently. This cannot be undone.': '“{title}” và toàn bộ tin nhắn trong đó sẽ bị xóa vĩnh viễn. Không thể hoàn tác.',
 };

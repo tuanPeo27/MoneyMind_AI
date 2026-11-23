@@ -69,7 +69,7 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
   const [financial, setContext] = useState<FinancialContext>(emptyContext);
   const [highlight, setHighlight] = useState<Highlight>(null);
   const { session } = useSession();
-  const { locale } = useLanguage();
+  const { locale, language, t } = useLanguage();
   const timeZone = session?.user.timeZoneId || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Ho_Chi_Minh';
   const [messages, setMessages] = useState<AIMessageData[]>([]);
   const [conversations, setConversations] = useState<AIConversationResponse[]>([]);
@@ -102,7 +102,7 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
     clearTimeout(fadeTimer.current);
 
     try {
-      const response = await aiChatApi.sendMessage(conversationId, text);
+      const response = await aiChatApi.sendMessage(conversationId, text, language);
       setConversationId(response.conversationId);
       if (session?.user.id) localStorage.setItem(`mm-ai-conversation-${session.user.id}`, response.conversationId);
       setConversations(old => {
@@ -124,8 +124,8 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
       }]);
     } catch {
       setMessages(old => [...old, {
-        id: crypto.randomUUID(), role: 'assistant', text: 'AI service is unavailable. Please try again.',
-        time: chatTime(new Date(), locale, timeZone), context: 'Request failed',
+        id: crypto.randomUUID(), role: 'assistant', text: t('AI service is unavailable. Please try again.'),
+        time: chatTime(new Date(), locale, timeZone), context: 'Request failed', // translated when shown
       }]);
     } finally {
       setBusy(false);
@@ -224,7 +224,8 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
   useEffect(() => () => { clearTimeout(fadeTimer.current); }, []);
   return <Context.Provider value={{
     open, busy, financial, highlight, messages, conversations, conversationId, historyBusy, storageError,
-    prompts: getPrompts(financial.route.startsWith('/admin') ? 'Admin' : financial.page), setContext, openAssistant, closeAssistant,
+    // Suggestions in the current language; the chip sends the same (translated) text it shows.
+    prompts: getPrompts(financial.route.startsWith('/admin') ? 'Admin' : financial.page).map(prompt => t(prompt)), setContext, openAssistant, closeAssistant,
     send, selectConversation, removeConversation, inspect, clearHighlight, registerNavigator,
     clear: () => {
       if (!locked.current) {

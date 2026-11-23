@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Check, Clock3, Download, Languages } from 'lucide-react';
-import { Button, Card, Field, SectionHead, fieldClass } from '../components/ui';
+import { Button, Card, Field, SectionHead } from '../components/ui';
 import { type Profile } from '../components/layout/UserLayout';
 import { type DemoRole } from '../routing';
 import { themeOptions, type Theme } from '../hooks/useTheme';
 import { useLanguage } from '../i18n';
 import { AccountSecurity } from '../components/AccountSecurity';
+import { Select } from '../components/Select';
 import { usersApi, useSession } from '../services';
 
 const timeZoneOptions = [
@@ -58,10 +59,11 @@ export default function SettingsPage({ profile, onSave, onExport, role, theme, s
       <SectionHead title={t('Time zone')} subtitle={t('Choose the time zone used to display dates and chat times.')} action={<Clock3 aria-hidden="true" className="size-4 text-brand" />} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1"><Field label={t('Time zone')}>
-          <select className={fieldClass} value={timeZoneId} onChange={e => { setTimeZoneId(e.target.value); setTimeZoneNotice(''); }}>
-            {!timeZoneOptions.some(([value]) => value === timeZoneId) && <option value={timeZoneId}>{timeZoneId}</option>}
-            {timeZoneOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
+          <Select label={t('Time zone')} value={timeZoneId} onChange={value => { setTimeZoneId(value); setTimeZoneNotice(''); }} options={[
+            // Keep a zone saved earlier (or the browser's own) selectable even when it is not in the short list.
+            ...(timeZoneOptions.some(([value]) => value === timeZoneId) ? [] : [{ value: timeZoneId, label: timeZoneId }]),
+            ...timeZoneOptions.map(([value, label]) => ({ value, label })),
+          ].map(option => ({ ...option, icon: <Clock3 aria-hidden="true" className="size-4 shrink-0 text-muted" /> }))} />
         </Field></div>
         <Button type="button" disabled={timeZoneBusy || timeZoneId === session?.user.timeZoneId} onClick={() => void saveTimeZone()}>{timeZoneBusy ? t('Saving...') : t('Save time zone')}</Button>
       </div>
