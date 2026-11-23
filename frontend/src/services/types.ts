@@ -27,6 +27,8 @@ export type SessionResponse = { id: string; deviceInfo?: string | null; ipAddres
 export type AccountResponse = {
   id: string; name: string; accountType: AccountType; initialBalance: number; balance: number;
   currency: string; isArchived: boolean; createdAt: string;
+  /** Moved from this account into savings funds; already subtracted from `balance`. */
+  contributed?: number;
 };
 export type CategoryResponse = {
   id: string; name: string; type: CategoryType; icon?: string | null; color?: string | null;
@@ -45,6 +47,8 @@ export type BudgetResponse = {
 export type FinancialGoalResponse = {
   id: string; name: string; targetAmount: number; currentAmount: number; progressPercent: number;
   deadline?: string | null; status: FinancialGoalStatus;
+  /** Day of the month (1-31) for the contribution reminder; null = none. */
+  reminderDay?: number | null;
 };
 export type NotificationResponse = {
   id: string; type: NotificationType; source: NotificationSource; title: string; message: string;
@@ -81,7 +85,7 @@ export type UpsertCategoryRequest = { name: string; type: CategoryType; icon?: s
 export type CreateAccountRequest = { name: string; accountType: AccountType; initialBalance: number; currency?: string };
 export type UpdateAccountRequest = { name: string; accountType: AccountType; isArchived: boolean };
 export type UpsertBudgetRequest = { categoryId: string; amount: number; startDate: string; endDate: string; alertThreshold?: number };
-export type UpsertGoalRequest = { name: string; targetAmount: number; deadline?: string | null };
+export type UpsertGoalRequest = { name: string; targetAmount: number; deadline?: string | null; reminderDay?: number | null };
 /** The backend clears the avatar when `avatarUrl` is empty, so always send the current one. */
 export type AIConversationResponse = {
   id: string; title: string; createdAt: string; updatedAt: string; isArchived: boolean;
@@ -121,3 +125,12 @@ export type AdminUserResponse = {
 };
 /** `search` matches full name or email. `isActive` false = locked accounts. */
 export type AdminUserQuery = { page?: number; pageSize?: number; search?: string; isActive?: boolean };
+// --- Admin: transaction statistics (AdminTransactionsController). Aggregates only, no individual data. ---
+export type AdminDailyTransactionStat = { date: string; count: number; income: number; expense: number };
+/** `categoryName` null = merged bucket (user-created categories and those used by fewer than `minGroupSize` people). */
+export type AdminCategoryTransactionStat = { categoryName: string | null; type: TransactionType; count: number; amount: number };
+export type AdminTransactionStatsResponse = {
+  from: string; to: string; transactionCount: number; activeUsers: number; totalIncome: number; totalExpense: number;
+  minGroupSize: number; daily: AdminDailyTransactionStat[]; categories: AdminCategoryTransactionStat[];
+  sources: { source: TransactionSource; count: number }[];
+};

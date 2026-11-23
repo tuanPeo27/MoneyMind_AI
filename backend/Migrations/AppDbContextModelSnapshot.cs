@@ -734,10 +734,16 @@ namespace backend.Migrations
                     b.Property<DateOnly?>("Deadline")
                         .HasColumnType("date");
 
+                    b.Property<DateOnly?>("LastReminderOn")
+                        .HasColumnType("date");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
+
+                    b.Property<byte?>("ReminderDay")
+                        .HasColumnType("tinyint");
 
                     b.Property<byte>("Status")
                         .HasColumnType("tinyint");
@@ -752,7 +758,40 @@ namespace backend.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("FinancialGoals");
+                    b.ToTable("FinancialGoals", t =>
+                        {
+                            t.HasCheckConstraint("CK_FinancialGoals_ReminderDay", "[ReminderDay] IS NULL OR ([ReminderDay] >= 1 AND [ReminderDay] <= 31)");
+                        });
+                });
+
+            modelBuilder.Entity("backend.Models.GoalContribution", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("AccountId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("GoalId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("GoalId");
+
+                    b.ToTable("GoalContributions", t =>
+                        {
+                            t.HasCheckConstraint("CK_GoalContributions_Amount_Positive", "[Amount] > 0");
+                        });
                 });
 
             modelBuilder.Entity("backend.Models.Notification", b =>
@@ -1294,6 +1333,20 @@ namespace backend.Migrations
                     b.HasOne("backend.Models.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("backend.Models.GoalContribution", b =>
+                {
+                    b.HasOne("backend.Models.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("backend.Models.FinancialGoal", null)
+                        .WithMany()
+                        .HasForeignKey("GoalId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

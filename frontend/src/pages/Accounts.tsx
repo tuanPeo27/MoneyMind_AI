@@ -8,7 +8,8 @@ import { money } from '../data';
 import type { AccountType } from '../services';
 import type { AccountInput, WalletAccount } from '../hooks/useWorkspaceData';
 
-export const HIDDEN_AMOUNT = '••••••';
+import { HIDDEN_AMOUNT } from '../lib/currency';
+export { HIDDEN_AMOUNT };
 export const accountTypes: Record<AccountType, { label: string; icon: LucideIcon; tone: string }> = {
   Cash: { label: 'Cash', icon: Banknote, tone: 'text-positive bg-positive/10' },
   Bank: { label: 'Bank account', icon: Landmark, tone: 'text-brand bg-brand/10' },

@@ -1,11 +1,16 @@
 import { useState } from 'react';
-import { CalendarClock, CircleCheck, Pencil, PiggyBank, Plus, RotateCcw, Trash2, Undo2, X, type LucideIcon } from 'lucide-react';
+import { BellRing, CalendarClock, CircleCheck, Pencil, PiggyBank, Plus, RotateCcw, Trash2, Undo2, X, type LucideIcon } from 'lucide-react';
 import { useLanguage } from '../i18n';
 import { Badge, Button, Card, Empty, Field, IconButton, Modal, SectionHead, fieldClass } from '../components/ui';
 import { AmountInput } from '../components/AmountInput';
 import { money } from '../data';
 import type { FinancialGoalResponse, FinancialGoalStatus, UpsertGoalRequest } from '../services';
-import { HIDDEN_AMOUNT } from './Accounts';
+import { AccountIcon, HIDDEN_AMOUNT } from './Accounts';
+import { FormSelect, Select } from '../components/Select';
+import type { WalletAccount } from '../hooks/useWorkspaceData';
+
+/** Option value meaning "record it in the fund only, do not take it from an account". */
+const NO_ACCOUNT = 'none';
 
 type Dialog =
   | { kind: 'form'; goal?: FinancialGoalResponse }
@@ -30,11 +35,13 @@ function ProgressBar({ percent, tone }: { percent: number; tone: string }) {
  * Savings funds (financial goals) from /api/financial-goals. The backend completes a fund when the saved amount
  * reaches its target and sends a notification, so the page only adds money and shows progress.
  */
-export default function SavingsPage({ goals, loading, hidden, onSave, onContribute, onStatus, onDelete }: {
+export default function SavingsPage({ goals, loading, hidden, accounts, onSave, onContribute, onStatus, onDelete }: {
   goals: FinancialGoalResponse[]; loading: boolean; hidden: boolean;
+  /** Active accounts with their current balance: the money for a contribution can come from one of them. */
+  accounts: WalletAccount[];
   /** Each returns true on success; errors are shown by the caller. */
   onSave: (id: string | undefined, input: UpsertGoalRequest) => Promise<boolean>;
-  onContribute: (goal: FinancialGoalResponse, amount: number) => Promise<boolean>;
+  onContribute: (goal: FinancialGoalResponse, amount: number, accountId: string | null) => Promise<boolean>;
   onStatus: (goal: FinancialGoalResponse, status: FinancialGoalStatus) => Promise<boolean>;
   onDelete: (goal: FinancialGoalResponse) => Promise<boolean>;
 }) {
@@ -82,6 +89,7 @@ export default function SavingsPage({ goals, loading, hidden, onSave, onContribu
                   {days === null ? t('No deadline') : days < 0 ? <span className="text-negative">{t('Overdue by {n} days', { n: -days })}</span>
                     : days === 0 ? t('Due today') : t('{n} days left', { n: days })}
                 </p>
+                {g.reminderDay ? <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted"><BellRing className="size-3.5 shrink-0" aria-hidden="true" />{t('Reminder on day {n} of every month', { n: g.reminderDay })}</p> : null}
               </div>
               <p className="shrink-0 text-sm font-semibold tabular-nums">{Math.round(g.progressPercent)}%</p>
             </div>
@@ -112,7 +120,7 @@ export default function SavingsPage({ goals, loading, hidden, onSave, onContribu
       </span>} />}
 
     {dialog?.kind === 'form' && <GoalForm goal={dialog.goal} busy={busy} onClose={() => setDialog(null)} onSave={input => run(() => onSave(dialog.goal?.id, input))} />}
-    {dialog?.kind === 'contribute' && <ContributeForm goal={dialog.goal} busy={busy} onClose={() => setDialog(null)} onSave={amount => run(() => onContribute(dialog.goal, amount))} />}
+    {dialog?.kind === 'contribute' && <ContributeForm goal={dialog.goal} accounts={accounts} hidden={hidden} busy={busy} onClose={() => setDialog(null)} onSave={(amount, accountId) => run(() => onContribute(dialog.goal, amount, accountId))} />}
     {dialog?.kind === 'cancel' && <Modal title={t('Cancel this fund?')} onClose={() => !busy && setDialog(null)}>
       <p className="text-sm leading-6 text-muted">{t('“{name}” will stop counting toward your active savings. You can reopen it later.', { name: dialog.goal.name })}</p>
       <div className="mt-6 flex justify-end gap-3">
@@ -121,7 +129,7 @@ export default function SavingsPage({ goals, loading, hidden, onSave, onContribu
       </div>
     </Modal>}
     {dialog?.kind === 'delete' && <Modal title={t('Delete this fund?')} onClose={() => !busy && setDialog(null)}>
-      <p className="text-sm leading-6 text-muted">{t('“{name}” will be deleted permanently. This does not change your account balances.', { name: dialog.goal.name })}</p>
+      <p className="text-sm leading-6 text-muted">{t('“{name}” will be deleted permanently. Money taken from your accounts for this fund goes back to them.', { name: dialog.goal.name })}</p>
       <div className="mt-6 flex justify-end gap-3">
         <Button secondary disabled={busy} onClick={() => setDialog(null)}>{t('Cancel')}</Button>
         <Button className="!bg-negative !text-on-negative" disabled={busy} onClick={() => void run(() => onDelete(dialog.goal))}>{t('Delete')}</Button>
@@ -160,14 +168,18 @@ function GoalForm({ goal, busy, onClose, onSave }: {
       const name = String(data.get('name')).trim();
       const targetAmount = Number(data.get('targetAmount') || 0);
       const deadline = String(data.get('deadline') || '');
+      const reminder = String(data.get('reminderDay') || 'off');
       if (!name) { setError(t('Enter a name for the fund.')); return; }
       if (targetAmount <= 0) { setError(t('Enter a target greater than 0.')); return; }
       if (goal && targetAmount < goal.currentAmount) { setError(t('The target cannot be lower than the amount already saved.')); return; }
-      onSave({ name, targetAmount, deadline: deadline || null });
+      onSave({ name, targetAmount, deadline: deadline || null, reminderDay: reminder === 'off' ? null : Number(reminder) });
     }}>
       <Field label={t('Fund name')}><input name="name" required maxLength={150} autoFocus defaultValue={goal?.name} placeholder={t('e.g. Emergency fund, Da Nang trip')} className={fieldClass} /></Field>
       <Field label={t('Target amount')}><AmountInput name="targetAmount" required defaultValue={goal?.targetAmount} /></Field>
       <Field label={t('Deadline (optional)')}><input name="deadline" type="date" lang={language} min={goal ? undefined : minDate} defaultValue={goal?.deadline ?? ''} className={fieldClass} /></Field>
+      <Field label={t('Contribution reminder')}><FormSelect name="reminderDay" label={t('Contribution reminder')} defaultValue={goal?.reminderDay ? String(goal.reminderDay) : 'off'}
+        options={[{ value: 'off', label: t('No reminder') }, ...Array.from({ length: 31 }, (_, i) => ({ value: String(i + 1), label: t('Day {n} of every month', { n: i + 1 }), icon: <BellRing aria-hidden="true" className="size-4 shrink-0 text-muted" /> }))]} /></Field>
+      <p className="-mt-3 text-xs leading-5 text-muted">{t('You get a notification on that day. Days 29-31 fall on the last day of shorter months.')}</p>
       {goal && <p className="rounded-xl bg-line/40 px-4 py-3 text-xs leading-5 text-muted">{t('Saved so far: {amount}. Use “Add money” to contribute.', { amount: money(goal.currentAmount) })}</p>}
       {error && <p role="alert" className="text-sm text-negative">{error}</p>}
       <div className="flex justify-end gap-3"><Button secondary type="button" disabled={busy} onClick={onClose}>{t('Cancel')}</Button><Button disabled={busy}>{t(goal ? 'Save changes' : 'Add savings fund')}</Button></div>
@@ -175,22 +187,37 @@ function GoalForm({ goal, busy, onClose, onSave }: {
   </Modal>;
 }
 
-function ContributeForm({ goal, busy, onClose, onSave }: {
-  goal: FinancialGoalResponse; busy: boolean; onClose: () => void; onSave: (amount: number) => void;
+function ContributeForm({ goal, accounts, hidden, busy, onClose, onSave }: {
+  goal: FinancialGoalResponse; accounts: WalletAccount[]; hidden: boolean; busy: boolean; onClose: () => void;
+  onSave: (amount: number, accountId: string | null) => void;
 }) {
   const { t } = useLanguage();
   const [error, setError] = useState('');
+  // Default to the account with the most money; "none" keeps the old behaviour (record it in the fund only).
+  const sorted = [...accounts].sort((a, b) => b.balance - a.balance);
+  const [source, setSource] = useState(sorted[0]?.id ?? NO_ACCOUNT);
+  const account = accounts.find(a => a.id === source);
   const remaining = Math.max(0, goal.targetAmount - goal.currentAmount);
+  const show = (vnd: number) => hidden ? HIDDEN_AMOUNT : money(vnd);
   return <Modal title={t('Add money to {name}', { name: goal.name })} onClose={() => !busy && onClose()}>
-    <form className="space-y-5" onSubmit={e => {
+    <form className="space-y-5" onInput={() => setError('')} onSubmit={e => {
       e.preventDefault();
       const amount = Number(new FormData(e.currentTarget).get('amount') || 0);
       if (amount <= 0) { setError(t('Enter an amount greater than 0.')); return; }
-      onSave(amount);
+      if (account && amount > account.balance) { setError(t('“{name}” only has {amount}.', { name: account.name, amount: money(Math.max(0, account.balance)) })); return; }
+      onSave(amount, account?.id ?? null);
     }}>
       <p className="text-sm text-muted">{t('Saved {saved} of {target}. {amount} to go.', { saved: money(goal.currentAmount), target: money(goal.targetAmount), amount: money(remaining) })}</p>
+      <Field label={t('Take the money from')}>
+        <Select label={t('Take the money from')} value={source} onChange={value => { setSource(value); setError(''); }} options={[
+          ...sorted.map(a => ({ value: a.id, label: `${a.name} · ${show(a.balance)}`, icon: <AccountIcon type={a.type} small /> })),
+          { value: NO_ACCOUNT, label: t('Not from an account (record only)'), icon: <PiggyBank aria-hidden="true" className="size-4 shrink-0 text-muted" /> },
+        ]} />
+      </Field>
       <Field label={t('Amount to add')}><AmountInput name="amount" required autoFocus /></Field>
-      <p className="text-xs leading-5 text-muted">{t('Adding money here only updates this fund. It does not create a transaction or change an account balance.')}</p>
+      <p className="text-xs leading-5 text-muted">{account
+        ? t('The amount is moved from “{name}” into this fund: the account balance goes down, but it is not counted as spending.', { name: account.name })
+        : t('Adding money here only updates this fund. It does not create a transaction or change an account balance.')}</p>
       {error && <p role="alert" className="text-sm text-negative">{error}</p>}
       <div className="flex justify-end gap-3"><Button secondary type="button" disabled={busy} onClick={onClose}>{t('Cancel')}</Button><Button disabled={busy}>{t('Add money')}</Button></div>
     </form>

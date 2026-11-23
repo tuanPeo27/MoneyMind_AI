@@ -10,7 +10,9 @@ public sealed record AccountResponse(
     decimal Balance,
     string Currency,
     bool IsArchived,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    /// <summary>Total moved from this account into savings goals (already subtracted from Balance).</summary>
+    decimal Contributed = 0m);
 
 public sealed record CategoryResponse(
     Guid Id,
@@ -64,7 +66,8 @@ public sealed record FinancialGoalResponse(
     decimal CurrentAmount,
     decimal ProgressPercent,
     DateOnly? Deadline,
-    FinancialGoalStatus Status);
+    FinancialGoalStatus Status,
+    byte? ReminderDay = null);
 
 public sealed record NotificationResponse(
     Guid Id,

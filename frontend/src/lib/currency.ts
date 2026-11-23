@@ -16,6 +16,14 @@ const RATE_MAX_AGE = 12 * 60 * 60 * 1000;
 // non-React code. LanguageProvider keeps it in sync and re-renders the tree whenever it changes.
 let state: { currency: Currency; rate: number } = { currency: 'VND', rate: FALLBACK_VND_PER_USD };
 export function setDisplayCurrency(currency: Currency, rate: number) { state = { currency, rate }; }
+
+/** Shown instead of an amount while amounts are hidden. */
+export const HIDDEN_AMOUNT = '••••••';
+// "Hide amounts" (the eye on Total balance). When on, every helper below masks its output, so all money on the
+// personal workspace is hidden at once: cards, lists, charts, budgets, search results. Set by App on each render.
+let amountsHidden = false;
+export function setAmountsHidden(hidden: boolean) { amountsHidden = hidden; }
+export const areAmountsHidden = () => amountsHidden;
 export const displayCurrency = () => state.currency;
 export const vndPerUsd = () => state.rate;
 
@@ -37,15 +45,18 @@ const localeOf = (c: Currency) => c === 'USD' ? 'en-US' : 'vi-VN';
 
 /** Number only, grouped every three digits: 100.000.000 (VND) or 3,846.15 (USD). Input is VND. */
 export function formatAmount(vnd: number) {
+  if (amountsHidden) return HIDDEN_AMOUNT;
   const c = state.currency, digits = fractionDigits();
   return nf(`n-${c}`, localeOf(c), { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(toDisplay(vnd));
 }
 /** Full amount with currency: "100.000.000 ₫" or "$3,846.15". Input is VND. */
 export function money(vnd: number) {
+  if (amountsHidden) return HIDDEN_AMOUNT;
   return state.currency === 'USD' ? `$${formatAmount(vnd)}`.replace('$-', '-$') : `${formatAmount(vnd)} ₫`;
 }
 /** Short form for chart axes and tight spaces: "31 Tr" or "$1.2K". Input is VND. */
 export function compact(vnd: number) {
+  if (amountsHidden) return '•••';
   const c = state.currency;
   return nf(`c-${c}`, localeOf(c), { notation: 'compact', maximumFractionDigits: 1, ...(c === 'USD' ? { style: 'currency', currency: 'USD' } : {}) })
     .format(toDisplay(vnd));

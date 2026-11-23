@@ -110,7 +110,8 @@ export function useWorkspaceData(userId: string | undefined) {
     }
     return accounts.map(a => ({
       id: a.id, name: a.name, type: a.accountType, initialBalance: a.initialBalance,
-      balance: a.initialBalance + (net.get(a.id) ?? 0), isArchived: a.isArchived, createdAt: a.createdAt, transactions: count.get(a.id) ?? 0,
+      // Money moved into savings funds leaves the account (no expense transaction is recorded for it).
+      balance: a.initialBalance + (net.get(a.id) ?? 0) - (a.contributed ?? 0), isArchived: a.isArchived, createdAt: a.createdAt, transactions: count.get(a.id) ?? 0,
     }));
   }, [accounts, rows]);
   const activeAccounts = useMemo(() => walletAccounts.filter(a => !a.isArchived), [walletAccounts]);
@@ -190,6 +191,9 @@ export function useWorkspaceData(userId: string | undefined) {
     return archived ? 'archived' as const : 'deleted' as const;
   }, [rows]);
 
+  /** Re-reads balances after money moved into a savings fund (it changes `contributed`, not the transactions). */
+  const refreshAccounts = useCallback(async () => { setAccounts(await accountsApi.listAccounts(true)); }, []);
+
   const removeBudget = useCallback(async (id: string) => {
     await budgetsApi.deleteBudget(id);
     setBudgets(old => old.filter(b => b.id !== id));
@@ -197,6 +201,6 @@ export function useWorkspaceData(userId: string | undefined) {
 
   return {
     rows, budgets, categories, accountNames, openingBalance, activeAccounts, archivedAccounts, activeAccountIds, loading, error, reload: load,
-    createAccount, updateAccount, removeAccount, saveTransaction, removeTransaction, saveCategory, removeCategory, saveBudget, removeBudget,
+    createAccount, updateAccount, removeAccount, refreshAccounts, saveTransaction, removeTransaction, saveCategory, removeCategory, saveBudget, removeBudget,
   };
 }

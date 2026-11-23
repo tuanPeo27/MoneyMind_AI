@@ -68,7 +68,8 @@ public sealed class FinancialAnalysisService(AppDbContext db) : IFinancialAnalys
                               where a.UserId == userId && !a.IsArchived
                               let net = db.Transactions.Where(t => t.UserId == userId && t.AccountId == a.Id)
                                   .Sum(t => (decimal?)(t.Type == TransactionType.Income ? t.Amount : -t.Amount)) ?? 0m
-                              select new { a.Name, a.AccountType, Balance = a.InitialBalance + net, a.Currency })
+                              let saved = db.GoalContributions.Where(c => c.AccountId == a.Id).Sum(c => (decimal?)c.Amount) ?? 0m
+                              select new { a.Name, a.AccountType, Balance = a.InitialBalance + net - saved, a.Currency })
             .ToListAsync(cancellationToken);
 
         // No transaction descriptions or personal identifiers are sent to the AI provider.

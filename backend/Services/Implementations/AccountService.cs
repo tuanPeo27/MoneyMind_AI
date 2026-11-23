@@ -18,8 +18,10 @@ public sealed class AccountService(AppDbContext db) : IAccountService
             .OrderBy(a => a.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        var net = await GetNetByAccountAsync(userId, accounts.Select(a => a.Id).ToList(), cancellationToken);
-        return accounts.Select(a => Map(a, net.GetValueOrDefault(a.Id))).ToList();
+        var ids = accounts.Select(a => a.Id).ToList();
+        var net = await GetNetByAccountAsync(userId, ids, cancellationToken);
+        var contributed = await GetContributedByAccountAsync(ids, cancellationToken);
+        return accounts.Select(a => Map(a, net.GetValueOrDefault(a.Id), contributed.GetValueOrDefault(a.Id))).ToList();
     }
 
     public async Task<AccountResponse> GetByIdAsync(Guid userId, Guid id, CancellationToken cancellationToken = default)
@@ -29,7 +31,8 @@ public sealed class AccountService(AppDbContext db) : IAccountService
             ?? throw new NotFoundException("Không tìm thấy ví.");
 
         var net = await GetNetByAccountAsync(userId, [id], cancellationToken);
-        return Map(account, net.GetValueOrDefault(id));
+        var contributed = await GetContributedByAccountAsync([id], cancellationToken);
+        return Map(account, net.GetValueOrDefault(id), contributed.GetValueOrDefault(id));
     }
 
     public async Task<AccountResponse> CreateAsync(Guid userId, CreateAccountRequest request,
@@ -48,7 +51,7 @@ public sealed class AccountService(AppDbContext db) : IAccountService
         };
         db.Accounts.Add(account);
         await db.SaveChangesAsync(cancellationToken);
-        return Map(account, 0m);
+        return Map(account, 0m, 0m);
     }
 
     public async Task<AccountResponse> UpdateAsync(Guid userId, Guid id, UpdateAccountRequest request,
@@ -66,7 +69,8 @@ public sealed class AccountService(AppDbContext db) : IAccountService
         await db.SaveChangesAsync(cancellationToken);
 
         var net = await GetNetByAccountAsync(userId, [id], cancellationToken);
-        return Map(account, net.GetValueOrDefault(id));
+        var contributed = await GetContributedByAccountAsync([id], cancellationToken);
+        return Map(account, net.GetValueOrDefault(id), contributed.GetValueOrDefault(id));
     }
 
     public async Task DeleteAsync(Guid userId, Guid id, CancellationToken cancellationToken = default)
@@ -74,7 +78,9 @@ public sealed class AccountService(AppDbContext db) : IAccountService
         var account = await db.Accounts.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId, cancellationToken)
             ?? throw new NotFoundException("Không tìm thấy ví.");
 
-        var hasTransactions = await db.Transactions.AnyAsync(t => t.AccountId == id, cancellationToken);
+        // Transactions and savings contributions keep pointing at the account, so it is archived, not deleted.
+        var hasTransactions = await db.Transactions.AnyAsync(t => t.AccountId == id, cancellationToken)
+            || await db.GoalContributions.AnyAsync(c => c.AccountId == id, cancellationToken);
         if (hasTransactions) account.IsArchived = true;
         else db.Accounts.Remove(account);
 
@@ -107,7 +113,19 @@ public sealed class AccountService(AppDbContext db) : IAccountService
                 g => g.Sum(r => r.Type == TransactionType.Income ? r.Total : -r.Total));
     }
 
-    private static AccountResponse Map(Account a, decimal net) =>
-        new(a.Id, a.Name, a.AccountType, a.InitialBalance, a.InitialBalance + net, a.Currency, a.IsArchived,
-            a.CreatedAt);
+    /// <summary>Money moved from each account into savings goals.</summary>
+    private async Task<Dictionary<Guid, decimal>> GetContributedByAccountAsync(List<Guid> accountIds,
+        CancellationToken cancellationToken)
+    {
+        if (accountIds.Count == 0) return [];
+        return await db.GoalContributions.AsNoTracking()
+            .Where(c => c.AccountId != null && accountIds.Contains(c.AccountId.Value))
+            .GroupBy(c => c.AccountId!.Value)
+            .Select(g => new { Id = g.Key, Total = g.Sum(c => c.Amount) })
+            .ToDictionaryAsync(x => x.Id, x => x.Total, cancellationToken);
+    }
+
+    private static AccountResponse Map(Account a, decimal net, decimal contributed) =>
+        new(a.Id, a.Name, a.AccountType, a.InitialBalance, a.InitialBalance + net - contributed, a.Currency, a.IsArchived,
+            a.CreatedAt, contributed);
 }

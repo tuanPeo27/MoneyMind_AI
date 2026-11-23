@@ -577,5 +577,20 @@ export const vi: Record<string, string> = {
   // AI assistant
   'Request failed': 'Yêu cầu thất bại',
   'Gemini · Encrypted history': 'Gemini · Lịch sử được mã hóa',
+  'This feature is not available on the server yet. Restart or update the backend.': 'Máy chủ chưa có chức năng này. Hãy khởi động lại hoặc cập nhật backend.',
   '“{title}” and all of its messages will be deleted permanently. This cannot be undone.': '“{title}” và toàn bộ tin nhắn trong đó sẽ bị xóa vĩnh viễn. Không thể hoàn tác.',
+  // Savings funds: source account and reminders
+  'Take the money from': 'Lấy tiền từ',
+  'Not from an account (record only)': 'Không lấy từ tài khoản (chỉ ghi nhận)',
+  '“{name}” only has {amount}.': '“{name}” chỉ còn {amount}.',
+  'The amount is moved from “{name}” into this fund: the account balance goes down, but it is not counted as spending.': 'Số tiền được chuyển từ “{name}” vào quỹ: số dư tài khoản giảm, nhưng không bị tính là chi tiêu.',
+  '“{name}” will be deleted permanently. Money taken from your accounts for this fund goes back to them.': '“{name}” sẽ bị xóa vĩnh viễn. Số tiền đã lấy từ các tài khoản cho quỹ này sẽ được hoàn lại vào tài khoản.',
+  'Contribution reminder': 'Nhắc góp quỹ',
+  'No reminder': 'Không nhắc',
+  'Day {n} of every month': 'Ngày {n} hằng tháng',
+  'Reminder on day {n} of every month': 'Nhắc vào ngày {n} hằng tháng',
+  'You get a notification on that day. Days 29-31 fall on the last day of shorter months.': 'Bạn sẽ nhận thông báo vào ngày đó. Ngày 29-31 sẽ dời về ngày cuối của các tháng ngắn hơn.',
+  // Phone number validation
+  'A phone number can only contain digits, spaces and + ( ) . -': 'Số điện thoại chỉ được chứa chữ số, khoảng trắng và các ký tự + ( ) . -',
+  'Enter a valid phone number, e.g. 0901 234 567 or +84 901 234 567.': 'Số điện thoại không hợp lệ. Ví dụ: 0901 234 567 hoặc +84 901 234 567.',
 };

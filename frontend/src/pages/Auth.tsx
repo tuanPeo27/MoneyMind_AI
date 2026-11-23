@@ -4,6 +4,7 @@ import { useLanguage } from '../i18n';
 import { Button, fieldClass } from '../components/ui';
 import { ApiError, forgotPassword, login, loginWithGoogle, register, resetPassword } from '../lib/auth';
 import { GoogleButton, googleSignInEnabled } from '../components/GoogleButton';
+import { BrandLogo } from '../components/BrandLogo';
 
 export const authPaths = ['/login', '/register', '/forgot-password', '/reset-password'];
 type Navigate = (path: string, replace?: boolean) => void;
@@ -16,6 +17,10 @@ export function useErrorText() {
       if (error.status === 0) return t('Cannot reach the server. Check your connection and try again.');
       if (error.status === 429) return t('Too many attempts. Please wait a moment and try again.');
       if (error.status >= 500) return t('Something went wrong on our side. Please try again later.');
+      // 404 without a server message: the running backend does not have this endpoint (usually it needs a restart).
+      if (error.status === 404 && error.message === 'REQUEST_FAILED') return t('This feature is not available on the server yet. Restart or update the backend.');
+      // Internal codes from the HTTP client are never shown as-is.
+      if (/^[A-Z_]+$/.test(error.message)) return t('Something went wrong. Please try again.');
       return error.message;
     }
     return t('Something went wrong. Please try again.');
@@ -34,7 +39,7 @@ function AuthShell({ title, subtitle, children, footer }: { title: string; subti
       <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-white/10 blur-3xl" aria-hidden="true" />
       <div className="pointer-events-none absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-[#ec4899]/25 blur-3xl" aria-hidden="true" />
       <a href="/" className="relative flex items-center gap-3 text-xl font-semibold tracking-tight">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25"><ChartNoAxesCombined className="h-5 w-5" aria-hidden="true" /></span>MoneyMind AI
+        <BrandLogo className="size-10 ring-1 ring-white/25" rounded="rounded-xl" />MoneyMind AI
       </a>
       <div className="relative max-w-md">
         <h2 className="text-4xl font-semibold leading-tight tracking-tight">{t('A clearer picture of your money.')}</h2>
@@ -48,7 +53,7 @@ function AuthShell({ title, subtitle, children, footer }: { title: string; subti
     <main className="flex flex-col px-5 py-6 sm:px-10">
       <div className="flex items-center justify-between">
         <a href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight lg:invisible">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand"><ChartNoAxesCombined className="h-4 w-4 text-on-brand" aria-hidden="true" /></span>MoneyMind AI
+          <BrandLogo className="size-8" />MoneyMind AI
         </a>
         <div role="group" aria-label={t('Language')} className="flex rounded-lg border border-line bg-surface p-0.5 text-xs font-medium">
           {(['vi', 'en'] as const).map(code => <button key={code} type="button" aria-pressed={language === code} onClick={() => setLanguage(code)}

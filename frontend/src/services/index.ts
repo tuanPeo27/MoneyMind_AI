@@ -14,3 +14,6 @@ export * as dashboardApi from './dashboard';
 export * as notificationsApi from './notifications';
 export * as aiChatApi from './aiChat';
 export * as adminUsersApi from './adminUsers';
+
+export * as adminTransactionsApi from './adminTransactions';
+export * as adminCategoriesApi from './adminCategories';

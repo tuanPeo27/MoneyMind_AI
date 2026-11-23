@@ -6,9 +6,9 @@ import { Avatar } from '../components/Avatar';
 import { type Profile } from '../components/layout/UserLayout';
 import { type DemoRole } from '../routing';
 import { SummaryCards, type Totals } from './Overview';
+import { formatPhone, hasInvalidPhoneChars, normalizePhone } from '../lib/phone';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phonePattern = /^[0-9+\s().-]{7,20}$/;
 const MAX_AVATAR_BYTES = 1024 * 1024; // 1 MB keeps the data URL small enough for localStorage.
 
 /** Personal workspace: who you are (editable, with avatar) and the four headline numbers. */
@@ -19,9 +19,17 @@ export default function WorkspacePage({ profile, onSave, totals, previous, hidde
   const { t } = useLanguage();
   const [name, setName] = useState(profile.name), [email, setEmail] = useState(profile.email), [phone, setPhone] = useState(profile.phone ?? ''), [avatar, setAvatar] = useState(profile.avatar);
   const [errors, setErrors] = useState<{ name?: string; email?: string; phone?: string; avatar?: string }>({});
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => { setName(profile.name); setEmail(profile.email); setPhone(profile.phone ?? ''); setAvatar(profile.avatar); }, [profile.name, profile.email, profile.phone, profile.avatar]);
   const changed = name.trim() !== profile.name || email.trim() !== profile.email || phone.trim() !== (profile.phone ?? '') || avatar !== profile.avatar;
+  // Checked while typing: an invalid number shows its message right away and blocks saving.
+  const phoneError = phoneProblem(phone);
+  function phoneProblem(value: string) {
+    if (!value.trim()) return undefined; // optional
+    if (hasInvalidPhoneChars(value)) return t('A phone number can only contain digits, spaces and + ( ) . -');
+    return normalizePhone(value) ? undefined : t('Enter a valid phone number, e.g. 0901 234 567 or +84 901 234 567.');
+  }
 
   function pickAvatar(file: File | undefined) {
     if (!file) return;
@@ -36,12 +44,15 @@ export default function WorkspacePage({ profile, onSave, totals, previous, hidde
     const next = {
       name: name.trim() ? undefined : t('Enter your full name.'),
       email: emailPattern.test(email.trim()) ? undefined : t('Enter a valid email address.'),
-      phone: !phone.trim() || phonePattern.test(phone.trim()) ? undefined : t('Enter a valid phone number.'),
+      phone: phoneError,
       avatar: errors.avatar,
     };
     setErrors(next);
     if (next.name || next.email || next.phone || next.avatar) return;
-    onSave({ ...profile, name: name.trim(), email: email.trim(), phone: phone.trim(), avatar });
+    const normalized = phone.trim() ? normalizePhone(phone) : '';
+    if (normalized === null) return;
+    setPhone(normalized ? formatPhone(normalized) : '');
+    onSave({ ...profile, name: name.trim(), email: email.trim(), phone: normalized, avatar });
   }
   const field = (label: string, icon: typeof User, error: string | undefined, input: (cls: string) => React.ReactNode) => {
     const Icon = icon;
@@ -74,9 +85,12 @@ export default function WorkspacePage({ profile, onSave, totals, previous, hidde
       <form onSubmit={submit} noValidate className="space-y-4">
         {field(t('Full name'), User, errors.name, cls => <input name="name" autoComplete="name" maxLength={100} value={name} onChange={e => setName(e.target.value)} className={cls} />)}
         {field(t('Email address'), Mail, errors.email, cls => <input name="email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} readOnly={signedIn} className={cls} />)}
-        {field(t('Phone number'), Phone, errors.phone, cls => <input name="phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="0901 234 567" value={phone} onChange={e => setPhone(e.target.value)} className={cls} />)}
+        {field(t('Phone number'), Phone, phone.trim() && (phoneTouched || errors.phone) ? phoneError : undefined, cls => <input name="phone" type="tel" autoComplete="tel" inputMode="tel" maxLength={20} placeholder="0901 234 567" value={phone}
+          aria-invalid={!!phoneError && phoneTouched}
+          onChange={e => { setPhone(e.target.value); setErrors(old => ({ ...old, phone: undefined })); if (hasInvalidPhoneChars(e.target.value)) setPhoneTouched(true); }}
+          onBlur={() => setPhoneTouched(true)} className={cls} />)}
         {signedIn && <p className="text-xs text-muted">{t('Your email comes from your signed-in account.')}</p>}
-        <div className="flex justify-end pt-1"><Button type="submit" disabled={!changed}>{t('Save changes')}</Button></div>
+        <div className="flex justify-end pt-1"><Button type="submit" disabled={!changed || !!phoneError}>{t('Save changes')}</Button></div>
       </form>
     </Card>
     <div className="min-w-0">

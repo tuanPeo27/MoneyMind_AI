@@ -3,11 +3,12 @@ import { Pagination, usePagination, type Pager } from '../components/Pagination'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Search, Eye, Lock, LockOpen, MessageSquare, Shield, Plus, Pencil, Trash2 } from 'lucide-react';
 import { type PlatformUser, type PlatformTransaction, type SystemCategory, aiUsage, questionTopics } from './data';
-import { money, dateLabel, localDate } from '../data';
+import { money, compact, dateLabel, localDate } from '../data';
+import { percent } from '../lib/currency';
 import { Badge, Button, Card, Empty, Field, IconButton, Modal, Progress, SectionHead, fieldClass } from '../components/ui';
 import { AdminChart } from './AdminCharts';
 import { FormSelect, Select } from '../components/Select';
-import { adminUsersApi, type AdminUserResponse, type PagedResult } from '../services';
+import { adminCategoriesApi, adminTransactionsApi, adminUsersApi, type AdminTransactionStatsResponse, type AdminUserResponse, type CategoryResponse, type CategoryType, type PagedResult } from '../services';
 import { useErrorText } from '../pages/Auth';
 import { QuotaBadge, QuotaDialog, limitLabel } from './AIQuota';
 import { CategoryIcon, CategoryIconPicker, categoryIcons, getCategoryIcon, type CategoryIconId } from '../components/CategoryIcon';
@@ -21,8 +22,9 @@ export function AdminTable({ headers, children, empty }: { headers: string[]; ch
 }
 /** Account numbers for the overview, read from /api/admin/users. `recent` is the newest page (up to 100 accounts). */
 export type AdminUserStats = { total: number; active: number; recent: AdminUserResponse[] };
-export function AdminOverview({ stats, transactions }: { stats: AdminUserStats | null; transactions: PlatformTransaction[] }) {
-  const volume = transactions.reduce((s, t) => s + t.amount, 0);
+/** Overview: account numbers from /api/admin/users, transaction numbers from /api/admin/transactions/stats (30 days). */
+export function AdminOverview({ stats, txStats }: { stats: AdminUserStats | null; txStats: AdminTransactionStatsResponse | null }) {
+  const volume = txStats ? txStats.totalIncome + txStats.totalExpense : 0;
   // Cumulative registrations at each month end. Accounts older than the loaded page are counted as a baseline.
   const growth = Array.from({ length: 6 }, (_, i) => {
     const n = new Date(), end = new Date(n.getFullYear(), n.getMonth() - 5 + i + 1, 0, 23, 59, 59);
@@ -30,16 +32,17 @@ export function AdminOverview({ stats, transactions }: { stats: AdminUserStats |
     const older = (stats?.total ?? 0) - recent.length;
     return { name: end.toLocaleDateString('en', { month: 'short' }), users: older + recent.filter(u => new Date(u.createdAt) <= end).length };
   });
-  const daily = aiUsage.map(d => ({ name: d.name, transactions: transactions.filter(t => t.date === d.date).length, requests: d.requests }));
+  const daily = aiUsage.map(d => ({ name: d.name, requests: d.requests }));
+  const txDaily = (txStats?.daily ?? []).map(d => ({ name: shortDay(d.date), transactions: d.count }));
   const count = (value?: number) => value === undefined ? '…' : value.toLocaleString();
   return <div className="space-y-5"><PlatformStats items={[
     { label: 'Total users', value: count(stats?.total), note: 'Registered accounts' },
     { label: 'Active users', value: count(stats?.active), note: 'Accounts not locked' },
-    { label: 'Total transactions', value: String(transactions.length), note: 'Platform sample records' },
-    { label: 'Financial volume', value: money(volume), note: 'Income + expense volume' },
+    { label: 'Total transactions', value: txStats ? txStats.transactionCount.toLocaleString() : '…', note: 'Last 30 days, all users' },
+    { label: 'Financial volume', value: txStats ? money(volume) : '…', note: 'Income + expenses, last 30 days' },
     { label: 'AI requests', value: aiUsage.reduce((s, d) => s + d.requests, 0).toLocaleString(), note: 'Six-day synthetic usage sample' },
     { label: 'System status', value: 'Demo healthy', note: 'Simulated · No live health checks' },
-  ]} /><div className="grid gap-5 xl:grid-cols-2"><AdminChart title="User growth" subtitle="Cumulative registrations · last six months" data={growth} dataKey="users" /><AdminChart title="Daily platform activity" subtitle="AI request events in the demo usage log" data={daily} dataKey="requests" bar /><AdminChart title="AI request volume" subtitle="Synthetic six-day sample" data={aiUsage} dataKey="requests" color="var(--color-ai)" /><AdminChart title="Transaction activity" subtitle="Sample financial records per day" data={daily} dataKey="transactions" bar color="var(--color-positive)" /></div></div>;
+  ]} /><div className="grid gap-5 xl:grid-cols-2"><AdminChart title="User growth" subtitle="Cumulative registrations · last six months" data={growth} dataKey="users" /><AdminChart title="Daily platform activity" subtitle="AI request events in the demo usage log" data={daily} dataKey="requests" bar /><AdminChart title="AI request volume" subtitle="Synthetic six-day sample" data={aiUsage} dataKey="requests" color="var(--color-ai)" /><AdminChart title="Transaction activity" subtitle="Transactions per day · last 30 days" data={txDaily} dataKey="transactions" bar color="var(--color-positive)" /></div></div>;
 }
 const isAdmin = (u: AdminUserResponse) => u.roles.includes('Admin');
 const dateTime = (iso?: string | null) => iso ? new Date(iso).toLocaleString('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
@@ -143,37 +146,206 @@ export function UserManagement({ currentUserId, onChanged }: { currentUserId?: s
       {actionError && <p role="alert" className="mt-3 text-sm text-negative">{actionError}</p>}
       <div className="mt-6 flex justify-end gap-3"><Button secondary disabled={busy} onClick={() => setUnlocking(null)}>{t('Cancel')}</Button><Button disabled={busy} onClick={() => { const target = unlocking; void run(() => adminUsersApi.unlockUser(target.id), `${target.fullName} has been unlocked.`); }}>{busy ? 'Unlocking...' : 'Unlock account'}</Button></div></Modal>}
   </Card>;
-}export function TransactionMonitoring({ transactions, users, categories }: { transactions: PlatformTransaction[]; users: PlatformUser[]; categories: SystemCategory[] }) {
-  const { t } = useLanguage();
-  const [search, setSearch] = useState(''), [user, setUser] = useState('All users'), [category, setCategory] = useState('All categories');
-  const [start, setStart] = useState(''), [end, setEnd] = useState(''), [detail, setDetail] = useState<PlatformTransaction | null>(null);
-  const shown = transactions.filter(t => `${t.description} ${users.find(u => u.id === t.userId)?.name}`.toLowerCase().includes(search.toLowerCase()) && (user === 'All users' || user === t.userId) && (category === 'All categories' || category === t.category) && (!start || t.date >= start) && (!end || t.date <= end));
-  const txPager = usePagination(shown, 10, `${search}|${user}|${category}|${start}|${end}`);
-  return <Card><div className="flex flex-wrap items-center gap-3 p-4"><input aria-label="Search platform transactions" value={search} onChange={e => setSearch(e.target.value)} placeholder={t("Search transactions...")} className={`${fieldClass} min-w-[200px] flex-1`} /><Select label="Filter by platform user" className="w-full sm:w-[200px]" value={user} onChange={setUser} options={[{ value: 'All users', label: 'All users' }, ...users.map(u => ({ value: u.id, label: u.name }))]} /><Select label="Filter platform category" className="w-full sm:w-[200px]" value={category} onChange={setCategory} options={[{ value: 'All categories', label: t("All categories") }, ...[...new Set(transactions.map(t => t.category))].map(c => ({ value: c, label: c }))]} /><input aria-label={t("Start date")} type="date" value={start} onChange={e => setStart(e.target.value)} className={`${fieldClass} w-auto`} /><input aria-label={t("End date")} type="date" value={end} min={start} onChange={e => setEnd(e.target.value)} className={`${fieldClass} w-auto`} /></div><div className="flex items-center gap-2 border-t border-line px-5 py-3 text-xs text-muted"><Shield className="h-3.5 w-3.5" />Read-only monitoring · Administrators cannot edit financial records.</div><AdminTable headers={['Transaction', 'User', 'Category', 'Date', 'Amount', 'Details']} empty={!shown.length}>{txPager.items.map(t => <tr key={t.id} className="hover:bg-line/30"><td className="max-w-[240px] truncate font-medium">{t.description}</td><td>{users.find(u => u.id === t.userId)?.name}</td><td><span className="flex items-center gap-2"><CategoryIcon name={t.category} icon={categories.find(c => c.name === t.category)?.icon} small />{t.category}</span></td><td className="text-muted">{dateLabel(t.date)}</td><td className={`tabular-nums ${t.type === 'Income' ? 'text-positive' : 'text-negative'}`}>{t.type === 'Income' ? '+' : '−'}{money(t.amount)}</td><td><IconButton icon={Eye} label={`View transaction ${t.id}`} onClick={() => setDetail(t)} /></td></tr>)}</AdminTable><Pagination pager={txPager} sizes={[10, 20, 50]} className="border-t border-line" /><p className="p-5 text-xs text-muted">{shown.length} read-only sample records</p>{detail && <Modal title="Transaction details · Read-only" onClose={() => setDetail(null)}><h3 className="mb-5 text-[1rem] font-semibold">{detail.description}</h3><dl className="space-y-4 text-sm">{[{ label: 'User', value: users.find(u => u.id === detail.userId)?.name }, { label: 'Amount', value: money(detail.amount) }, { label: 'Type', value: detail.type }, { label: 'Category', value: detail.category }, { label: 'Account', value: detail.account }, { label: 'Date', value: dateLabel(detail.date) }, { label: 'Reference', value: detail.id }].map(d => <div className="flex justify-between gap-4" key={d.label}><dt className="text-muted">{d.label}</dt><dd className="text-right">{d.value}</dd></div>)}</dl><div className="mt-6 flex justify-end"><Button secondary onClick={() => setDetail(null)}>Close details</Button></div></Modal>}</Card>;
+}const RANGES = [7, 30, 90] as const;
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+/** Last `days` days including today, as YYYY-MM-DD (UTC, matching the API). */
+export function lastDays(days: number) {
+  const to = new Date(), from = new Date(to); from.setUTCDate(from.getUTCDate() - (days - 1));
+  return { from: isoDate(from), to: isoDate(to) };
 }
-export function CategoryManagement({ categories, transactions, onSave, onDelete, confirm }: {
-  categories: SystemCategory[]; transactions: PlatformTransaction[];
-  onSave: (category: SystemCategory) => void; onDelete: (id: string) => void; confirm: (c: ConfirmAction) => void;
-}) {
+const shortDay = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+
+/**
+ * Transaction monitoring from /api/admin/transactions/stats. Aggregated only: administrators never see an
+ * individual transaction, description, account or user. Small or user-created categories are merged by the API.
+ */
+export function TransactionMonitoring() {
   const { t } = useLanguage();
-  const [editing, setEditing] = useState<SystemCategory | 'new' | null>(null), [error, setError] = useState('');
+  const errorText = useErrorText();
+  const [days, setDays] = useState<number>(30);
+  const [stats, setStats] = useState<AdminTransactionStatsResponse | null>(null);
+  const [loading, setLoading] = useState(true), [error, setError] = useState<unknown>(null);
+  const request = useRef(0);
+  const load = useCallback(async () => {
+    const current = ++request.current;
+    setLoading(true); setError(null);
+    try {
+      const range = lastDays(days);
+      const result = await adminTransactionsApi.getTransactionStats(range.from, range.to);
+      if (current === request.current) setStats(result);
+    } catch (e) { if (current === request.current) setError(e); }
+    finally { if (current === request.current) setLoading(false); }
+  }, [days]);
+  useEffect(() => { void load(); }, [load]);
+
+  const volume = (stats?.totalIncome ?? 0) + (stats?.totalExpense ?? 0);
+  const daily = (stats?.daily ?? []).map(d => ({ name: shortDay(d.date), transactions: d.count, volume: d.income + d.expense }));
+  const sources = stats?.sources ?? [];
+  const sourceTotal = sources.reduce((s, x) => s + x.count, 0);
+  return <div className="space-y-5">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div role="tablist" aria-label="Time range" className="flex rounded-xl border border-line bg-surface p-1">{RANGES.map(n =>
+        <button key={n} role="tab" aria-selected={days === n} onClick={() => setDays(n)} className={`min-h-9 rounded-lg px-4 text-sm transition-colors ${days === n ? 'bg-brand/15 font-medium text-brand' : 'text-muted hover:text-ink'}`}>Last {n} days</button>)}</div>
+      {stats && <span className="text-xs text-muted">{dateLabel(stats.from.slice(0, 10))} – {dateLabel(stats.to.slice(0, 10))}</span>}
+    </div>
+    {error != null && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 px-4 py-3 text-sm text-negative"><span>{errorText(error)}</span><Button secondary onClick={() => void load()}>{t('Try again')}</Button></div>}
+    <div aria-busy={loading} className={`space-y-5 transition-opacity ${loading && stats ? 'opacity-60' : ''}`}>
+      <PlatformStats items={[
+        { label: 'Transactions', value: stats ? stats.transactionCount.toLocaleString() : '…', note: `Recorded in the last ${days} days` },
+        { label: 'Active users', value: stats ? stats.activeUsers.toLocaleString() : '…', note: 'People who recorded at least one transaction' },
+        { label: 'Income volume', value: stats ? money(stats.totalIncome) : '…', note: 'Sum of all income' },
+        { label: 'Expense volume', value: stats ? money(stats.totalExpense) : '…', note: 'Sum of all expenses' },
+      ]} />
+      <div className="grid gap-5 xl:grid-cols-2">
+        <AdminChart title="Transactions per day" subtitle={`Platform-wide · last ${days} days`} data={daily} dataKey="transactions" bar color="var(--color-positive)" />
+        <AdminChart title="Financial volume per day" subtitle="Income + expenses, all users combined" data={daily} dataKey="volume" axisFormat={compact} valueFormat={money} />
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <Card><div className="p-5 pb-3"><SectionHead title="Volume by category" subtitle={`Categories used by fewer than ${stats?.minGroupSize ?? 3} people, and user-created categories, are grouped to protect privacy.`} /></div>
+          <AdminTable headers={['Category', 'Type', 'Transactions', 'Amount', 'Share']} empty={!loading && !stats?.categories.length}>
+            {(stats?.categories ?? []).map(c => {
+              const typeTotal = c.type === 'Income' ? stats!.totalIncome : stats!.totalExpense;
+              return <tr key={`${c.categoryName ?? '~other'}-${c.type}`} className="hover:bg-line/30">
+                <td className="flex items-center gap-3">{c.categoryName ? <CategoryIcon name={c.categoryName} small /> : <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-lg bg-line/60 text-muted"><Shield className="size-3.5" /></span>}<span className={c.categoryName ? '' : 'italic text-muted'}>{c.categoryName ?? 'Other & custom categories'}</span></td>
+                <td><Badge tone={c.type === 'Income' ? 'positive' : 'neutral'}>{c.type}</Badge></td>
+                <td className="tabular-nums">{c.count.toLocaleString()}</td>
+                <td className="tabular-nums">{money(c.amount)}</td>
+                <td className="tabular-nums text-muted">{percent(c.amount, typeTotal)}</td>
+              </tr>;
+            })}
+          </AdminTable></Card>
+        <Card className="p-5"><SectionHead title="How transactions are entered" subtitle="Manual entries vs. AI drafts" />
+          <div className="space-y-4">{sources.length ? sources.map(s => <div key={s.source}>
+            <div className="mb-2 flex justify-between text-sm"><span>{s.source === 'AIDraft' ? 'AI draft' : 'Manual'}</span><span className="tabular-nums text-muted">{s.count.toLocaleString()} · {percent(s.count, sourceTotal)}</span></div>
+            <Progress label={s.source} value={sourceTotal ? s.count / sourceTotal * 100 : 0} color={s.source === 'AIDraft' ? 'var(--color-ai)' : undefined} />
+          </div>) : <p className="text-sm text-muted">No transactions in this range.</p>}</div>
+          <p className="mt-6 border-t border-line pt-4 text-xs leading-5 text-muted">Total volume {stats ? money(volume) : '…'}. Administrators can only see these aggregates: individual transactions stay private to their owners.</p>
+        </Card>
+      </div>
+    </div>
+  </div>;
+}
+type CategoryFilter = 'All' | 'Expense' | 'Income' | 'Hidden';
+/**
+ * Default (system) categories from /api/admin/categories: shared by every user, who cannot edit them.
+ * Deleting an unused one removes it; one already used by transactions or budgets is only hidden, so no user
+ * loses data. The type of a used category cannot change (the API answers 409). Usage counts come from the
+ * 30-day aggregates, which only list categories used by enough people.
+ */
+export function CategoryManagement() {
+  const { t } = useLanguage();
+  const errorText = useErrorText();
+  const [items, setItems] = useState<CategoryResponse[] | null>(null);
+  const [usage, setUsage] = useState<Map<string, number> | null>(null);
+  const [loading, setLoading] = useState(true), [error, setError] = useState<unknown>(null);
+  const [filter, setFilter] = useState<CategoryFilter>('All');
+  const [editing, setEditing] = useState<CategoryResponse | 'new' | null>(null);
+  const [deleting, setDeleting] = useState<CategoryResponse | null>(null);
   const [icon, setIcon] = useState<CategoryIconId>('Tag');
+  const [busy, setBusy] = useState(false), [formError, setFormError] = useState(''), [notice, setNotice] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const range = lastDays(30);
+      const [list, stats] = await Promise.all([
+        adminCategoriesApi.listSystemCategories(),
+        adminTransactionsApi.getTransactionStats(range.from, range.to).catch(() => null),
+      ]);
+      setItems(list);
+      setUsage(stats ? new Map(stats.categories.filter(s => s.categoryName).map(s => [`${s.type}:${s.categoryName}`, s.count])) : null);
+    } catch (e) { setError(e); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  const all = items ?? [];
+  const shown = all.filter(c => filter === 'All' ? true : filter === 'Hidden' ? !c.isActive : c.type === filter);
+  const pager = usePagination(shown, 10, filter);
   const selected = editing && editing !== 'new' ? editing : undefined;
-  const categoryPager = usePagination(categories, 10, categories.length);
-  function startEdit(category: SystemCategory | 'new') {
-    setError('');
-    setIcon(category === 'new' ? 'Tag' : getCategoryIcon(category.name, category.icon));
+  function startEdit(category: CategoryResponse | 'new') {
+    setFormError(''); setNotice('');
+    setIcon(category === 'new' ? 'Tag' : getCategoryIcon(category.name, category.icon ?? undefined));
     setEditing(category);
   }
-  return <div className="space-y-5"><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted">System-wide defaults · Separate from personal categories</p><Button onClick={() => startEdit('new')}><Plus className="h-4 w-4" />Add category</Button></div><Card><AdminTable headers={['Category', 'Type', 'Icon', 'Usage', 'Actions']}>{categoryPager.items.map(c => {
-    const used = transactions.filter(t => t.category === c.name).length;
-    return <tr key={c.id} className="hover:bg-line/30"><td><span className="flex items-center gap-3"><CategoryIcon name={c.name} icon={c.icon} />{c.name}</span></td><td><Badge tone={c.type === 'Income' ? 'positive' : 'neutral'}>{c.type}</Badge></td><td className="text-muted">{categoryIcons[getCategoryIcon(c.name, c.icon)].label}</td><td className="text-muted">{used} records</td><td><div className="flex"><IconButton icon={Pencil} label={`Edit system category ${c.name}`} onClick={() => startEdit(c)} /><IconButton icon={Trash2} label={`Delete system category ${c.name}`} disabled={used > 0} onClick={() => confirm({ title: 'Delete system category?', text: `Delete “${c.name}” from local system defaults?`, action: () => onDelete(c.id) })} /></div></td></tr>;
-  })}</AdminTable><Pagination pager={categoryPager} sizes={[5, 10, 20]} className="border-t border-line" /><p className="px-5 py-4 text-xs text-muted">Categories used by platform records cannot be deleted. No personal categories are changed.</p></Card>{editing && <Modal title={selected ? 'Edit system category' : 'Add system category'} onClose={() => setEditing(null)}><form className="space-y-5" onSubmit={e => {
-    e.preventDefault(); const d = new FormData(e.currentTarget), name = String(d.get('name')).trim();
-    if (!name || categories.some(c => c.id !== selected?.id && c.name.toLowerCase() === name.toLowerCase())) return setError('Choose a unique category name.');
-    if (selected && transactions.some(t => t.category === selected.name) && (name !== selected.name || d.get('type') !== selected.type)) return setError('This category is used by platform records. Only its icon may be changed.');
-    onSave({ id: selected?.id || crypto.randomUUID(), name, type: d.get('type') as SystemCategory['type'], icon, color: selected?.color ?? '#3B82F6' }); setEditing(null);
-  }}><Field label={t("Category name")}><input name="name" required maxLength={40} defaultValue={selected?.name} className={fieldClass} /></Field><Field label={t("Type")}><FormSelect name="type" label={t("Type")} defaultValue={selected?.type || 'Expense'} options={[{ value: 'Expense', label: t("Expense") }, { value: 'Income', label: t("Income") }]} /></Field><CategoryIconPicker value={icon} onChange={setIcon} />{error && <p role="alert" className="text-sm text-negative">{error}</p>}<div className="flex justify-end gap-3"><Button secondary type="button" onClick={() => setEditing(null)}>{t("Cancel")}</Button><Button>{t("Save category")}</Button></div></form></Modal>}</div>;
+  async function run(action: () => Promise<string>) {
+    setBusy(true); setFormError('');
+    try { setNotice(await action()); setEditing(null); setDeleting(null); }
+    catch (e) { setFormError(errorText(e)); }
+    finally { setBusy(false); }
+  }
+  const request = (c: CategoryResponse, isActive: boolean) => ({ name: c.name, type: c.type, icon: c.icon, color: c.color, isActive });
+
+  return <div className="space-y-5">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div role="tablist" aria-label="Filter categories" className="flex rounded-xl border border-line bg-surface p-1">{(['All', 'Expense', 'Income', 'Hidden'] as const).map(f =>
+        <button key={f} role="tab" aria-selected={filter === f} onClick={() => setFilter(f)} className={`min-h-9 rounded-lg px-4 text-sm transition-colors ${filter === f ? 'bg-brand/15 font-medium text-brand' : 'text-muted hover:text-ink'}`}>
+          {f}{f === 'Hidden' && all.some(c => !c.isActive) ? ` (${all.filter(c => !c.isActive).length})` : ''}</button>)}</div>
+      <Button onClick={() => startEdit('new')}><Plus className="h-4 w-4" />Add category</Button>
+    </div>
+    {notice && <p role="status" className="rounded-lg bg-positive/10 px-4 py-2.5 text-sm text-positive">{notice}</p>}
+    {error != null && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 px-4 py-3 text-sm text-negative"><span>{errorText(error)}</span><Button secondary onClick={() => void load()}>{t('Try again')}</Button></div>}
+    <Card>
+      <div aria-busy={loading} className={loading && items ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
+        <AdminTable headers={['Category', 'Type', 'Status', 'Transactions (30 days)', 'Actions']} empty={!loading && !error && !shown.length}>{pager.items.map(c => {
+          const count = usage?.get(`${c.type}:${c.name}`);
+          return <tr key={c.id} className="hover:bg-line/30">
+            <td><span className={`flex items-center gap-3 ${c.isActive ? '' : 'opacity-60'}`}><CategoryIcon name={c.name} icon={c.icon ?? undefined} />{c.name}</span></td>
+            <td><Badge tone={c.type === 'Income' ? 'positive' : 'neutral'}>{c.type}</Badge></td>
+            <td><Badge tone={c.isActive ? 'positive' : 'neutral'}>{c.isActive ? 'Visible to users' : 'Hidden'}</Badge></td>
+            <td className="tabular-nums text-muted" title={count === undefined ? `Shown only when at least ${3} people used it` : undefined}>{count === undefined ? '—' : count.toLocaleString()}</td>
+            <td><div className="flex">
+              <IconButton icon={Pencil} label={`Edit system category ${c.name}`} onClick={() => startEdit(c)} />
+              {c.isActive
+                ? <IconButton icon={Trash2} label={`Delete system category ${c.name}`} onClick={() => { setFormError(''); setNotice(''); setDeleting(c); }} />
+                : <IconButton icon={Eye} label={`Show ${c.name} to users again`} disabled={busy} onClick={() => void run(async () => { await adminCategoriesApi.updateSystemCategory(c.id, request(c, true)); await load(); return `“${c.name}” is visible to users again.`; })} />}
+            </div></td>
+          </tr>;
+        })}</AdminTable>
+        {loading && !items && <p role="status" className="p-5 text-sm text-muted">Loading categories...</p>}
+      </div>
+      <Pagination pager={pager} sizes={[10, 20, 50]} className="border-t border-line" />
+      <p className="px-5 py-4 text-xs leading-5 text-muted">{all.length} default categories, shared by every user. Users cannot edit them; their own categories are not listed here. “—” means fewer than 3 people used the category in the last 30 days.</p>
+    </Card>
+
+    {editing && <Modal title={selected ? 'Edit system category' : 'Add system category'} onClose={() => !busy && setEditing(null)}><form className="space-y-5" onSubmit={e => {
+      e.preventDefault();
+      const d = new FormData(e.currentTarget), name = String(d.get('name')).trim(), type = d.get('type') as CategoryType;
+      if (!name) return setFormError('Enter a category name.');
+      if (all.some(c => c.id !== selected?.id && c.type === type && c.name.toLocaleLowerCase() === name.toLocaleLowerCase())) return setFormError('A default category with this name and type already exists.');
+      const body = { name, type, icon, color: selected?.color ?? null, isActive: selected?.isActive ?? true };
+      void run(async () => {
+        if (selected) await adminCategoriesApi.updateSystemCategory(selected.id, body);
+        else await adminCategoriesApi.createSystemCategory(body);
+        await load();
+        return selected ? `“${name}” was updated for every user.` : `“${name}” was added for every user.`;
+      });
+    }}>
+      <Field label={t('Category name')}><input name="name" required maxLength={100} defaultValue={selected?.name} className={fieldClass} /></Field>
+      <Field label={t('Type')}><FormSelect name="type" label={t('Type')} defaultValue={selected?.type || 'Expense'} options={[{ value: 'Expense', label: t('Expense') }, { value: 'Income', label: t('Income') }]} /></Field>
+      <CategoryIconPicker value={icon} onChange={setIcon} />
+      {selected && <p className="text-xs leading-5 text-muted">Changes apply to every user. The type cannot change once transactions or budgets use this category.</p>}
+      {formError && <p role="alert" className="text-sm text-negative">{formError}</p>}
+      <div className="flex justify-end gap-3"><Button secondary type="button" disabled={busy} onClick={() => setEditing(null)}>{t('Cancel')}</Button><Button disabled={busy}>{busy ? 'Saving...' : t('Save category')}</Button></div>
+    </form></Modal>}
+
+    {deleting && <Modal title="Delete this default category?" onClose={() => !busy && setDeleting(null)}>
+      <p className="text-sm leading-6 text-muted">If no transaction or budget uses “{deleting.name}”, it is deleted. Otherwise it is <strong className="text-ink">hidden</strong> instead: users keep their existing records but can no longer pick it. A hidden category can be shown again later.</p>
+      {formError && <p role="alert" className="mt-3 text-sm text-negative">{formError}</p>}
+      <div className="mt-6 flex justify-end gap-3">
+        <Button secondary disabled={busy} onClick={() => setDeleting(null)}>{t('Cancel')}</Button>
+        <Button className="!bg-negative !text-on-negative" disabled={busy} onClick={() => {
+          const target = deleting;
+          void run(async () => {
+            await adminCategoriesApi.deleteSystemCategory(target.id);
+            const list = await adminCategoriesApi.listSystemCategories();
+            setItems(list);
+            return list.some(c => c.id === target.id) ? `“${target.name}” is in use, so it was hidden instead of deleted.` : `“${target.name}” was deleted.`;
+          });
+        }}>{t('Delete')}</Button>
+      </div>
+    </Modal>}
+  </div>;
 }
 export function AIAnalytics() {
   const requests = aiUsage.reduce((s, d) => s + d.requests, 0), completed = aiUsage.reduce((s, d) => s + d.completed, 0);

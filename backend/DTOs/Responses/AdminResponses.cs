@@ -92,3 +92,27 @@ public sealed record AnnouncementResponse(
     DateTime? EndAt,
     bool IsActive,
     DateTime CreatedAt);
+
+/// <summary>
+/// Platform-wide transaction statistics for administrators. Aggregates only: no transaction, description,
+/// account or user is identifiable. Categories used by fewer than <c>MinGroupSize</c> people, and every
+/// user-created category, are merged into one bucket per type (<see cref="AdminCategoryTransactionStat.CategoryName"/> = null).
+/// </summary>
+public sealed record AdminTransactionStatsResponse(
+    DateTime From,
+    DateTime To,
+    int TransactionCount,
+    int ActiveUsers,
+    decimal TotalIncome,
+    decimal TotalExpense,
+    int MinGroupSize,
+    IReadOnlyList<AdminDailyTransactionStat> Daily,
+    IReadOnlyList<AdminCategoryTransactionStat> Categories,
+    IReadOnlyList<AdminSourceTransactionStat> Sources);
+
+public sealed record AdminDailyTransactionStat(DateOnly Date, int Count, decimal Income, decimal Expense);
+
+/// <param name="CategoryName">System category name, or null for the merged "other / custom" bucket.</param>
+public sealed record AdminCategoryTransactionStat(string? CategoryName, TransactionType Type, int Count, decimal Amount);
+
+public sealed record AdminSourceTransactionStat(TransactionSource Source, int Count);

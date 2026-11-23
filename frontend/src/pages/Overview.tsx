@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { type Transaction, type Budget, type Category, money, dateLabel } from '../data';
 import { currencySymbol, formatAmount, percent } from '../lib/currency';
 import type { WalletAccount } from '../hooks/useWorkspaceData';
-import { AccountIcon, HIDDEN_AMOUNT } from './Accounts';
+import { AccountIcon, accountTypes } from './Accounts';
 import { Card, Change, Progress, SectionHead, Badge, Empty, IconButton } from '../components/ui';
 import { ExpandedCard } from '../components/ExpandedCard';
 import { TrendChart, ExpenseDonut, monthlyData } from '../components/charts';
@@ -42,7 +42,7 @@ export function SummaryCards({ totals, previous, hidden = false, onToggleHidden,
     <Card key={label} className={`relative px-3.5 py-3.5 sm:px-5 sm:py-5 transition-all duration-300 motion-safe:hover:-translate-y-0.5 ${index === 0 ? '!border-brand/25 !bg-balance' : ''} ${highlight === 'summary' && index === 3 ? 'ring-1 ring-[#8B5CF6]/75 brightness-110 shadow-[0_0_24px_-14px_#8B5CF6]' : ''}`}>
       {highlight === 'summary' && index === 3 && <button onClick={() => openAssistant('How can I improve my savings?')} className="absolute -top-6 right-3 flex min-h-11 items-center gap-1.5 rounded-lg border border-[#8B5CF6]/50 bg-surface px-3 text-xs text-ai"><Sparkles className="h-3 w-3" />{t("AI Insight")}</button>}
       <div className="flex items-center justify-between gap-2"><span className="truncate text-xs text-muted sm:text-sm">{t(label)}</span>{index === 0 && onToggleHidden ? <button type="button" onClick={() => onToggleHidden(!hidden)} aria-pressed={hidden} aria-label={hidden ? t("Show account balance") : t("Hide account balance")} className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-brand/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">{hidden ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}</button> : <Icon className={`h-4 w-4 shrink-0 ${index === 1 ? 'text-positive' : index === 2 ? 'text-negative' : 'text-muted'}`} aria-hidden="true" />}</div>
-      <div className="mt-3 flex items-baseline gap-1 sm:mt-4 sm:gap-1.5"><span className={`font-semibold leading-none tracking-[-0.045em] tabular-nums ${index === 0 ? 'text-[20px] sm:text-[29px] 2xl:text-[34px]' : 'text-[19px] sm:text-[26px] 2xl:text-[30px]'}`}>{index === 0 && hidden ? '••••••••' : formatAmount(value)}</span><span className={`text-sm text-muted ${symbol.before ? '-order-1' : ''}`}>{symbol.symbol}</span></div>
+      <div className="mt-3 flex items-baseline gap-1 sm:mt-4 sm:gap-1.5"><span className={`font-semibold leading-none tracking-[-0.045em] tabular-nums ${index === 0 ? 'text-[20px] sm:text-[29px] 2xl:text-[34px]' : 'text-[19px] sm:text-[26px] 2xl:text-[30px]'}`}>{formatAmount(value)}</span>{!hidden && <span className={`text-sm text-muted ${symbol.before ? '-order-1' : ''}`}>{symbol.symbol}</span>}</div>
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-0.5 sm:mt-4">{index === 0 && hidden ? <span className="text-xs text-muted">{t("Balance hidden")}</span> : <><Change value={percentChange(value, old)} inverse={inverse} /><span className="hidden text-xs text-muted sm:inline">{index === 3 ? t('{rate}% savings rate', { rate: totals.rate.toFixed(1) }) : t("vs. previous period")}</span></>}</div>
     </Card>,
   )}</div>;
@@ -290,24 +290,34 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
     {highlight && <div className="flex justify-end"><button onClick={clearHighlight} className="min-h-11 text-sm text-muted hover:text-ink">{t("Clear AI highlight & return to normal view")}</button></div>}
   </div>;
 }
-const STRIP_LIMIT = 6;
-/** Compact "account name — balance" list. Follows the Total balance eye: hiding it hides every amount here too. */
+const STRIP_LIMIT = 8;
+/**
+ * One tile per account (name, type, balance), largest balance first. Follows the Total balance eye: hiding it
+ * hides every amount here too.
+ */
 function AccountsStrip({ accounts, hidden, onManage }: { accounts: WalletAccount[]; hidden: boolean; onManage: () => void }) {
   const { t } = useLanguage();
   const shown = [...accounts].sort((a, b) => b.balance - a.balance).slice(0, STRIP_LIMIT);
-  return <Card className="px-4 py-3.5 sm:px-5">
-    <div className="mb-2.5 flex items-center justify-between gap-3">
-      <h2 className="text-sm font-semibold tracking-tight">{t('Your accounts')}</h2>
+  return <section aria-labelledby="overview-accounts">
+    <div className="mb-2.5 flex items-center justify-between gap-3 px-1">
+      <h2 id="overview-accounts" className="text-sm font-semibold tracking-tight">{t('Your accounts')}</h2>
       <button type="button" onClick={onManage} className="inline-flex min-h-9 items-center gap-1 rounded-lg text-xs font-medium text-brand hover:underline focus-visible:ring-2 focus-visible:ring-brand">
         {accounts.length > STRIP_LIMIT ? t('View all {count}', { count: accounts.length }) : t('Manage accounts')}<ChevronRight className="size-3.5" aria-hidden="true" />
       </button>
     </div>
-    {shown.length ? <ul className="grid gap-x-6 gap-y-1 sm:grid-cols-2 xl:grid-cols-3">{shown.map(a =>
-      <li key={a.id} className="flex min-h-11 items-center gap-3 border-b border-line/60 py-1.5 last:border-b-0 sm:[&:nth-last-child(-n+2)]:border-b-0 xl:[&:nth-last-child(-n+3)]:border-b-0">
-        <AccountIcon type={a.type} small />
-        <span className="min-w-0 flex-1 truncate text-sm">{a.name}</span>
-        <span className={`shrink-0 text-sm font-medium tabular-nums ${!hidden && a.balance < 0 ? 'text-negative' : ''}`}>{hidden ? HIDDEN_AMOUNT : money(a.balance)}</span>
-      </li>)}</ul>
-      : <p className="py-2 text-sm text-muted">{t('No accounts yet')}</p>}
-  </Card>;
+    {shown.length ? <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{shown.map(a =>
+      <li key={a.id}><button type="button" onClick={onManage} title={a.name}
+        className="glass block w-full rounded-2xl px-4 py-3.5 text-left transition-[transform,box-shadow] duration-300 motion-safe:hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+        <span className="flex items-center gap-3">
+          <AccountIcon type={a.type} small />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">{a.name}</span>
+            <span className="block truncate text-xs text-muted">{t(accountTypes[a.type]?.label ?? a.type)}</span>
+          </span>
+        </span>
+        {/* Balance on its own line so a long amount never squeezes the account name. */}
+        <span className={`mt-3 block truncate text-lg font-semibold leading-none tracking-[-0.03em] tabular-nums ${!hidden && a.balance < 0 ? 'text-negative' : ''}`}>{money(a.balance)}</span>
+      </button></li>)}</ul>
+      : <Card className="px-4 py-3.5"><p className="text-sm text-muted">{t('No accounts yet')}</p></Card>}
+  </section>;
 }

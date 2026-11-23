@@ -13,6 +13,8 @@ import SettingsPage from './pages/Settings';
 import WorkspacePage from './pages/Workspace';
 import NotificationsPage from './pages/Notifications';
 import AccountsPage from './pages/Accounts';
+import { setAmountsHidden } from './lib/currency';
+import { formatPhone } from './lib/phone';
 import SavingsPage from './pages/Savings';
 import { useNotifications } from './hooks/useNotifications';
 import { useSavingsGoals } from './hooks/useSavingsGoals';
@@ -29,7 +31,7 @@ import { AuthPages, authPaths, useErrorText } from './pages/Auth';
 import { useSession } from './lib/auth';
 import { usersApi } from './services';
 import { useWorkspaceData } from './hooks/useWorkspaceData';
-import { adminNav, platformTransactions, aiUsage } from './admin/data';
+import { adminNav, aiUsage } from './admin/data';
 import type { AdminUserStats } from './admin/AdminPages';
 
 type Dialog =
@@ -59,13 +61,14 @@ function Workspace() {
   const [storedProfile, setProfile] = useLocal<Profile>(`mm-profile-v2:${session?.user.id ?? 'guest'}`, { name: '', email: '', notifications: true, insights: true });
   const profile = useMemo<Profile>(() => session
     ? {
-      ...storedProfile, name: session.user.fullName, email: session.user.email, phone: session.user.phoneNumber ?? undefined,
+      ...storedProfile, name: session.user.fullName, email: session.user.email, phone: session.user.phoneNumber ? formatPhone(session.user.phoneNumber) : undefined,
       // A photo picked on this device wins; otherwise the account's own avatar (e.g. the Google profile picture).
       avatar: storedProfile.avatar || session.user.avatarUrl || undefined,
     }
     : storedProfile, [storedProfile, session]);
   // Account counts reported by the admin area (from /api/admin/users), shared with the AI assistant context.
   const [userStats, setUserStats] = useState<AdminUserStats | null>(null);
+  const [platformVolume, setPlatformVolume] = useState(0);
   // One eye for every balance (Total balance, the accounts list, the Accounts page). Hidden by default, per account.
   const [hidden, setHidden] = useLocal(`mm-balance-hidden-v2:${session?.user.id ?? 'guest'}`, true);
   // Budget and savings-goal alerts created by the server pop up as a toast as soon as the next refresh sees them.
@@ -86,6 +89,8 @@ function Workspace() {
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
   const authPage = authPaths.includes(path);
   const admin = path === '/admin' || path.startsWith('/admin/');
+  // Before any child renders: hide every amount on the personal workspace (the admin area has no eye toggle).
+  setAmountsHidden(hidden && !admin);
   const range = usePeriodRange(period, custom);
   const filtered = useMemo(() => rows.filter(t => t.date >= range.start && t.date <= range.end), [rows, range.start, range.end]);
   const previous = useMemo(() => {
@@ -115,9 +120,9 @@ function Workspace() {
     platform: admin ? {
       users: userStats?.total ?? 0, active: userStats?.active ?? 0,
       requests: aiUsage.reduce((s, d) => s + d.requests, 0),
-      volume: platformTransactions.reduce((s, t) => s + t.amount, 0),
+      volume: platformVolume,
     } : undefined,
-  }), [path, admin, page, period, range.start, range.end, filtered, previous, budgets, selection, userStats, balances]);
+  }), [path, admin, page, period, range.start, range.end, filtered, previous, budgets, selection, userStats, platformVolume, balances]);
   useEffect(() => { setContext(financial); }, [financial, setContext]);
   // Everything except the auth pages needs a signed-in account.
   useEffect(() => {
@@ -219,7 +224,7 @@ function Workspace() {
     <AmbientShell>
       {admin && role === 'ADMIN' ? <AdminApp
         path={path} navigate={goTo} onSignOut={() => { void signOut().then(() => goTo('/login')); }}
-        onStats={setUserStats}
+        onStats={setUserStats} onVolume={setPlatformVolume}
       /> : <BalanceContext.Provider value={balances}><UserLayout
         page={page} profile={profile} onNavigate={navigate} search={search} setSearch={setSearch} transactions={rows} categories={categories}
         onExport={() => exportRows(filtered)} role={role} onAdmin={() => { if (role === 'ADMIN') goTo('/admin'); }}
@@ -262,17 +267,21 @@ function Workspace() {
             return attempt(() => data.removeAccount(a.id), archives ? 'Account archived. Its transactions are kept.' : 'Account deleted.');
           }}
           onRestore={a => attempt(() => data.updateAccount(a.id, { name: a.name, type: a.type }, false), 'Account restored.')} />}
-        {page === 'Savings Funds' && <SavingsPage goals={savings.goals} loading={savings.loading} hidden={hidden}
+        {page === 'Savings Funds' && <SavingsPage goals={savings.goals} loading={savings.loading} hidden={hidden} accounts={data.activeAccounts}
           onSave={(id, input) => attempt(() => id ? savings.update(id, input) : savings.create(input), id ? 'Savings fund saved.' : 'Savings fund created.')}
-          onContribute={async (goal, amount) => {
+          onContribute={async (goal, amount, accountId) => {
             // A goal that reaches its target is completed by the server, which also sends the "goal reached" notification.
             let reached = false;
-            const ok = await attempt(async () => { reached = (await savings.contribute(goal.id, amount)).status === 'Completed'; });
+            const ok = await attempt(async () => {
+              reached = (await savings.contribute(goal.id, amount, accountId)).status === 'Completed';
+              // Money taken from an account lowers its balance: re-read the accounts.
+              if (accountId) await data.refreshAccounts();
+            });
             if (ok && !reached) notify('Money added to {name}.', { name: goal.name });
             return ok;
           }}
           onStatus={(goal, status) => attempt(() => savings.setStatus(goal.id, status), status === 'Active' ? 'Savings fund reopened.' : 'Savings fund cancelled.')}
-          onDelete={goal => attempt(() => savings.remove(goal.id), 'Savings fund deleted.')} />}
+          onDelete={goal => attempt(async () => { await savings.remove(goal.id); await data.refreshAccounts(); }, 'Savings fund deleted.')} />}
         {page === 'Transactions' && <Transactions onManageCategories={() => navigate('Categories')} rows={filtered} categories={categories} search={search} setSearch={setSearch} onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} onEdit={editTransaction} onDelete={deleteTransaction} onExport={exportRows} />}
         {page === 'Budgets' && <Budgets budgets={budgets} rows={filtered} categories={categories}
           onAdd={() => setDialog({ kind: 'budget' })}

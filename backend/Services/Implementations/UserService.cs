@@ -22,7 +22,8 @@ public sealed class UserService(UserManager<ApplicationUser> userManager, AppDbC
     {
         var user = await FindAsync(userId);
         user.FullName = request.FullName.Trim();
-        user.PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim();
+        // Stored in canonical form (e.g. "0901234567"); the request was already validated by [ValidPhoneNumber].
+        user.PhoneNumber = PhoneNumberRules.Normalize(request.PhoneNumber);
         user.AvatarUrl = NormalizeAvatarUrl(request.AvatarUrl);
         user.UpdatedAt = DateTime.UtcNow;
 

@@ -2,22 +2,24 @@ import { useLanguage } from '../i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { ChartNoAxesCombined, LayoutDashboard, Users, ArrowLeftRight, Shapes, Sparkles, Settings, LogOut, ChevronRight, Menu, X, ShieldCheck, Activity, Check } from 'lucide-react';
 import { useLocal } from '../hooks/useLocal';
-import { initialUsers, platformTransactions, systemCategories, adminNav, type SystemCategory } from './data';
+import { adminNav } from './data';
 import { DefaultQuotaCard } from './AIQuota';
-import { AdminOverview, UserManagement, TransactionMonitoring, CategoryManagement, AIAnalytics, type AdminUserStats, type ConfirmAction } from './AdminPages';
-import { adminUsersApi, useSession } from '../services';
+import { AdminOverview, UserManagement, TransactionMonitoring, CategoryManagement, AIAnalytics, lastDays, type AdminUserStats, type ConfirmAction } from './AdminPages';
+import { adminTransactionsApi, adminUsersApi, useSession, type AdminTransactionStatsResponse } from '../services';
 import { Button, Card, Badge, Field, IconButton, Modal, SectionHead, fieldClass } from '../components/ui';
 import { Avatar } from '../components/Avatar';
+import { BrandLogo } from '../components/BrandLogo';
 
 const icons = { overview: LayoutDashboard, users: Users, transactions: ArrowLeftRight, categories: Shapes, ai: Sparkles, settings: Settings };
-export function AdminApp({ path, navigate, onSignOut, onStats }: {
+export function AdminApp({ path, navigate, onSignOut, onStats, onVolume }: {
   path: string; navigate: (path: string) => void; onSignOut: () => void;
   /** Reports the account counts so the AI assistant can talk about them. */
   onStats?: (stats: AdminUserStats) => void;
+  /** Reports the 30-day financial volume (income + expenses, all users) for the AI assistant. */
+  onVolume?: (volume: number) => void;
 }) {
   const { t } = useLanguage();
   const [mobile, setMobile] = useState(false), [confirmation, setConfirmation] = useState<ConfirmAction | null>(null);
-  const [categories, setCategories, categoryError] = useLocal<SystemCategory[]>('mm-system-categories-v1', systemCategories);
   const [events, setEvents] = useLocal<{ time: string; text: string }[]>('mm-admin-audit-v1', []);
   const current = adminNav.find(p => p.path === path) || adminNav[0];
   const { session } = useSession();
@@ -36,13 +38,23 @@ export function AdminApp({ path, navigate, onSignOut, onStats }: {
     } catch { setStatsError(true); }
   }, [onStats]);
   useEffect(() => { void loadStats(); }, [loadStats]);
+  // Transaction numbers for the overview: aggregates of the last 30 days (no individual transactions).
+  const [txStats, setTxStats] = useState<AdminTransactionStatsResponse | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const range = lastDays(30);
+    adminTransactionsApi.getTransactionStats(range.from, range.to)
+      .then(result => { if (!cancelled) { setTxStats(result); onVolume?.(result.totalIncome + result.totalExpense); } })
+      .catch(() => { if (!cancelled) setTxStats(null); });
+    return () => { cancelled = true; };
+  }, [onVolume]);
   function audit(text: string) {
     setEvents(old => [{ time: new Date().toISOString(), text }, ...old].slice(0, 20));
   }
   return <div className="min-h-screen overflow-x-clip text-sm text-ink">
     {mobile && <button className="fixed inset-0 z-40 bg-black/60 md:hidden" aria-label="Close administration navigation" onClick={() => setMobile(false)} />}
     <aside className={`fixed inset-y-0 z-40 flex w-[220px] flex-col border-r border-white/60 bg-surface backdrop-blur-2xl no-dark-blur dark:border-white/10 transition-transform duration-300 md:translate-x-0 ${mobile ? '' : '-translate-x-full'}`}>
-      <a href="/admin" onClick={e => { e.preventDefault(); navigate('/admin'); }} className="flex h-[76px] items-center gap-2.5 px-5"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand"><ChartNoAxesCombined className="h-5 w-5 text-on-brand" /></span><span className="text-lg font-semibold tracking-tight">MoneyMind <span className="text-xs text-muted">AI</span></span></a>
+      <a href="/admin" onClick={e => { e.preventDefault(); navigate('/admin'); }} className="flex h-[76px] items-center gap-2.5 px-5"><BrandLogo className="size-8" /><span className="text-lg font-semibold tracking-tight">MoneyMind <span className="text-xs text-muted">AI</span></span></a>
       <div className="mx-4 mb-8 flex items-center gap-2 rounded-lg border border-line bg-base px-3 py-3"><ShieldCheck className="h-4 w-4 text-brand" /><span className="text-sm font-medium">Administration</span></div>
       <p className="mb-3 px-6 text-xs tracking-widest text-muted">PLATFORM</p>
       <nav aria-label="Administration navigation" className="flex-1 space-y-1 px-3">{adminNav.map(item => {
@@ -54,13 +66,12 @@ export function AdminApp({ path, navigate, onSignOut, onStats }: {
     </aside>
     <div className="min-w-0 md:ml-[220px]"><header className="flex min-h-[76px] items-center justify-between gap-4 border-b border-line px-5 lg:px-8"><div className="flex items-center gap-3"><span className="md:hidden"><IconButton icon={Menu} label="Open administration navigation" onClick={() => setMobile(true)} /></span><span className="text-muted">Admin</span><ChevronRight className="h-3.5 w-3.5 text-muted" /><span>{current.label}</span></div><Badge tone="positive"><Activity className="h-3 w-3" />Local sandbox</Badge></header>
       <main className="mx-auto max-w-[1640px] px-5 pb-32 pt-8 lg:px-8"><div className="mb-6 flex flex-wrap items-center justify-between gap-3"><div><p className="mb-2 text-xs font-medium tracking-[0.13em] text-muted">PLATFORM OPERATIONS</p><h1 className="text-[27px] font-semibold tracking-[-0.04em]">{current.label}</h1></div><span className="text-sm text-muted">{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
-        <div className="mb-6 flex items-start gap-3 rounded-lg border border-line bg-surface px-4 py-3"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand" /><p className="text-sm leading-6 text-muted">User accounts are live data from the server, and every admin request is authorized by the backend. Transactions, categories, AI analytics and settings on these pages are still sample data.</p></div>
-        {categoryError && <p role="alert" className="mb-4 text-sm text-negative">Browser storage unavailable. Category changes will not survive a refresh.</p>}
+        <div className="mb-6 flex items-start gap-3 rounded-lg border border-line bg-surface px-4 py-3"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand" /><p className="text-sm leading-6 text-muted">User accounts, transaction statistics and default categories are live data from the server, and every admin request is authorized by the backend. Transaction data is shown as aggregates only. AI analytics and settings on these pages are still sample data.</p></div>
         {statsError && current.path === '/admin' && <p role="alert" className="mb-4 text-sm text-negative">Could not load account statistics. <button className="underline" onClick={() => void loadStats()}>Try again</button></p>}
-        {current.path === '/admin' && <AdminOverview stats={stats} transactions={platformTransactions} />}
+        {current.path === '/admin' && <AdminOverview stats={stats} txStats={txStats} />}
         {current.path === '/admin/users' && <UserManagement currentUserId={me?.id} onChanged={() => void loadStats()} />}
-        {current.path === '/admin/transactions' && <TransactionMonitoring transactions={platformTransactions} users={initialUsers} categories={categories} />}
-        {current.path === '/admin/categories' && <CategoryManagement categories={categories} transactions={platformTransactions} confirm={setConfirmation} onSave={category => { setCategories(old => old.some(c => c.id === category.id) ? old.map(c => c.id === category.id ? category : c) : [...old, category]); audit(`Saved system category ${category.name}.`); }} onDelete={id => { setCategories(old => old.filter(c => c.id !== id)); audit(`Deleted unused system category ${id}.`); }} />}
+        {current.path === '/admin/transactions' && <TransactionMonitoring />}
+        {current.path === '/admin/categories' && <CategoryManagement />}
         {current.path === '/admin/ai' && <AIAnalytics />}
         {current.path === '/admin/settings' && <SystemSettings onSave={audit} />}
         {events.length > 0 && <Card className="mt-5 p-5"><SectionHead title="Local administrative activity" subtitle="Recent actions on this browser · Not a server audit trail" /><div className="space-y-3">{events.slice(0, 4).map((event, index) => <div key={`${event.time}-${index}`} className="flex flex-wrap justify-between gap-2 text-sm"><span className="text-muted">{event.text}</span><time className="text-xs text-muted" dateTime={event.time}>{new Date(event.time).toLocaleString('vi-VN')}</time></div>)}</div></Card>}

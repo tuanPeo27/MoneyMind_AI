@@ -59,6 +59,25 @@ public sealed class FinancialGoal
     public decimal CurrentAmount { get; set; }
     public DateOnly? Deadline { get; set; }
     public FinancialGoalStatus Status { get; set; } = FinancialGoalStatus.Active;
+    /// <summary>Day of the month (1-31) to remind the user to contribute; null = no reminder. Days past the end of a
+    /// short month fall on its last day.</summary>
+    public byte? ReminderDay { get; set; }
+    /// <summary>Local date (user's time zone) of the last reminder, so one is sent at most once per day.</summary>
+    public DateOnly? LastReminderOn { get; set; }
+}
+
+/// <summary>
+/// Money added to a savings goal. When <see cref="AccountId"/> is set the amount was taken from that account: the
+/// account balance is reduced by it (no expense transaction is created, so spending reports stay correct).
+/// Deleting the goal deletes its contributions, which returns the money to the accounts.
+/// </summary>
+public sealed class GoalContribution
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid GoalId { get; set; }
+    public Guid? AccountId { get; set; }
+    public decimal Amount { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 public sealed class Notification

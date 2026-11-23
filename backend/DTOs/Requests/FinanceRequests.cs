@@ -54,13 +54,17 @@ public sealed record UpsertBudgetRequest(
     DateOnly EndDate,
     [Range(1, 100)] byte AlertThreshold = 80);
 
+/// <param name="ReminderDay">Day of the month (1-31) for a contribution reminder; null turns it off.</param>
 public sealed record UpsertGoalRequest(
     [Required, StringLength(150)] string Name,
     [Range(typeof(decimal), "0.0001", "999999999999999")] decimal TargetAmount,
-    DateOnly? Deadline);
+    DateOnly? Deadline,
+    [Range(1, 31)] byte? ReminderDay = null);
 
+/// <param name="AccountId">Account the money is taken from (its balance goes down). null = only record it in the goal.</param>
 public sealed record GoalContributionRequest(
-    [Range(typeof(decimal), "0.0001", "999999999999999")] decimal Amount);
+    [Range(typeof(decimal), "0.0001", "999999999999999")] decimal Amount,
+    Guid? AccountId = null);
 
 public sealed record UpdateGoalStatusRequest(FinancialGoalStatus Status);
 

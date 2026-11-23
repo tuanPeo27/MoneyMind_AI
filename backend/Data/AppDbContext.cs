@@ -13,6 +13,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<FinancialGoal> FinancialGoals => Set<FinancialGoal>();
+    public DbSet<GoalContribution> GoalContributions => Set<GoalContribution>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AIConversation> AIConversations => Set<AIConversation>();
     public DbSet<AIChatMessage> AIChatMessages => Set<AIChatMessage>();
@@ -115,8 +116,22 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             entity.Property(goal => goal.TargetAmount).HasColumnType("decimal(19,4)");
             entity.Property(goal => goal.CurrentAmount).HasColumnType("decimal(19,4)");
             entity.Property(goal => goal.Status).HasConversion<byte>();
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_FinancialGoals_ReminderDay", "[ReminderDay] IS NULL OR ([ReminderDay] >= 1 AND [ReminderDay] <= 31)"));
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(goal => goal.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<GoalContribution>(entity =>
+        {
+            entity.ToTable(table => table.HasCheckConstraint("CK_GoalContributions_Amount_Positive", "[Amount] > 0"));
+            entity.Property(contribution => contribution.Amount).HasColumnType("decimal(19,4)");
+            entity.HasIndex(contribution => contribution.AccountId);
+            // Deleting a goal removes its contributions (the money goes back to the accounts).
+            entity.HasOne<FinancialGoal>().WithMany().HasForeignKey(contribution => contribution.GoalId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // NoAction like Transactions: an account with contributions is archived, never deleted.
+            entity.HasOne<Account>().WithMany().HasForeignKey(contribution => contribution.AccountId)
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
         builder.Entity<Notification>(entity =>

@@ -32,8 +32,8 @@ export function useSavingsGoals(userId: string | undefined) {
   const update = useCallback(async (id: string, request: UpsertGoalRequest) => { await goalsApi.updateGoal(id, request); await reload(); }, [reload]);
   const setStatus = useCallback(async (id: string, status: FinancialGoalStatus) => { await goalsApi.setGoalStatus(id, status); await reload(); }, [reload]);
   const remove = useCallback(async (id: string) => { await goalsApi.deleteGoal(id); await reload(); }, [reload]);
-  const contribute = useCallback(async (id: string, amount: number) => {
-    const goal = await goalsApi.contributeToGoal(id, amount);
+  const contribute = useCallback(async (id: string, amount: number, accountId?: string | null) => {
+    const goal = await goalsApi.contributeToGoal(id, amount, accountId);
     await reload();
     return goal;
   }, [reload]);

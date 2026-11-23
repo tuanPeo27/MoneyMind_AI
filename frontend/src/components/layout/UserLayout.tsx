@@ -12,6 +12,7 @@ import { themeOptions, type Theme } from '../../hooks/useTheme';
 import { useLocal } from '../../hooks/useLocal';
 import { displayCurrency } from '../../lib/currency';
 import { DropdownMenu, MenuHeader, MenuItem, MenuLabel, MenuRadioItem, MenuSeparator } from '../DropdownMenu';
+import { BrandLogo } from '../BrandLogo';
 
 export type Profile = { name: string; email: string; phone?: string; avatar?: string; notifications: boolean; insights: boolean };
 const groups = [
@@ -34,7 +35,7 @@ export function UserLayout({ page, profile, onNavigate, search, setSearch, trans
   return <div className="min-h-screen overflow-x-clip" style={{ '--sidebar-w': collapsed ? '76px' : '220px' } as React.CSSProperties}>
     <aside data-mini={collapsed} className={`group/side fixed inset-y-0 left-0 z-40 hidden w-[220px] flex-col border-r border-white/60 bg-surface backdrop-blur-2xl no-dark-blur transition-[transform,width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none dark:border-white/10 md:flex md:w-[var(--sidebar-w)]`}>
       <a href="/" title="MoneyMind AI" onClick={e => { e.preventDefault(); go('Overview'); }} className="flex h-[76px] shrink-0 items-center gap-2.5 px-5 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand md:group-data-[mini=true]/side:justify-center md:group-data-[mini=true]/side:px-0">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand"><ChartNoAxesCombined className="h-5 w-5 text-on-brand" aria-hidden="true" /></span>
+        <BrandLogo className="size-8" />
         <span className={`whitespace-nowrap text-[19px] font-semibold tracking-[-0.045em] ${mini}`}>MoneyMind<span className="ml-1.5 text-xs font-medium tracking-normal text-muted">AI</span></span>
       </a>
 
@@ -55,7 +56,7 @@ export function UserLayout({ page, profile, onNavigate, search, setSearch, trans
     <div className="min-w-0 transition-[margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none md:ml-[var(--sidebar-w)]">
       <header className="sticky top-0 z-30 flex h-[76px] items-center justify-between gap-2 px-3 sm:gap-4 sm:px-5 lg:px-8">
         <span aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 border-b border-white/60 bg-surface backdrop-blur-xl dark:border-white/10" />
-        <div className="flex min-w-0 items-center gap-3"><button type="button" aria-label="MoneyMind" onClick={() => go('Overview')} className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] text-white shadow-md shadow-[#8B5CF6]/30 focus-visible:ring-2 focus-visible:ring-brand md:hidden"><ChartNoAxesCombined className="size-5" aria-hidden="true" /></button><span className="hidden md:block"><IconButton icon={collapsed ? PanelLeftOpen : PanelLeftClose} label={collapsed ? t("Expand sidebar") : t("Collapse sidebar")} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)} /></span><span className="hidden text-sm text-muted lg:block">{t("Personal workspace")}</span><ChevronRight className="hidden h-3.5 w-3.5 text-muted lg:block" /><span className="truncate text-sm font-medium">{t(page === 'AI Financial Assistant' ? 'AI Assistant' : page)}</span></div>
+        <div className="flex min-w-0 items-center gap-3"><button type="button" aria-label="MoneyMind" onClick={() => go('Overview')} className="flex size-10 shrink-0 items-center justify-center rounded-xl shadow-md shadow-[#8B5CF6]/30 focus-visible:ring-2 focus-visible:ring-brand md:hidden"><BrandLogo className="size-10" rounded="rounded-xl" /></button><span className="hidden md:block"><IconButton icon={collapsed ? PanelLeftOpen : PanelLeftClose} label={collapsed ? t("Expand sidebar") : t("Collapse sidebar")} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)} /></span><span className="hidden text-sm text-muted lg:block">{t("Personal workspace")}</span><ChevronRight className="hidden h-3.5 w-3.5 text-muted lg:block" /><span className="truncate text-sm font-medium">{t(page === 'AI Financial Assistant' ? 'AI Assistant' : page)}</span></div>
         <div className="flex shrink-0 items-center gap-1 sm:gap-3">
           <SearchBox value={search} onChange={setSearch} onSubmit={() => go('Transactions')} transactions={transactions} categories={categories} />
           
@@ -65,7 +66,11 @@ export function UserLayout({ page, profile, onNavigate, search, setSearch, trans
             {themeOptions.map(({ value, label }) => <MenuRadioItem key={value} className="theme-btn" checked={theme === value} onSelect={() => setTheme(value)}
               icon={<ThemeIcon value={value} className="size-[18px]" />}>{t(label)}</MenuRadioItem>)}
           </DropdownMenu>
-          <LiquidButton variant="icon" className="bell-btn relative" aria-label={t("Notifications")} title={t("Notifications")} aria-current={page === 'Notifications' ? 'page' : undefined} onClick={() => go('Notifications')}><Bell className="bell-icon h-[18px] w-[18px]" />{unreadCount > 0 && <span aria-hidden="true" className="pointer-events-none absolute right-1.5 top-1.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-semibold leading-none text-on-brand ring-2 ring-base">{unreadCount > 9 ? '9+' : unreadCount}</span>}</LiquidButton>
+          {/* The badge sits next to the button, not inside it: LiquidButton clips its content to a circle and rolls it on hover. */}
+          <span className="relative inline-flex">
+            <LiquidButton variant="icon" className="bell-btn" aria-label={unreadCount > 0 ? `${t("Notifications")} (${unreadCount})` : t("Notifications")} title={t("Notifications")} aria-current={page === 'Notifications' ? 'page' : undefined} onClick={() => go('Notifications')}><Bell className="bell-icon h-[18px] w-[18px]" /></LiquidButton>
+            {unreadCount > 0 && <span aria-hidden="true" className="pointer-events-none absolute right-1 top-1 z-10 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-semibold leading-none tabular-nums text-on-brand ring-2 ring-base">{unreadCount > 9 ? '9+' : unreadCount}</span>}
+          </span>
           <span className="mx-1 hidden h-6 w-px bg-line sm:block" />
           <DropdownMenu label={t('Open profile menu')} width={285} trigger={props =>
             <button type="button" aria-label={t('Open profile menu')} className="flex min-h-11 items-center gap-2 rounded-lg px-1 focus-visible:ring-2 focus-visible:ring-brand" {...props}>
