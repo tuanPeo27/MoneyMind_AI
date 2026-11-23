@@ -43,6 +43,23 @@ public sealed class GoogleOptions
     public string ClientId { get; set; } = string.Empty;
 }
 
+public sealed class AIServiceOptions
+{
+    public const string SectionName = "AIService";
+
+    [Required, Url] public string BaseUrl { get; set; } = "http://127.0.0.1:8001";
+    [Required, MinLength(32)] public string ServiceKey { get; set; } = string.Empty;
+    [Range(5, 120)] public int TimeoutSeconds { get; set; } = 60;
+}
+
+public sealed class EncryptionOptions
+{
+    public const string SectionName = "Encryption";
+
+    /// <summary>Base64-encoded 32-byte key used only to wrap per-user data keys.</summary>
+    [Required] public string MasterKey { get; set; } = string.Empty;
+}
+
 public sealed class SmtpOptions
 {
     public const string SectionName = "Smtp";

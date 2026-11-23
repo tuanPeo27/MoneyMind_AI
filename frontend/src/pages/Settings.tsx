@@ -1,11 +1,24 @@
-import { useState } from 'react';
-import { Check, Download, Languages } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Check, Clock3, Download, Languages } from 'lucide-react';
 import { Button, Card, Field, SectionHead, fieldClass } from '../components/ui';
 import { type Profile } from '../components/layout/UserLayout';
 import { type DemoRole } from '../routing';
 import { themeOptions, type Theme } from '../hooks/useTheme';
 import { useLanguage } from '../i18n';
 import { AccountSecurity } from '../components/AccountSecurity';
+import { usersApi, useSession } from '../services';
+
+const timeZoneOptions = [
+  ['Asia/Ho_Chi_Minh', 'Việt Nam (UTC+7)'],
+  ['Asia/Bangkok', 'Bangkok (UTC+7)'],
+  ['Asia/Singapore', 'Singapore (UTC+8)'],
+  ['Asia/Tokyo', 'Tokyo (UTC+9)'],
+  ['Australia/Sydney', 'Sydney'],
+  ['Europe/London', 'London'],
+  ['America/New_York', 'New York'],
+  ['America/Los_Angeles', 'Los Angeles'],
+  ['UTC', 'UTC'],
+] as const;
 
 export default function SettingsPage({ profile, onSave, onExport, role, theme, setTheme }: {
   profile: Profile; onSave: (p: Profile) => void; onExport: () => void;
@@ -15,6 +28,19 @@ export default function SettingsPage({ profile, onSave, onExport, role, theme, s
   const [notifications, setNotifications] = useState(profile.notifications);
   const [insights, setInsights] = useState(profile.insights);
   const { language, setLanguage, t } = useLanguage();
+  const { session } = useSession();
+  const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Ho_Chi_Minh';
+  const [timeZoneId, setTimeZoneId] = useState(session?.user.timeZoneId || browserTimeZone);
+  const [timeZoneBusy, setTimeZoneBusy] = useState(false);
+  const [timeZoneNotice, setTimeZoneNotice] = useState('');
+  useEffect(() => setTimeZoneId(session?.user.timeZoneId || browserTimeZone), [session?.user.timeZoneId, browserTimeZone]);
+
+  async function saveTimeZone() {
+    setTimeZoneBusy(true); setTimeZoneNotice('');
+    try { await usersApi.updateTimeZone(timeZoneId); setTimeZoneNotice('Time zone saved.'); }
+    catch { setTimeZoneNotice('Could not save the time zone.'); }
+    finally { setTimeZoneBusy(false); }
+  }
   return <div className="mx-auto max-w-4xl space-y-5">
     <Card className="p-6">
       <SectionHead title={t('Language')} subtitle={t('Choose the language for your workspace.')} action={<Languages aria-hidden="true" className="size-4 text-brand" />} />
@@ -27,6 +53,19 @@ export default function SettingsPage({ profile, onSave, onExport, role, theme, s
           </span>
         </label>)}
       </fieldset>
+    </Card>
+    <Card className="p-6">
+      <SectionHead title={t('Time zone')} subtitle={t('Choose the time zone used to display dates and chat times.')} action={<Clock3 aria-hidden="true" className="size-4 text-brand" />} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex-1"><Field label={t('Time zone')}>
+          <select className={fieldClass} value={timeZoneId} onChange={e => { setTimeZoneId(e.target.value); setTimeZoneNotice(''); }}>
+            {!timeZoneOptions.some(([value]) => value === timeZoneId) && <option value={timeZoneId}>{timeZoneId}</option>}
+            {timeZoneOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </Field></div>
+        <Button type="button" disabled={timeZoneBusy || timeZoneId === session?.user.timeZoneId} onClick={() => void saveTimeZone()}>{timeZoneBusy ? t('Saving...') : t('Save time zone')}</Button>
+      </div>
+      {timeZoneNotice && <p role="status" className={`mt-3 text-sm ${timeZoneNotice.startsWith('Could') ? 'text-negative' : 'text-positive'}`}>{t(timeZoneNotice)}</p>}
     </Card>
     <Card className="p-6">
       <SectionHead title={t("Appearance")} subtitle={t("Choose how MoneyMind looks on this device.")} />

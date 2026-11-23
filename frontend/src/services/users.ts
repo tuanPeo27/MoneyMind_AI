@@ -12,5 +12,10 @@ export async function updateProfile(request: UpdateProfileRequest) {
   return user;
 }
 
+export const updateTimeZone = async (timeZoneId: string) => {
+  const user = await getData(http.put<UserResponse>('/users/me/time-zone', { timeZoneId }));
+  patchSessionUser({ timeZoneId: user.timeZoneId });
+  return user;
+};
 export const changePassword = (request: ChangePasswordRequest) =>
   getData(http.put<MessageResponse>('/users/me/password', request));

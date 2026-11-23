@@ -230,3 +230,14 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .sass-cache/
 *.tgz
 .temp/
+# ------------------------------------------
+# 19. Python / FastAPI
+# ------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+

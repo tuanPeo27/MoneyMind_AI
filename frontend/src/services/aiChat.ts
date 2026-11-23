@@ -1,0 +1,22 @@
+import { getData, http } from './client';
+import type { AIChatMessageResponse, AIConversationResponse, PagedResult, SendAIChatMessageResponse } from './types';
+
+export const getConversations = () =>
+  getData(http.get<PagedResult<AIConversationResponse>>('/ai/chat/conversations', { params: { page: 1, pageSize: 100 } }));
+
+export const getMessages = (conversationId: string) =>
+  getData(http.get<PagedResult<AIChatMessageResponse>>(
+    `/ai/chat/conversations/${conversationId}/messages`,
+    { params: { page: 1, pageSize: 100 } },
+  ));
+
+export const deleteConversation = (conversationId: string) =>
+  http.delete(`/ai/chat/conversations/${conversationId}`).then(() => undefined);
+
+/** Sends a message through ASP.NET; the browser never receives the Gemini API key. */
+export const sendMessage = (conversationId: string | null, message: string) =>
+  getData(http.post<SendAIChatMessageResponse>(
+    '/ai/chat/messages',
+    { conversationId, message },
+    { timeout: 65_000 },
+  ));

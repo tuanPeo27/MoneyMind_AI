@@ -20,6 +20,11 @@ public sealed class UsersController(IUserService userService, ICurrentUserServic
     public async Task<ActionResult<UserResponse>> UpdateProfile(UpdateProfileRequest request, CancellationToken ct) =>
         Ok(await userService.UpdateProfileAsync(currentUser.RequiredUserId, request, ct));
 
+    [HttpPut("me/time-zone")]
+    public async Task<ActionResult<UserResponse>> UpdateTimeZone(UpdateTimeZoneRequest request,
+        CancellationToken ct) =>
+        Ok(await userService.UpdateTimeZoneAsync(currentUser.RequiredUserId, request, ct));
+
     [HttpPut("me/password")]
     [EnableRateLimiting("auth")]
     public async Task<ActionResult<MessageResponse>> ChangePassword(ChangePasswordRequest request, CancellationToken ct)

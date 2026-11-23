@@ -525,6 +525,13 @@ namespace backend.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasDefaultValue("Asia/Ho_Chi_Minh");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");
 

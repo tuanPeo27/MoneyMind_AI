@@ -6,6 +6,7 @@ public sealed record UserResponse(
     string Email,
     string? PhoneNumber,
     string? AvatarUrl,
+    string TimeZoneId,
     IReadOnlyList<string> Roles,
     DateTime CreatedAt,
     DateTime? LastLoginAt,

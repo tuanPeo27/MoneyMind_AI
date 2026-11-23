@@ -16,6 +16,7 @@ export type MessageResponse = { message: string };
 export type UserResponse = {
   id: string; fullName: string; email: string; phoneNumber?: string | null;
   roles: string[]; createdAt: string; lastLoginAt?: string | null; avatarUrl?: string | null;
+  timeZoneId: string;
   /** False for accounts that sign in with Google only: they have no password to change or reset. */
   hasPassword: boolean;
 };
@@ -82,6 +83,17 @@ export type UpdateAccountRequest = { name: string; accountType: AccountType; isA
 export type UpsertBudgetRequest = { categoryId: string; amount: number; startDate: string; endDate: string; alertThreshold?: number };
 export type UpsertGoalRequest = { name: string; targetAmount: number; deadline?: string | null };
 /** The backend clears the avatar when `avatarUrl` is empty, so always send the current one. */
+export type AIConversationResponse = {
+  id: string; title: string; createdAt: string; updatedAt: string; isArchived: boolean;
+};
+export type AIChatMessageResponse = {
+  id: string; conversationId: string; sequence: number; role: 'User' | 'Assistant' | 'System';
+  content: string; intent?: string | null; status: 'Pending' | 'Completed' | 'Failed'; createdAt: string;
+};
+export type SendAIChatMessageResponse = {
+  conversationId: string; userMessage: AIChatMessageResponse; assistantMessage: AIChatMessageResponse;
+};
+
 export type UpdateProfileRequest = { fullName: string; phoneNumber?: string | null; avatarUrl?: string | null };
 export type ChangePasswordRequest = { currentPassword: string; newPassword: string };
 

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { useLocal } from '../../hooks/useLocal';
-import { emptyContext, getPrompts, simulateFinancialResponse, type FinancialContext, type Highlight, type AIResponse } from './mockAssistant';
+import { emptyContext, getPrompts, type FinancialContext, type Highlight, type AIResponse } from './mockAssistant';
+import { aiChatApi, useSession, type AIChatMessageResponse, type AIConversationResponse } from '../../services';
+import { useLanguage } from '../../i18n';
 
 export type AIMessageData = AIResponse & {
   id: string; role: 'user' | 'assistant'; time: string; context?: string;
@@ -9,6 +10,9 @@ type AmbientState = {
   open: boolean;
   busy: boolean;
   messages: AIMessageData[];
+  conversations: AIConversationResponse[];
+  conversationId: string | null;
+  historyBusy: boolean;
   financial: FinancialContext;
   highlight: Highlight;
   prompts: string[];
@@ -17,11 +21,43 @@ type AmbientState = {
   openAssistant: (question?: string) => void;
   closeAssistant: () => void;
   send: (question: string) => void;
+  selectConversation: (id: string) => Promise<void>;
+  removeConversation: (id: string) => Promise<void>;
   clear: () => void;
   clearHighlight: () => void;
   inspect: (target: Highlight) => void;
   registerNavigator: (callback: (target: Highlight) => void) => void;
 };
+
+function intentHighlight(intent?: string | null): Highlight {
+  if (intent === 'spending_analysis') return 'expenses';
+  if (intent === 'budget_advice') return 'budgets';
+  if (intent === 'transaction_help') return 'transactions';
+  if (intent === 'saving_goal' || intent === 'account_help') return 'summary';
+  return null;
+}
+
+function utcDate(value: string): Date {
+  // SQL Server DateTime values from older backend versions have no offset, but all chat dates are stored as UTC.
+  return new Date(/[zZ]$|[+-]\d{2}:\d{2}$/.test(value) ? value : `${value}Z`);
+}
+
+function chatTime(value: string | Date, locale: string, timeZone: string): string {
+  const date = typeof value === 'string' ? utcDate(value) : value;
+  return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone });
+}
+
+function mapServerMessage(message: AIChatMessageResponse, locale: string, timeZone: string): AIMessageData {
+  return {
+    id: message.id,
+    role: message.role === 'Assistant' ? 'assistant' : 'user',
+    text: message.content,
+    time: chatTime(message.createdAt, locale, timeZone),
+    context: message.role === 'Assistant' ? 'Gemini · Encrypted history' : undefined,
+    highlight: intentHighlight(message.intent),
+  };
+}
+
 const Context = createContext<AmbientState | null>(null);
 export const useAmbientAI = () => {
   const value = useContext(Context);
@@ -32,13 +68,14 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false);
   const [financial, setContext] = useState<FinancialContext>(emptyContext);
   const [highlight, setHighlight] = useState<Highlight>(null);
-  const [messages, setMessages, storageError] = useLocal<AIMessageData[]>('mm-ambient-chat-v1', () => {
-    try {
-      const legacy = JSON.parse(localStorage.getItem('mm-chat') || '[]');
-      return Array.isArray(legacy) ? legacy.filter(m => m.id !== 'welcome').map(m => ({ ...m, context: 'Previous local conversation' })) : [];
-    } catch { return []; }
-  });
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const { session } = useSession();
+  const { locale } = useLanguage();
+  const timeZone = session?.user.timeZoneId || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Ho_Chi_Minh';
+  const [messages, setMessages] = useState<AIMessageData[]>([]);
+  const [conversations, setConversations] = useState<AIConversationResponse[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const storageError = false;
   const fadeTimer = useRef<ReturnType<typeof setTimeout>>();
   const navigate = useRef<(target: Highlight) => void>(() => {});
   const locked = useRef(false);
@@ -55,23 +92,77 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
     clearTimeout(fadeTimer.current);
     fadeTimer.current = setTimeout(() => setHighlight(null), 25000);
   }, []);
-  function send(question: string) {
-    if (!question.trim() || locked.current) return;
+  async function send(question: string) {
+    const text = question.trim();
+    if (!text || locked.current) return;
     locked.current = true;
     setBusy(true);
-    const time = new Date().toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
-    const snapshot = financial;
-    setMessages(old => [...old, { id: crypto.randomUUID(), role: 'user', text: question.trim(), time, context: snapshot.page }]);
+    const time = chatTime(new Date(), locale, timeZone);
+    setMessages(old => [...old, { id: crypto.randomUUID(), role: 'user', text, time, context: financial.page }]);
     clearTimeout(fadeTimer.current);
-    timer.current = setTimeout(() => {
-      const response = simulateFinancialResponse(question, snapshot, lastTarget.current);
-      lastTarget.current = response.highlight || null;
-      setHighlight(response.highlight || null);
-      setMessages(old => [...old, { ...response, id: crypto.randomUUID(), role: 'assistant', time: new Date().toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' }), context: `${snapshot.page} · ${snapshot.period}` }]);
+
+    try {
+      const response = await aiChatApi.sendMessage(conversationId, text);
+      setConversationId(response.conversationId);
+      if (session?.user.id) localStorage.setItem(`mm-ai-conversation-${session.user.id}`, response.conversationId);
+      setConversations(old => {
+        const existing = old.find(item => item.id === response.conversationId);
+        const now = response.assistantMessage.createdAt;
+        if (existing) return [{ ...existing, updatedAt: now }, ...old.filter(item => item.id !== existing.id)];
+        return [{ id: response.conversationId, title: text.length <= 60 ? text : `${text.slice(0, 57)}...`, createdAt: now, updatedAt: now, isArchived: false }, ...old];
+      });
+      const target = intentHighlight(response.assistantMessage.intent);
+      lastTarget.current = target;
+      setHighlight(target);
+      setMessages(old => [...old, {
+        id: response.assistantMessage.id,
+        role: 'assistant',
+        text: response.assistantMessage.content,
+        time: chatTime(response.assistantMessage.createdAt, locale, timeZone),
+        context: 'Gemini · Encrypted history',
+        highlight: target,
+      }]);
+    } catch {
+      setMessages(old => [...old, {
+        id: crypto.randomUUID(), role: 'assistant', text: 'AI service is unavailable. Please try again.',
+        time: chatTime(new Date(), locale, timeZone), context: 'Request failed',
+      }]);
+    } finally {
       setBusy(false);
       locked.current = false;
-    }, 800);
+    }
   }
+  async function selectConversation(id: string) {
+    if (locked.current || id === conversationId) return;
+    setHistoryBusy(true);
+    try {
+      const history = await aiChatApi.getMessages(id);
+      setConversationId(id);
+      setMessages(history.items.map(message => mapServerMessage(message, locale, timeZone)));
+      if (session?.user.id) localStorage.setItem(`mm-ai-conversation-${session.user.id}`, id);
+    } finally {
+      setHistoryBusy(false);
+    }
+  }
+
+  async function removeConversation(id: string) {
+    if (locked.current) return;
+    setHistoryBusy(true);
+    try {
+      await aiChatApi.deleteConversation(id);
+      const remaining = conversations.filter(item => item.id !== id);
+      setConversations(remaining);
+      if (id === conversationId) {
+        setConversationId(null); setMessages([]);
+        if (session?.user.id) localStorage.removeItem(`mm-ai-conversation-${session.user.id}`);
+        const next = remaining.find(item => !item.isArchived);
+        if (next) await selectConversation(next.id);
+      }
+    } finally {
+      setHistoryBusy(false);
+    }
+  }
+
   function openAssistant(question?: string) {
     previousFocus.current = document.activeElement as HTMLElement;
     setOpen(true);
@@ -82,6 +173,41 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
     closeAssistant();
     navigate.current(target);
   }
+  useEffect(() => {
+    let cancelled = false;
+    const userId = session?.user.id;
+    setMessages([]);
+    setConversations([]);
+    setConversationId(null);
+    if (!userId) return () => { cancelled = true; };
+
+    // Remove legacy plaintext chat copies; server-side history is encrypted at rest.
+    localStorage.removeItem('mm-ambient-chat-v1');
+    localStorage.removeItem('mm-chat');
+
+    void (async () => {
+      try {
+        const conversations = await aiChatApi.getConversations();
+        if (cancelled) return;
+        const available = conversations.items.filter(item => !item.isArchived);
+        setConversations(available);
+        const storageKey = `mm-ai-conversation-${userId}`;
+        const savedId = localStorage.getItem(storageKey);
+        const id = available.some(item => item.id === savedId) ? savedId : available[0]?.id ?? null;
+        if (!id || cancelled) return;
+
+        const history = await aiChatApi.getMessages(id);
+        if (cancelled) return;
+        setConversationId(id);
+        localStorage.setItem(storageKey, id);
+        setMessages(history.items.map(message => mapServerMessage(message, locale, timeZone)));
+      } catch {
+        localStorage.removeItem(`mm-ai-conversation-${userId}`);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [session?.user.id, locale, timeZone]);
+
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const element = e.target as HTMLElement;
@@ -95,11 +221,16 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
     window.addEventListener('keydown', key);
     return () => { window.removeEventListener('keydown', key); };
   }, []);
-  useEffect(() => () => { clearTimeout(timer.current); clearTimeout(fadeTimer.current); }, []);
+  useEffect(() => () => { clearTimeout(fadeTimer.current); }, []);
   return <Context.Provider value={{
-    open, busy, financial, highlight, messages, storageError,
+    open, busy, financial, highlight, messages, conversations, conversationId, historyBusy, storageError,
     prompts: getPrompts(financial.route.startsWith('/admin') ? 'Admin' : financial.page), setContext, openAssistant, closeAssistant,
-    send, inspect, clearHighlight, registerNavigator,
-    clear: () => { if (!locked.current) { setMessages([]); clearHighlight(); lastTarget.current = null; } },
+    send, selectConversation, removeConversation, inspect, clearHighlight, registerNavigator,
+    clear: () => {
+      if (!locked.current) {
+        if (session?.user.id) localStorage.removeItem(`mm-ai-conversation-${session.user.id}`);
+        setMessages([]); setConversationId(null); clearHighlight(); lastTarget.current = null;
+      }
+    },
   }}>{children}</Context.Provider>;
 }
