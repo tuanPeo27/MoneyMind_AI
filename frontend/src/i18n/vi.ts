@@ -465,6 +465,7 @@ export const vi: Record<string, string> = {
   'Stored in your MoneyMind account. No bank or AI provider is connected.': 'Dữ liệu được lưu trong tài khoản MoneyMind của bạn. Không kết nối ngân hàng hay nhà cung cấp AI.',
   'Export your transactions at any time. Clearing browser storage removes your preferences and AI conversations.': 'Bạn có thể xuất giao dịch bất cứ lúc nào. Xóa bộ nhớ trình duyệt sẽ xóa tùy chọn và hội thoại AI.',
   'Change your password or request a reset link by email.': 'Đổi mật khẩu hoặc yêu cầu liên kết đặt lại qua email.',
+  'You sign in with Google, so this account has no password to change or reset.': 'Bạn đăng nhập bằng Google nên tài khoản này không có mật khẩu để đổi hoặc đặt lại.',
   'We will send a password reset link to {email}.': 'Chúng tôi sẽ gửi liên kết đặt lại mật khẩu tới {email}.',
   'If the email exists, a reset link has been sent.': 'Nếu email tồn tại, liên kết đặt lại đã được gửi.',
   'Your password has been changed.': 'Mật khẩu của bạn đã được thay đổi.',

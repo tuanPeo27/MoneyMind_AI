@@ -16,6 +16,8 @@ export type MessageResponse = { message: string };
 export type UserResponse = {
   id: string; fullName: string; email: string; phoneNumber?: string | null;
   roles: string[]; createdAt: string; lastLoginAt?: string | null; avatarUrl?: string | null;
+  /** False for accounts that sign in with Google only: they have no password to change or reset. */
+  hasPassword: boolean;
 };
 export type AuthResponse = { accessToken: string; refreshToken: string; accessTokenExpiresAt: string; user: UserResponse };
 export type SessionResponse = { id: string; deviceInfo?: string | null; ipAddress?: string | null; createdAt: string; expiresAt: string };
@@ -79,7 +81,8 @@ export type CreateAccountRequest = { name: string; accountType: AccountType; ini
 export type UpdateAccountRequest = { name: string; accountType: AccountType; isArchived: boolean };
 export type UpsertBudgetRequest = { categoryId: string; amount: number; startDate: string; endDate: string; alertThreshold?: number };
 export type UpsertGoalRequest = { name: string; targetAmount: number; deadline?: string | null };
-export type UpdateProfileRequest = { fullName: string; phoneNumber?: string | null };
+/** The backend clears the avatar when `avatarUrl` is empty, so always send the current one. */
+export type UpdateProfileRequest = { fullName: string; phoneNumber?: string | null; avatarUrl?: string | null };
 export type ChangePasswordRequest = { currentPassword: string; newPassword: string };
 
 export type TransactionQuery = {

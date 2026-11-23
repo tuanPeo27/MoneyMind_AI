@@ -23,7 +23,7 @@ public sealed class AuthService(
     IOptions<GoogleOptions> googleOptions,
     ILogger<AuthService> logger) : IAuthService
 {
-    private const string InvalidCredentials = "Email hoặc mật khẩu không đúng.";
+    private const string InvalidCredentials = "Mật khẩu không đúng.";
     private const string InvalidResetToken = "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.";
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
@@ -61,7 +61,11 @@ public sealed class AuthService(
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
         var user = await userManager.FindByEmailAsync(NormalizeEmail(request.Email))
-            ?? throw new UnauthorizedAppException(InvalidCredentials);
+            ?? throw new NotFoundException("Tài khoản này không tồn tại.");
+
+        // Accounts created through Google have no password, so a password can never match.
+        if (!user.HasPassword())
+            throw new UnauthorizedAppException("Tài khoản này đăng nhập bằng Google. Hãy dùng nút đăng nhập bằng Google.");
 
         if (await userManager.IsLockedOutAsync(user))
             throw new ForbiddenException("Tài khoản tạm thời bị khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau.");
@@ -197,7 +201,8 @@ public sealed class AuthService(
     {
         // Always completes silently so callers cannot discover which emails are registered.
         var user = await userManager.FindByEmailAsync(NormalizeEmail(request.Email));
-        if (user is null || !user.IsActive) return;
+        // Accounts without a password (Google sign-in) have nothing to reset. Same silent result as an unknown email.
+        if (user is null || !user.IsActive || !user.HasPassword()) return;
 
         var now = DateTime.UtcNow;
         var pending = await db.PasswordResetTokens
@@ -232,7 +237,7 @@ public sealed class AuthService(
             throw new BadRequestException(InvalidResetToken);
 
         var user = await userManager.FindByIdAsync(stored.UserId.ToString());
-        if (user is null || !user.IsActive) throw new BadRequestException(InvalidResetToken);
+        if (user is null || !user.IsActive || !user.HasPassword()) throw new BadRequestException(InvalidResetToken);
 
         var identityToken = await userManager.GeneratePasswordResetTokenAsync(user);
         var result = await userManager.ResetPasswordAsync(user, identityToken, request.NewPassword);

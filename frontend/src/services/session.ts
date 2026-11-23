@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export type AuthUser = { id: string; fullName: string; email: string; phoneNumber?: string | null; roles: string[]; createdAt?: string; lastLoginAt?: string | null };
+export type AuthUser = {
+  id: string; fullName: string; email: string; phoneNumber?: string | null; avatarUrl?: string | null; roles: string[];
+  createdAt?: string; lastLoginAt?: string | null;
+  /** Missing in sessions saved before this field existed: treat anything but `false` as "has a password". */
+  hasPassword?: boolean;
+};
 export type AuthSession = { accessToken: string; refreshToken: string; accessTokenExpiresAt: string; user: AuthUser };
 
 const SESSION_KEY = 'mm-auth-session-v1';

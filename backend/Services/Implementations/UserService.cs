@@ -39,6 +39,9 @@ public sealed class UserService(UserManager<ApplicationUser> userManager, AppDbC
             throw new BadRequestException("Mật khẩu mới phải khác mật khẩu hiện tại.");
 
         var user = await FindAsync(userId);
+        if (!user.HasPassword())
+            throw new BadRequestException("Tài khoản đăng nhập bằng Google không có mật khẩu để đổi.");
+
         var result = await userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
         if (!result.Succeeded) throw new BadRequestException(result.Describe());
 

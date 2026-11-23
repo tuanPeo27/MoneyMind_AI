@@ -10,6 +10,7 @@ export function AccountSecurity({ role }: { role: DemoRole }) {
   const { t } = useLanguage();
   const errorText = useErrorText();
   const { session } = useSession();
+  const hasPassword = session?.user.hasPassword !== false;
   const [mode, setMode] = useState<'change' | 'recover' | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -25,10 +26,12 @@ export function AccountSecurity({ role }: { role: DemoRole }) {
 
   return <Card className="p-6">
     <SectionHead title={t('Account security')} subtitle={t('Change your password or request a reset link by email.')} action={<Badge>{role}</Badge>} />
-    <div className="grid gap-3 sm:grid-cols-2">
-      <Button secondary onClick={() => { setNotice(''); changeMode('change'); }}><KeyRound className="size-4" />{t('Change password')}</Button>
-      <Button secondary onClick={() => { setNotice(''); changeMode('recover'); }}><Mail className="size-4" />{t('Forgot password?')}</Button>
-    </div>
+    {hasPassword
+      ? <div className="grid gap-3 sm:grid-cols-2">
+        <Button secondary onClick={() => { setNotice(''); changeMode('change'); }}><KeyRound className="size-4" />{t('Change password')}</Button>
+        <Button secondary onClick={() => { setNotice(''); changeMode('recover'); }}><Mail className="size-4" />{t('Forgot password?')}</Button>
+      </div>
+      : <p className="text-sm leading-6 text-muted">{t('You sign in with Google, so this account has no password to change or reset.')}</p>}
     <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-muted"><ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-brand" />{t('Your role is read-only. Users cannot grant themselves administrator access.')}</p>
     {notice && <p role="status" className="mt-3 text-sm text-positive">{t(notice)}</p>}
     {mode === 'recover' && <Modal title={t('Forgot password?')} onClose={() => changeMode(null)}>

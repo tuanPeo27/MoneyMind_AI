@@ -8,7 +8,8 @@ public sealed record UserResponse(
     string? AvatarUrl,
     IReadOnlyList<string> Roles,
     DateTime CreatedAt,
-    DateTime? LastLoginAt);
+    DateTime? LastLoginAt,
+    bool HasPassword);
 
 public sealed record AuthResponse(
     string AccessToken,
