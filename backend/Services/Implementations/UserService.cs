@@ -32,6 +32,31 @@ public sealed class UserService(UserManager<ApplicationUser> userManager, AppDbC
         return user.ToResponse(await userManager.GetRolesAsync(user));
     }
 
+    public async Task<UserResponse> UpdateTimeZoneAsync(Guid userId, UpdateTimeZoneRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var timeZoneId = request.TimeZoneId.Trim();
+        try
+        {
+            _ = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            throw new BadRequestException("Múi giờ không hợp lệ.");
+        }
+        catch (InvalidTimeZoneException)
+        {
+            throw new BadRequestException("Múi giờ không hợp lệ.");
+        }
+
+        var user = await FindAsync(userId);
+        user.TimeZoneId = timeZoneId;
+        user.UpdatedAt = DateTime.UtcNow;
+        var result = await userManager.UpdateAsync(user);
+        if (!result.Succeeded) throw new BadRequestException(result.Describe());
+        return user.ToResponse(await userManager.GetRolesAsync(user));
+    }
+
     public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request,
         CancellationToken cancellationToken = default)
     {

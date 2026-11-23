@@ -29,6 +29,9 @@ public sealed record UpdateProfileRequest(
     [Phone, StringLength(30)] string? PhoneNumber,
     [Url, StringLength(2048)] string? AvatarUrl = null);
 
+public sealed record UpdateTimeZoneRequest(
+    [Required, StringLength(100)] string TimeZoneId);
+
 public sealed record ChangePasswordRequest(
     [Required] string CurrentPassword,
     [Required, StringLength(128, MinimumLength = 8)] string NewPassword);

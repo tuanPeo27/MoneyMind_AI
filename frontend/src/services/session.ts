@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 
 export type AuthUser = {
-  id: string; fullName: string; email: string; phoneNumber?: string | null; avatarUrl?: string | null; roles: string[];
+  id: string; fullName: string; email: string; phoneNumber?: string | null; avatarUrl?: string | null;
+  timeZoneId?: string; roles: string[];
   createdAt?: string; lastLoginAt?: string | null;
   /** Missing in sessions saved before this field existed: treat anything but `false` as "has a password". */
   hasPassword?: boolean;
