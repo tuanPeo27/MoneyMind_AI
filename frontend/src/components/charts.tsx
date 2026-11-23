@@ -1,3 +1,4 @@
+import { displayCurrency, percent } from '../lib/currency';
 import { useLanguage } from '../i18n';
 import { useId, useState } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area, PieChart, Pie, Cell, Sector } from 'recharts';
@@ -49,7 +50,7 @@ export function ExpenseDonut({ transactions, categories, size = 174 }: { transac
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
         <span className="max-w-full truncate text-xs text-muted">{current ? current.name : t("Total spent")}</span>
         <span className="mt-1 font-semibold tracking-tight transition-transform duration-200" style={{ fontSize: size > 200 ? 38 : 25, transform: current ? 'scale(1.06)' : undefined }}>{compact(current ? current.value : total)}</span>
-        <span className="mt-0.5 text-xs text-muted">{current ? `${Math.round(current.value / total * 100)}%` : 'VND'}</span>
+        <span className="mt-0.5 text-xs text-muted">{current ? percent(current.value, total) : displayCurrency()}</span>
       </div>
     </div>
     <div className="w-full min-w-0 flex-1 space-y-1">{data.map((c, i) => {
@@ -58,7 +59,7 @@ export function ExpenseDonut({ transactions, categories, size = 174 }: { transac
         style={on ? { backgroundColor: `color-mix(in oklab, ${colors[i]} 16%, transparent)`, boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${colors[i]} 45%, transparent), 0 10px 26px -14px ${colors[i]}` } : top ? { backgroundImage: `radial-gradient(120% 160% at 0% 50%, color-mix(in oklab, ${colors[0]} 30%, transparent), transparent 72%)`, '--glow': colors[0] } as React.CSSProperties : undefined}
         className={`flex origin-left cursor-default items-center justify-between gap-2 rounded-xl px-3 py-2 outline-none transition-[transform,opacity,background-color,box-shadow] duration-200 ease-out focus-visible:ring-2 focus-visible:ring-brand motion-reduce:transition-none ${on ? 'scale-[1.07] opacity-100' : 'scale-100'} ${dim ? 'opacity-45' : ''} ${top ? 'donut-top-row' : ''} ${size > 250 ? 'py-3' : ''}`}>
         <span className={`flex min-w-0 items-center gap-2 text-sm transition-colors ${on ? 'font-semibold text-ink' : 'text-muted'}`}><span className={`shrink-0 rounded-full transition-all duration-200 ${on ? 'h-2.5 w-2.5' : 'h-1.5 w-1.5'}`} style={{ backgroundColor: colors[i] }} /><span className="truncate">{c.name}</span>{i === 0 && total > 0 && <span className="shrink-0 rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#EC4899] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">{t("Highest")}</span>}</span>
-        <div className="shrink-0 text-right"><p className={`text-xs tabular-nums ${on ? 'font-semibold' : 'font-medium'}`}>{money(c.value)}</p><p className="mt-0.5 text-xs tabular-nums text-muted">{Math.round(c.value / total * 100)}%</p></div>
+        <div className="shrink-0 text-right"><p className={`text-xs tabular-nums ${on ? 'font-semibold' : 'font-medium'}`}>{money(c.value)}</p><p className="mt-0.5 text-xs tabular-nums text-muted">{percent(c.value, total)}</p></div>
       </div>;
     })}{!total && <p className="text-sm text-muted">{t("No expenses in this period.")}</p>}</div>
   </div>;

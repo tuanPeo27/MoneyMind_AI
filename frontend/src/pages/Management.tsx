@@ -1,17 +1,18 @@
 import { useLanguage } from '../i18n';
 import { useState, type FormEvent } from 'react';
-import { Search, Plus, ArrowDownUp, Download, Pencil, Trash2, ArrowUpRight, SlidersHorizontal, Check, FolderOpen } from 'lucide-react';
+import { Search, Plus, ArrowDownUp, Download, Pencil, Trash2, ArrowUpRight, SlidersHorizontal, Check, FolderOpen, Shapes } from 'lucide-react';
 import { type Transaction, type Category, type Budget, money } from '../data';
 import { Button, Card, Badge, Empty, Field, Modal, Progress, IconButton, fieldClass, SectionHead } from '../components/ui';
 import { TransactionTable } from '../components/transactions';
 import { CategoryIcon, CategoryIconPicker, getCategoryIcon, type CategoryIconId } from '../components/CategoryIcon';
 import { ExpenseDonut, TrendChart, monthlyData } from '../components/charts';
 import { getTotals, percentChange, SummaryCards } from './Overview';
-import { Select } from '../components/Select';
+import { FormSelect, Select } from '../components/Select';
+import { AmountInput } from '../components/AmountInput';
 import { Pagination, usePagination } from '../components/Pagination';
 import { accountLabel, categoryLabel } from '../i18n/labels';
 
-export function Transactions({ rows, categories, search, setSearch, onAdd, onEdit, onDelete, onExport }: { rows: Transaction[]; categories: Category[]; search: string; setSearch: (s: string) => void; onAdd: () => void; onEdit: (t: Transaction) => void; onDelete: (t: Transaction) => void; onExport: (rows: Transaction[]) => void }) {
+export function Transactions({ rows, categories, search, setSearch, onAdd, onEdit, onDelete, onExport, onManageCategories }: { rows: Transaction[]; categories: Category[]; search: string; setSearch: (s: string) => void; onAdd: () => void; onEdit: (t: Transaction) => void; onDelete: (t: Transaction) => void; onExport: (rows: Transaction[]) => void; onManageCategories: () => void }) {
   const { t, language } = useLanguage();
   const [type, setType] = useState('All types'), [category, setCategory] = useState('All categories');
   const [sort, setSort] = useState({ key: 'date', ascending: false });
@@ -43,6 +44,8 @@ export function Transactions({ rows, categories, search, setSearch, onAdd, onEdi
           { value: 'All categories', label: t('All categories') },
           ...categories.map(item => ({ value: item.name, label: categoryLabel(item.name, language), icon: <CategoryIcon name={item.name} icon={item.icon} small /> })),
         ]} />
+        {/* Categories has no tab in the phone taskbar: this is the way there from Transactions. */}
+        <Button secondary onClick={onManageCategories}><Shapes aria-hidden="true" className="size-4" />{t('Categories')}</Button>
         <Button secondary onClick={() => onExport(filtered)}><Download aria-hidden="true" className="size-4" />{t('Export')}</Button>
         <Button onClick={onAdd}><Plus aria-hidden="true" className="size-4" />{t('Add transaction')}</Button>
       </div>
@@ -63,9 +66,9 @@ export function Budgets({ budgets, rows, categories, onAdd, onEdit, onDelete }: 
   })}</div><Pagination pager={pager} sizes={[6, 12, 24]} className="glass rounded-2xl" />{!items.length && <Card><Empty title={t("Your budget starts here")} text={t("Create a category budget to take control of your spending.")} /></Card>}<p className="text-xs text-muted">{t("Spending is calculated from transactions in your selected period. Budget limits apply to that period.")}</p></div>;
 }
 export function BudgetForm({ budget, categories, budgets, onClose, onSave }: { budget?: Budget; categories: Category[]; budgets: Budget[]; onClose: () => void; onSave: (b: Budget) => void }) {
-  const { t } = useLanguage();
+  const { t, language, currency } = useLanguage();
   const available = categories.filter(c => c.type === 'Expense' && !budgets.some(b => b.category === c.name && b.id !== budget?.id));
-  return <Modal title={budget ? t("Edit budget") : t("Create a budget")} onClose={onClose}><form className="space-y-5" onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); onSave({ id: budget?.id || crypto.randomUUID(), category: String(data.get('category')), limit: Number(data.get('limit')) }); }}><p className="text-sm leading-6 text-muted">{t("Set a realistic spending limit for a category. We’ll calculate your progress from your transactions.")}</p><Field label={t("Category")}><select name="category" required defaultValue={budget?.category || available[0]?.name} className={fieldClass}>{available.map(c => <option key={c.name}>{c.name}</option>)}</select></Field><Field label={t("Budget limit (VND)")}><input name="limit" required min="1" max="999999999999" type="number" step="1" defaultValue={budget?.limit} placeholder="5,000,000" className={fieldClass} /></Field>{!available.length && <p className="text-sm text-negative">{t("Every expense category already has a budget.")}</p>}<div className="flex justify-end gap-3 border-t border-line pt-5"><Button secondary type="button" onClick={onClose}>{t("Cancel")}</Button><Button disabled={!available.length}>{t("Save budget")}</Button></div></form></Modal>;
+  return <Modal title={budget ? t("Edit budget") : t("Create a budget")} onClose={onClose}><form className="space-y-5" onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); onSave({ id: budget?.id || crypto.randomUUID(), category: String(data.get('category')), limit: Number(data.get('limit')) }); }}><p className="text-sm leading-6 text-muted">{t("Set a realistic spending limit for a category. We’ll calculate your progress from your transactions.")}</p><Field label={t("Category")}><FormSelect name="category" label={t("Category")} defaultValue={budget?.category || available[0]?.name} placeholder={t("No categories available")} options={available.map(c => ({ value: c.name, label: categoryLabel(c.name, language), icon: <CategoryIcon name={c.name} icon={c.icon} small /> }))} /></Field><Field label={t("Budget limit ({currency})", { currency })}><AmountInput name="limit" required defaultValue={budget?.limit} /></Field>{!available.length && <p className="text-sm text-negative">{t("Every expense category already has a budget.")}</p>}<div className="flex justify-end gap-3 border-t border-line pt-5"><Button secondary type="button" onClick={onClose}>{t("Cancel")}</Button><Button disabled={!available.length}>{t("Save budget")}</Button></div></form></Modal>;
 }
 export function Categories({ categories, rows, onAdd, onEdit, onDelete }: { categories: Category[]; rows: Transaction[]; onAdd: () => void; onEdit: (c: Category) => void; onDelete: (c: Category) => void }) {
   const { t } = useLanguage();
@@ -89,7 +92,7 @@ export function CategoryForm({ category, categories, onClose, onSave }: { catego
       onSave({ name: trimmed, type: category?.type ?? type, color: category?.color ?? '#3B82F6', icon });
     }}>
       <Field label={t("Category name")}><input required name="name" maxLength={40} value={name} onChange={e => setName(e.target.value)} placeholder={t("e.g. Sức khỏe")} className={fieldClass} /></Field>
-      <Field label={t("Type")}><select name="type" defaultValue={category?.type || 'Expense'} disabled={!!category} className={fieldClass}><option value="Expense">{t("Expense")}</option><option value="Income">{t("Income")}</option></select></Field>
+      <Field label={t("Type")}><FormSelect name="type" label={t("Type")} defaultValue={category?.type || 'Expense'} disabled={!!category} options={[{ value: 'Expense', label: t("Expense") }, { value: 'Income', label: t("Income") }]} /></Field>
       <CategoryIconPicker value={icon} onChange={setChosen} />
       {error && <p role="alert" className="text-sm text-negative">{t(error)}</p>}
       <div className="flex justify-end gap-3"><Button secondary type="button" onClick={onClose}>{t("Cancel")}</Button><Button>{t("Save category")}</Button></div>

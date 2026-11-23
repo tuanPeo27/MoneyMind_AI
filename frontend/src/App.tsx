@@ -12,6 +12,7 @@ import { Insights } from './pages/Intelligence';
 import SettingsPage from './pages/Settings';
 import WorkspacePage from './pages/Workspace';
 import NotificationsPage from './pages/Notifications';
+import AccountsPage from './pages/Accounts';
 import { useNotifications } from './hooks/useNotifications';
 import { UserLayout, type Profile } from './components/layout/UserLayout';
 import { useLocal } from './hooks/useLocal';
@@ -51,13 +52,20 @@ function Workspace() {
   // Transactions, budgets and categories live on the server. Only UI preferences stay in local storage.
   const data = useWorkspaceData(personalId);
   const { rows, budgets, categories } = data;
-  const [storedProfile, setProfile] = useLocal<Profile>('mm-profile-v1', { name: '', email: '', notifications: true, insights: true });
+  // Avatar and preferences are stored per account. The old shared key leaked one user's avatar to every account.
+  useEffect(() => { try { localStorage.removeItem('mm-profile-v1'); } catch { /* storage unavailable */ } }, []);
+  const [storedProfile, setProfile] = useLocal<Profile>(`mm-profile-v2:${session?.user.id ?? 'guest'}`, { name: '', email: '', notifications: true, insights: true });
   const profile = useMemo<Profile>(() => session
-    ? { ...storedProfile, name: session.user.fullName, email: session.user.email, phone: session.user.phoneNumber ?? undefined }
+    ? {
+      ...storedProfile, name: session.user.fullName, email: session.user.email, phone: session.user.phoneNumber ?? undefined,
+      // A photo picked on this device wins; otherwise the account's own avatar (e.g. the Google profile picture).
+      avatar: storedProfile.avatar || session.user.avatarUrl || undefined,
+    }
     : storedProfile, [storedProfile, session]);
   // Account counts reported by the admin area (from /api/admin/users), shared with the AI assistant context.
   const [userStats, setUserStats] = useState<AdminUserStats | null>(null);
-  const [hidden, setHidden] = useLocal('mm-balance-hidden-v1', false);
+  // One eye for every balance (Total balance, the accounts list, the Accounts page). Hidden by default, per account.
+  const [hidden, setHidden] = useLocal(`mm-balance-hidden-v2:${session?.user.id ?? 'guest'}`, true);
   const notifications = useNotifications(personalId);
   const { path: rawPath, navigate: goTo } = useRoute();
   const { setContext, registerNavigator, openAssistant, closeAssistant, open: assistantOpen } = useAmbientAI();
@@ -87,10 +95,12 @@ function Workspace() {
   }, [rows, range.start, range.end, period]);
   // Real balance = account opening balances + net of every transaction up to the date (not just the period's rows).
   const balances = useMemo(() => {
-    const at = (date: string) => rows.reduce((s, t) => t.date <= date ? s + (t.type === 'Income' ? t.amount : -t.amount) : s, data.openingBalance);
+    // Only active accounts count: an archived account's starting balance is excluded, so are its transactions.
+    const counts = (t: Transaction) => !t.accountId || data.activeAccountIds.has(t.accountId);
+    const at = (date: string) => rows.reduce((s, t) => t.date <= date && counts(t) ? s + (t.type === 'Income' ? t.amount : -t.amount) : s, data.openingBalance);
     const before = new Date(range.start + 'T12:00:00'); before.setDate(before.getDate() - 1);
     return { current: at(range.end), previous: at(localDate(before)) };
-  }, [rows, data.openingBalance, range.start, range.end]);
+  }, [rows, data.openingBalance, data.activeAccountIds, range.start, range.end]);
   const financial = useMemo<FinancialContext>(() => ({
     route: path,
     page: admin ? adminNav.find(item => item.path === path)?.label || 'Admin Overview' : page,
@@ -220,7 +230,7 @@ function Workspace() {
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {page !== 'Settings' && <Select
+            {page !== 'Settings' && page !== 'Accounts' && <Select
               className="w-[230px] max-w-full" label={t("Select date range")} value={period}
               onChange={value => {
                 if (value === 'Custom') setDialog({ kind: 'date' });
@@ -232,14 +242,22 @@ function Workspace() {
                 icon: <CalendarDays aria-hidden="true" className="size-4 shrink-0 text-muted" />,
               }))}
             />}
-            {period === 'Custom' && page !== 'Settings' && <button className="min-h-11 text-xs text-muted hover:text-ink" onClick={() => setDialog({ kind: 'date' })}>{t("Edit dates")}</button>}
-            {page === 'Overview' && <span className="hidden md:block"><Button onClick={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }}><Plus className="h-4 w-4" />{t("Add transaction")}</Button></span>}
+            {period === 'Custom' && page !== 'Settings' && page !== 'Accounts' && <button className="min-h-11 text-xs text-muted hover:text-ink" onClick={() => setDialog({ kind: 'date' })}>{t("Edit dates")}</button>}
           </div>
         </div>
         {data.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(data.error)}</span><Button secondary onClick={() => void data.reload()}>{t('Try again')}</Button></p>}
         {data.loading && !rows.length && <p role="status" className="mb-4 text-sm text-muted">{t('Loading your data...')}</p>}
-        {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} onNavigate={navigate} onEdit={editTransaction} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} />}
-        {page === 'Transactions' && <Transactions rows={filtered} categories={categories} search={search} setSearch={setSearch} onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} onEdit={editTransaction} onDelete={deleteTransaction} onExport={exportRows} />}
+        {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} accounts={data.activeAccounts} onNavigate={navigate} onEdit={editTransaction} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} />}
+        {page === 'Accounts' && <AccountsPage accounts={data.activeAccounts} archived={data.archivedAccounts} hidden={hidden} setHidden={setHidden}
+          onCreate={input => attempt(() => data.createAccount(input), 'Account added.')}
+          onUpdate={(id, input) => attempt(() => data.updateAccount(id, input), 'Account saved.')}
+          onDelete={async a => {
+            // The backend archives an account that still has transactions instead of deleting it.
+            const archives = a.transactions > 0;
+            return attempt(() => data.removeAccount(a.id), archives ? 'Account archived. Its transactions are kept.' : 'Account deleted.');
+          }}
+          onRestore={a => attempt(() => data.updateAccount(a.id, { name: a.name, type: a.type }, false), 'Account restored.')} />}
+        {page === 'Transactions' && <Transactions onManageCategories={() => navigate('Categories')} rows={filtered} categories={categories} search={search} setSearch={setSearch} onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} onEdit={editTransaction} onDelete={deleteTransaction} onExport={exportRows} />}
         {page === 'Budgets' && <Budgets budgets={budgets} rows={filtered} categories={categories}
           onAdd={() => setDialog({ kind: 'budget' })}
           onEdit={b => { setSelection({ category: b.category }); setDialog({ kind: 'budget', value: b }); }}

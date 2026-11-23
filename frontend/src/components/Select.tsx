@@ -11,9 +11,11 @@ type SelectProps = {
   disabled?: boolean;
   placeholder?: string;
   className?: string;
+  /** When set, the value is also submitted with the surrounding <form> under this name (hidden input). */
+  name?: string;
 };
 
-// A ixed popup is positioned against the nearest ancestor that has a transform/filter/backdrop-filter.
+// A fixed popup is positioned against the nearest ancestor that has a transform/filter/backdrop-filter.
 // Glass dialogs use backdrop-filter, so portal to <body> there; otherwise stay inside the dialog.
 function popupHost(trigger: HTMLElement | null): HTMLElement {
   const dialog = trigger?.closest<HTMLElement>('[role="dialog"]');
@@ -22,7 +24,7 @@ function popupHost(trigger: HTMLElement | null): HTMLElement {
   const contains = [style.backdropFilter, style.filter, style.transform, style.perspective].some(v => v && v !== 'none');
   return contains ? document.body : dialog;
 }
-export function Select({ label, value, options, onChange, disabled, placeholder = '—', className = '' }: SelectProps) {
+export function Select({ label, value, options, onChange, disabled, placeholder = '—', className = '', name }: SelectProps) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -75,6 +77,7 @@ export function Select({ label, value, options, onChange, disabled, placeholder 
     if (open) list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [open, active]);
   return <div className={`min-w-0 ${className}`}>
+    {name && <input type="hidden" name={name} value={value} />}
     <button
       ref={trigger} type="button" role="combobox" aria-label={label}
       aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? id : undefined}
@@ -107,7 +110,7 @@ export function Select({ label, value, options, onChange, disabled, placeholder 
       <ChevronDown aria-hidden="true" strokeWidth={1.75} className={`size-4 shrink-0 text-muted transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} />
     </button>
     {open && createPortal(<div ref={list} id={id} role="listbox" aria-label={label} style={position}
-      className="fixed z-[100] overflow-y-auto overscroll-contain glass-strong rounded-xl p-1 text-ink [scrollbar-color:var(--color-line)_transparent] [scrollbar-width:thin] origin-top motion-safe:animate-[message-in_160ms_ease-out]">
+      className="fixed z-[100] overflow-y-auto overscroll-contain glass-strong rounded-xl p-1 text-ink [scrollbar-width:none] [&::-webkit-scrollbar]:hidden origin-top motion-safe:animate-[menu-in_160ms_cubic-bezier(0.22,1,0.36,1)]">
       {options.map((option, index) => <div
         key={option.value} id={`${id}-${index}`} data-index={index}
         role="option" aria-selected={option.value === value}
@@ -121,4 +124,9 @@ export function Select({ label, value, options, onChange, disabled, placeholder 
       </div>)}
     </div>, popupHost(trigger.current))}
   </div>;
+}
+/** Uncontrolled <Select> for plain forms: starts at `defaultValue` and submits under `name` like a native select. */
+export function FormSelect({ defaultValue, onChange, ...props }: Omit<SelectProps, 'value' | 'onChange'> & { name: string; defaultValue?: string; onChange?: (value: string) => void }) {
+  const [value, setValue] = useState(defaultValue ?? props.options[0]?.value ?? '');
+  return <Select {...props} value={value} onChange={next => { setValue(next); onChange?.(next); }} />;
 }

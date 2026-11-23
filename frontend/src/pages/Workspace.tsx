@@ -56,7 +56,7 @@ export default function WorkspacePage({ profile, onSave, totals, previous, hidde
       <SectionHead title={t('Personal information')} subtitle={t('Update how you appear in your workspace.')} />
       <div className="mb-6 flex items-center gap-4">
         <div className="group relative shrink-0">
-          <Avatar name={name} src={avatar} className="size-[72px] text-2xl" />
+          <Avatar name={name} src={avatar} seed={profile.email} className="size-[72px] text-2xl" />
           <button type="button" onClick={() => fileRef.current?.click()} aria-label={t('Change photo')}
             className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none group-hover:opacity-100"><Camera className="size-5" aria-hidden="true" /></button>
           <input ref={fileRef} type="file" accept="image/*" className="sr-only" onChange={e => { pickAvatar(e.target.files?.[0]); e.target.value = ''; }} />

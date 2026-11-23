@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { accountsApi, budgetsApi, categoriesApi, transactionsApi } from '../services';
-import type { AccountResponse, BudgetResponse, CategoryResponse, TransactionResponse } from '../services';
+import type { AccountResponse, AccountType, BudgetResponse, CategoryResponse, TransactionResponse } from '../services';
 import { ApiError } from '../services';
 import { getCategoryIcon } from '../components/CategoryIcon';
 import { localDate, type Budget, type Category, type Transaction } from '../data';
@@ -19,7 +19,7 @@ function toTransaction(r: TransactionResponse): Transaction {
   const [description = '', ...rest] = (r.description ?? '').split('\n');
   return {
     id: r.id, description, notes: rest.join('\n'), amount: r.amount, type: r.type,
-    category: r.categoryName, account: r.accountName, date: r.transactionDate.slice(0, 10),
+    category: r.categoryName, account: r.accountName, accountId: r.accountId, date: r.transactionDate.slice(0, 10),
   };
 }
 const toCategory = (c: CategoryResponse): Category => ({
@@ -33,6 +33,26 @@ const monthRange = () => {
   return { start: localDate(new Date(now.getFullYear(), now.getMonth(), 1)), end: localDate(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
 };
 const invalid = (message: string) => new ApiError(message, 400);
+
+/** An account (wallet, bank account, e-wallet) with its balance computed from the loaded transactions. */
+export type WalletAccount = { id: string; name: string; type: AccountType; initialBalance: number; balance: number; isArchived: boolean; createdAt: string; transactions: number };
+export type AccountInput = { name: string; type: AccountType; initialBalance: number };
+
+// Two loads can overlap (StrictMode runs effects twice in dev, a quick reload) and both see zero accounts. The
+// backend's unique-name check is not atomic, so both creates could succeed: share one request per user instead.
+const creatingDefault = new Map<string, Promise<AccountResponse[]>>();
+function ensureDefaultAccount(userId: string) {
+  let pending = creatingDefault.get(userId);
+  if (!pending) {
+    pending = accountsApi.createAccount({ name: DEFAULT_ACCOUNT_NAME, accountType: 'Cash', initialBalance: 0 })
+      .then(created => [created])
+      // Created meanwhile from another tab: just read it back.
+      .catch(e => e instanceof ApiError && e.status === 409 ? accountsApi.listAccounts(true) : Promise.reject(e))
+      .finally(() => setTimeout(() => creatingDefault.delete(userId), 5000));
+    creatingDefault.set(userId, pending);
+  }
+  return pending;
+}
 
 /** Loads the signed-in user's accounts, categories, transactions and budgets from the API and exposes CRUD actions. */
 export function useWorkspaceData(userId: string | undefined) {
@@ -50,7 +70,7 @@ export function useWorkspaceData(userId: string | undefined) {
     setLoading(true); setError(null);
     try {
       const [accountList, categoryItems, firstPage, budgetItems] = await Promise.all([
-        accountsApi.listAccounts(),
+        accountsApi.listAccounts(true), // archived ones too: their transactions still exist
         categoriesApi.listCategories(),
         transactionsApi.listTransactions({ page: 1, pageSize: PAGE_SIZE }),
         budgetsApi.listBudgets(localDate(new Date())),
@@ -58,10 +78,9 @@ export function useWorkspaceData(userId: string | undefined) {
       const pages = Math.min(firstPage.totalPages, MAX_PAGES);
       const rest = await Promise.all(Array.from({ length: Math.max(0, pages - 1) }, (_, i) =>
         transactionsApi.listTransactions({ page: i + 2, pageSize: PAGE_SIZE })));
-      // New users have no account yet and every transaction needs one.
-      const usable = accountList.filter(a => !a.isArchived);
-      const ensured = usable.length ? accountList
-        : [...accountList, await accountsApi.createAccount({ name: DEFAULT_ACCOUNT_NAME, accountType: 'Cash', initialBalance: 0 })];
+      // A brand-new user has no account and every transaction needs one. Only then create a default wallet,
+      // so deleting your last account does not make it come back on the next load.
+      const ensured = accountList.length ? accountList : await ensureDefaultAccount(userId);
       if (current !== requestId.current) return; // a newer load (or sign-out) superseded this one
       setAccounts(ensured);
       setCategoryList(categoryItems);
@@ -81,13 +100,28 @@ export function useWorkspaceData(userId: string | undefined) {
   }, [userId, load]);
 
   const categories = useMemo(() => categoryList.filter(c => c.isActive).map(toCategory), [categoryList]);
-  const accountNames = useMemo(() => accounts.filter(a => !a.isArchived).map(a => a.name), [accounts]);
-  // Sum of the accounts' starting balances. The backend computes balance = initialBalance + income - expense per
-  // account, so the total balance at any date is this plus the net of all transactions up to that date.
-  const openingBalance = useMemo(() => accounts.reduce((s, a) => s + a.initialBalance, 0), [accounts]);
+  // Balance = starting balance + income - expense of the account's transactions (the backend's formula), computed
+  // from the loaded rows so it is current right after adding or editing a transaction.
+  const walletAccounts = useMemo<WalletAccount[]>(() => {
+    const net = new Map<string, number>(), count = new Map<string, number>();
+    for (const r of rows) if (r.accountId) {
+      net.set(r.accountId, (net.get(r.accountId) ?? 0) + (r.type === 'Income' ? r.amount : -r.amount));
+      count.set(r.accountId, (count.get(r.accountId) ?? 0) + 1);
+    }
+    return accounts.map(a => ({
+      id: a.id, name: a.name, type: a.accountType, initialBalance: a.initialBalance,
+      balance: a.initialBalance + (net.get(a.id) ?? 0), isArchived: a.isArchived, createdAt: a.createdAt, transactions: count.get(a.id) ?? 0,
+    }));
+  }, [accounts, rows]);
+  const activeAccounts = useMemo(() => walletAccounts.filter(a => !a.isArchived), [walletAccounts]);
+  const archivedAccounts = useMemo(() => walletAccounts.filter(a => a.isArchived), [walletAccounts]);
+  const accountNames = useMemo(() => activeAccounts.map(a => a.name), [activeAccounts]);
+  // Starting balances of the active accounts. Total balance at a date = this + net of their transactions up to it.
+  const openingBalance = useMemo(() => activeAccounts.reduce((s, a) => s + a.initialBalance, 0), [activeAccounts]);
+  const activeAccountIds = useMemo(() => new Set(activeAccounts.map(a => a.id)), [activeAccounts]);
 
   const saveTransaction = useCallback(async (t: Transaction, editing: boolean) => {
-    const account = accounts.find(a => a.name === t.account);
+    const account = accounts.find(a => a.name === t.account && !a.isArchived);
     const category = categoryList.find(c => c.name === t.category && c.type === t.type);
     if (!account) throw invalid('Choose an account to continue.');
     if (!category) throw invalid('Choose a category to continue.');
@@ -137,13 +171,32 @@ export function useWorkspaceData(userId: string | undefined) {
     setBudgets(old => editing ? old.map(x => x.id === saved.id ? saved : x) : [...old, saved]);
   }, [categoryList]);
 
+  const createAccount = useCallback(async (input: AccountInput) => {
+    const saved = await accountsApi.createAccount({ name: input.name.trim(), accountType: input.type, initialBalance: input.initialBalance });
+    setAccounts(old => [...old, saved]);
+  }, []);
+  /** Name and type only: the backend does not allow changing the starting balance after creation. */
+  const updateAccount = useCallback(async (id: string, input: Pick<AccountInput, 'name' | 'type'>, isArchived = false) => {
+    const old = accounts.find(a => a.id === id);
+    const saved = await accountsApi.updateAccount(id, { name: input.name.trim(), accountType: input.type, isArchived });
+    setAccounts(list => list.map(a => a.id === id ? saved : a));
+    if (old && old.name !== saved.name) setRows(list => list.map(r => r.accountId === id ? { ...r, account: saved.name } : r));
+  }, [accounts]);
+  /** Deletes the account, or archives it when it still has transactions. Returns which of the two happened. */
+  const removeAccount = useCallback(async (id: string) => {
+    const archived = rows.some(r => r.accountId === id);
+    await accountsApi.deleteAccount(id);
+    setAccounts(list => archived ? list.map(a => a.id === id ? { ...a, isArchived: true } : a) : list.filter(a => a.id !== id));
+    return archived ? 'archived' as const : 'deleted' as const;
+  }, [rows]);
+
   const removeBudget = useCallback(async (id: string) => {
     await budgetsApi.deleteBudget(id);
     setBudgets(old => old.filter(b => b.id !== id));
   }, []);
 
   return {
-    rows, budgets, categories, accountNames, openingBalance, loading, error, reload: load,
-    saveTransaction, removeTransaction, saveCategory, removeCategory, saveBudget, removeBudget,
+    rows, budgets, categories, accountNames, openingBalance, activeAccounts, archivedAccounts, activeAccountIds, loading, error, reload: load,
+    createAccount, updateAccount, removeAccount, saveTransaction, removeTransaction, saveCategory, removeCategory, saveBudget, removeBudget,
   };
 }

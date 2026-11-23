@@ -3,19 +3,22 @@ import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffe
 import { ArrowUpRight, ArrowRight, Wallet, TrendingUp, TrendingDown, Landmark, Sparkles, ChevronRight, Maximize2, Eye, EyeOff } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { type Transaction, type Budget, type Category, money, dateLabel } from '../data';
+import { currencySymbol, formatAmount, percent } from '../lib/currency';
+import type { WalletAccount } from '../hooks/useWorkspaceData';
+import { AccountIcon, HIDDEN_AMOUNT } from './Accounts';
 import { Card, Change, Progress, SectionHead, Badge, Empty, IconButton } from '../components/ui';
 import { ExpandedCard } from '../components/ExpandedCard';
 import { TrendChart, ExpenseDonut, monthlyData } from '../components/charts';
 import type { Highlight } from '../components/ambient-ai/mockAssistant';
 import { CategoryIcon } from '../components/CategoryIcon';
-import { HighlightCard, MORPH_SPRING, useDepthBackdrop } from '../components/ambient-ai/AmbientAI';
+import { HighlightCard, MORPH_SPRING } from '../components/ambient-ai/AmbientAI';
 import { useAmbientAI } from '../components/ambient-ai/AmbientAIProvider';
 
 export type Totals = { income: number; expense: number; savings: number; balance: number; rate: number };
 export function getTotals(rows: Transaction[]): Totals {
   const income = rows.filter(t => t.type === 'Income').reduce((s, t) => s + t.amount, 0);
   const expense = rows.filter(t => t.type === 'Expense').reduce((s, t) => s + t.amount, 0);
-  // alance here is only the period's net. The real account balance comes from BalanceContext (see SummaryCards).
+  // `balance` here is only the period's net. The real account balance comes from BalanceContext (see SummaryCards).
   return { income, expense, savings: income - expense, balance: income - expense, rate: income ? (income - expense) / income * 100 : 0 };
 }
 /**
@@ -28,6 +31,7 @@ export function SummaryCards({ totals, previous, hidden = false, onToggleHidden,
   const { t } = useLanguage();
   const { highlight, openAssistant } = useAmbientAI();
   const balance = useContext(BalanceContext);
+  const symbol = currencySymbol();
   const cards = [
     { label: 'Total balance', value: balance?.current ?? totals.balance, previous: balance?.previous ?? previous.balance, icon: Wallet },
     { label: 'Total income', value: totals.income, previous: previous.income, icon: TrendingUp },
@@ -38,7 +42,7 @@ export function SummaryCards({ totals, previous, hidden = false, onToggleHidden,
     <Card key={label} className={`relative px-3.5 py-3.5 sm:px-5 sm:py-5 transition-all duration-300 motion-safe:hover:-translate-y-0.5 ${index === 0 ? '!border-brand/25 !bg-balance' : ''} ${highlight === 'summary' && index === 3 ? 'ring-1 ring-[#8B5CF6]/75 brightness-110 shadow-[0_0_24px_-14px_#8B5CF6]' : ''}`}>
       {highlight === 'summary' && index === 3 && <button onClick={() => openAssistant('How can I improve my savings?')} className="absolute -top-6 right-3 flex min-h-11 items-center gap-1.5 rounded-lg border border-[#8B5CF6]/50 bg-surface px-3 text-xs text-ai"><Sparkles className="h-3 w-3" />{t("AI Insight")}</button>}
       <div className="flex items-center justify-between gap-2"><span className="truncate text-xs text-muted sm:text-sm">{t(label)}</span>{index === 0 && onToggleHidden ? <button type="button" onClick={() => onToggleHidden(!hidden)} aria-pressed={hidden} aria-label={hidden ? t("Show account balance") : t("Hide account balance")} className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-brand/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">{hidden ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}</button> : <Icon className={`h-4 w-4 shrink-0 ${index === 1 ? 'text-positive' : index === 2 ? 'text-negative' : 'text-muted'}`} aria-hidden="true" />}</div>
-      <div className="mt-3 flex items-baseline gap-1 sm:mt-4 sm:gap-1.5"><span className={`font-semibold leading-none tracking-[-0.045em] tabular-nums ${index === 0 ? 'text-[20px] sm:text-[29px] 2xl:text-[34px]' : 'text-[19px] sm:text-[26px] 2xl:text-[30px]'}`}>{index === 0 && hidden ? '••••••••' : new Intl.NumberFormat('vi-VN').format(value)}</span><span className="text-sm text-muted">₫</span></div>
+      <div className="mt-3 flex items-baseline gap-1 sm:mt-4 sm:gap-1.5"><span className={`font-semibold leading-none tracking-[-0.045em] tabular-nums ${index === 0 ? 'text-[20px] sm:text-[29px] 2xl:text-[34px]' : 'text-[19px] sm:text-[26px] 2xl:text-[30px]'}`}>{index === 0 && hidden ? '••••••••' : formatAmount(value)}</span><span className={`text-sm text-muted ${symbol.before ? '-order-1' : ''}`}>{symbol.symbol}</span></div>
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-0.5 sm:mt-4">{index === 0 && hidden ? <span className="text-xs text-muted">{t("Balance hidden")}</span> : <><Change value={percentChange(value, old)} inverse={inverse} /><span className="hidden text-xs text-muted sm:inline">{index === 3 ? t('{rate}% savings rate', { rate: totals.rate.toFixed(1) }) : t("vs. previous period")}</span></>}</div>
     </Card>,
   )}</div>;
@@ -58,9 +62,11 @@ export function BudgetList({ budgets, rows, categories, onView }: { budgets: Bud
   </Card>;
 }
 const slideOfHighlight: Partial<Record<NonNullable<Highlight>, number>> = { cashflow: 0, expenses: 1, budgets: 2, transactions: 3 };
-export default function Overview({ rows, allRows, previous, budgets, categories, onNavigate, onEdit, hidden = false, setHidden, rangeEnd, showInsight = true }: {
+export default function Overview({ rows, allRows, previous, budgets, categories, accounts = [], onNavigate, onEdit, hidden = false, setHidden, rangeEnd, showInsight = true }: {
   rows: Transaction[]; allRows: Transaction[]; previous: Transaction[]; budgets: Budget[]; categories: Category[];
-  onNavigate: (page: 'Transactions' | 'Budgets' | 'Smart Insights' | 'AI Financial Assistant') => void;
+  /** Active accounts with their current balance, for the short list under the summary cards. */
+  accounts?: WalletAccount[];
+  onNavigate: (page: 'Transactions' | 'Budgets' | 'Smart Insights' | 'AI Financial Assistant' | 'Accounts') => void;
   onEdit: (t: Transaction) => void; hidden?: boolean; setHidden?: (value: boolean) => void; rangeEnd?: string; showInsight?: boolean;
 }) {
   const { t, locale } = useLanguage();
@@ -74,11 +80,13 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
   const dots = useRef<(HTMLButtonElement | null)[]>([]);
   const scroller = useRef<HTMLDivElement>(null);
   const cards = useRef<(HTMLDivElement | null)[]>([]);
-  const indexRef = useRef(0), frame = useRef(0), wheelLock = useRef(false), wheelSum = useRef(0), wheelAt = useRef(0);
+  const indexRef = useRef(0), frame = useRef(0);
   const COUNT = 4;
   const [expanded, setExpanded] = useState<string | null>(null);
   const reduceMotion = useReducedMotion();
-  useDepthBackdrop(expanded !== null);
+  // No depth effect here (unlike the AI page): shrinking <main> to 94% while a card is expanded made the closing
+  // morph aim at the shrunken card, then the card jumped to full size as <main> scaled back. The blurred backdrop
+  // of ExpandedCard already separates the surface from the page.
   const compact = cardW < 520;
   const uid = useId();
   const totals = getTotals(rows), past = getTotals(previous);
@@ -173,27 +181,8 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
     return () => { observer.disconnect(); tabObserver.disconnect(); cancelAnimationFrame(frame.current); };
   }, [applyFocus, go]);
   useLayoutEffect(() => { go(indexRef.current, true); applyFocus(); }, [cardW, applyFocus, go]);
-  // Vertical wheel -> one card per gesture. At the first/last card the page scrolls normally.
-  useEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.ctrlKey) return;
-      const dir = e.deltaY > 0 ? 1 : -1, next = indexRef.current + dir;
-      if (next < 0 || next >= COUNT) return;
-      e.preventDefault();
-      if (wheelLock.current) return;
-      const now = performance.now();
-      wheelSum.current = now - wheelAt.current > 200 ? e.deltaY : wheelSum.current + e.deltaY;
-      wheelAt.current = now;
-      if (Math.abs(wheelSum.current) < 40) return;
-      wheelSum.current = 0; wheelLock.current = true;
-      go(next);
-      setTimeout(() => { wheelLock.current = false; }, 650);
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [go]);
+  // Cards change only by clicking: the tab bar, the dots, or one of the faded side cards (plus the keyboard).
+  // The mouse wheel scrolls the page, and the strip itself is overflow-hidden so trackpad / touch swipes do nothing.
   // Left / Right arrow keys anywhere on the page (except while typing or inside a dialog).
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -247,7 +236,7 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
     expenses: <div className="space-y-6">
       <ExpenseDonut transactions={rows} categories={categories} size={340} />
       <div className="overflow-x-auto rounded-2xl border border-line"><table className="w-full text-sm"><thead className="border-b border-line"><tr><th className={th}>{t('Categories')}</th><th className={th}>{t('Total spent')}</th><th className={th}>%</th></tr></thead>
-        <tbody className="divide-y divide-line">{spendByCategory.map(([name, amount]) => <tr key={name}><td className={td}>{name}</td><td className={td}>{money(amount)}</td><td className={td}>{totals.expense ? Math.round(amount / totals.expense * 100) : 0}%</td></tr>)}</tbody></table></div>
+        <tbody className="divide-y divide-line">{spendByCategory.map(([name, amount]) => <tr key={name}><td className={td}>{name}</td><td className={td}>{money(amount)}</td><td className={td}>{percent(amount, totals.expense)}</td></tr>)}</tbody></table></div>
     </div>,
     budgets: <div className="grid gap-x-12 gap-y-7 md:grid-cols-2">{budgetRows.map(b => { const value = b.spent / b.limit * 100;
       return <div key={b.id}><div className="mb-2.5 flex items-center justify-between gap-2 text-sm"><span className="flex items-center gap-2"><CategoryIcon name={b.category} icon={categories.find(c => c.name === b.category)?.icon} small />{b.category}</span><span className={value >= 85 ? 'text-negative' : 'text-muted'}>{Math.round(value)}%</span></div><Progress label={`${b.category} budget used`} value={value} color={value >= 85 ? 'var(--color-negative)' : undefined} /><div className="mt-2 flex justify-between gap-2 text-xs text-muted"><span>{money(b.spent)}</span><span>{t('of')} {money(b.limit)}</span></div></div>; })}
@@ -264,6 +253,7 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
   }
   return <div className="space-y-5">
     <SummaryCards totals={totals} previous={past} hidden={hidden} onToggleHidden={setHidden} />
+    <AccountsStrip accounts={accounts} hidden={hidden} onManage={() => onNavigate('Accounts')} />
     <section aria-label={t("Overview sections")}>
       <div ref={tabList} role="tablist" aria-label={t("Overview sections")} onKeyDown={onTabKey} className="relative isolate mx-auto mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl bg-surface p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {/* Position and width are written by applyFocus on every scroll frame. */}
@@ -273,10 +263,10 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
           className={`min-h-9 shrink-0 rounded-xl px-3.5 text-sm font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${i === index ? 'text-white' : 'text-muted hover:text-ink'}`}>{t(s.label)}</button>)}</div>
       <div ref={scroller} onScroll={() => { cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(applyFocus); }}
         style={{ ['--card-w' as string]: `${cardW}px`, perspective: '1400px', paddingInline: 'calc(50% - var(--card-w) / 2)' }}
-        className="relative flex snap-x snap-mandatory items-stretch gap-6 overflow-x-auto overflow-y-hidden overscroll-x-contain py-3 sm:py-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        className="relative flex items-stretch gap-6 overflow-hidden py-3 sm:py-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {slides.map((s, i) => <div key={s.id} ref={el => { cards.current[i] = el; }} role="tabpanel" id={`${uid}-panel-${s.id}`} aria-labelledby={`${uid}-tab-${s.id}`} aria-hidden={i !== index}
           onClick={() => { if (i !== index) go(i); }}
-          className={`relative flex w-[var(--card-w)] flex-none snap-center will-change-transform ${i === index ? '' : 'cursor-pointer'}`}>
+          className={`relative flex w-[var(--card-w)] flex-none will-change-transform ${i === index ? '' : 'cursor-pointer'}`}>
           <motion.div layoutId={`card-${s.id}`} style={{ borderRadius: 24 }} transition={reduceMotion ? { duration: 0 } : MORPH_SPRING} className="glass relative w-full p-4 sm:p-6">
             <span aria-hidden="true" className={`pointer-events-none absolute -inset-px rounded-3xl shadow-[0_0_48px_-10px_rgba(139,92,246,0.7)] ring-1 ring-[#8B5CF6]/50 transition-opacity duration-500 ${i === index ? 'opacity-100' : 'opacity-0'}`} />
             <motion.div className="relative" animate={{ opacity: expanded === s.id ? 0 : 1 }} transition={{ duration: 0.1 }} {...(i === index ? {} : ({ inert: '' } as object))}>
@@ -299,4 +289,25 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
     </div>}
     {highlight && <div className="flex justify-end"><button onClick={clearHighlight} className="min-h-11 text-sm text-muted hover:text-ink">{t("Clear AI highlight & return to normal view")}</button></div>}
   </div>;
+}
+const STRIP_LIMIT = 6;
+/** Compact "account name — balance" list. Follows the Total balance eye: hiding it hides every amount here too. */
+function AccountsStrip({ accounts, hidden, onManage }: { accounts: WalletAccount[]; hidden: boolean; onManage: () => void }) {
+  const { t } = useLanguage();
+  const shown = [...accounts].sort((a, b) => b.balance - a.balance).slice(0, STRIP_LIMIT);
+  return <Card className="px-4 py-3.5 sm:px-5">
+    <div className="mb-2.5 flex items-center justify-between gap-3">
+      <h2 className="text-sm font-semibold tracking-tight">{t('Your accounts')}</h2>
+      <button type="button" onClick={onManage} className="inline-flex min-h-9 items-center gap-1 rounded-lg text-xs font-medium text-brand hover:underline focus-visible:ring-2 focus-visible:ring-brand">
+        {accounts.length > STRIP_LIMIT ? t('View all {count}', { count: accounts.length }) : t('Manage accounts')}<ChevronRight className="size-3.5" aria-hidden="true" />
+      </button>
+    </div>
+    {shown.length ? <ul className="grid gap-x-6 gap-y-1 sm:grid-cols-2 xl:grid-cols-3">{shown.map(a =>
+      <li key={a.id} className="flex min-h-11 items-center gap-3 border-b border-line/60 py-1.5 last:border-b-0 sm:[&:nth-last-child(-n+2)]:border-b-0 xl:[&:nth-last-child(-n+3)]:border-b-0">
+        <AccountIcon type={a.type} small />
+        <span className="min-w-0 flex-1 truncate text-sm">{a.name}</span>
+        <span className={`shrink-0 text-sm font-medium tabular-nums ${!hidden && a.balance < 0 ? 'text-negative' : ''}`}>{hidden ? HIDDEN_AMOUNT : money(a.balance)}</span>
+      </li>)}</ul>
+      : <p className="py-2 text-sm text-muted">{t('No accounts yet')}</p>}
+  </Card>;
 }

@@ -3,6 +3,7 @@ import type { Page } from './data';
 
 export const pagePaths: Record<Page, string> = {
   Overview: '/',
+  Accounts: '/accounts',
   Transactions: '/transactions',
   Budgets: '/budgets',
   Categories: '/categories',

@@ -1,4 +1,5 @@
 import { money, type Transaction, type Budget } from '../../data';
+import { displayCurrency, fromDisplay, vndPerUsd } from '../../lib/currency';
 
 export type Highlight = 'summary' | 'cashflow' | 'expenses' | 'transactions' | 'budgets' | null;
 export type FinancialContext = {
@@ -56,8 +57,12 @@ export function simulateFinancialResponse(question: string, context: FinancialCo
   }
   if (!rows.length) return { text: 'There are no transactions in your selected date range. Change the date filter or add a transaction to get a useful analysis.', highlight: 'transactions' };
   if (/afford|purchase|mua/.test(q) || (/\d/.test(q) && followUp === 'summary')) {
-    const match = q.match(/(\d[\d,.]*)\s*(m|million|triệu|k|nghìn|vnd|₫)?/);
-    const amount = match ? Number(match[1].replace(/,/g, '')) * (/^(m|million|triệu)$/.test(match[2] || '') ? 1000000 : /^(k|nghìn)$/.test(match[2] || '') ? 1000 : 1) : 0;
+    const match = q.match(/(\d[\d,.]*)\s*(m|million|triệu|k|nghìn|vnd|₫|usd)?/);
+    const unit = match?.[2] || '';
+    const scaled = match ? Number(match[1].replace(/,/g, '')) * (/^(m|million|triệu)$/.test(unit) ? 1000000 : /^(k|nghìn)$/.test(unit) ? 1000 : 1) : 0;
+    // A number without an explicit VND unit is in the display currency (USD in English), stored amounts are VND.
+    const amount = unit === 'usd' ? Math.round(scaled * vndPerUsd())
+      : /^(vnd|₫|triệu|nghìn)$/.test(unit) || displayCurrency() === 'VND' ? scaled : fromDisplay(scaled);
     return { text: amount ? `A ${money(amount)} purchase would leave ${money(savings - amount)} of your selected-period net income. ${amount <= Math.max(0, savings) * 0.3 ? 'It fits within 30% of that surplus, but check upcoming bills first.' : 'It would use a significant share of your surplus. Consider waiting or saving toward it.'} This simple estimate does not account for debt or future obligations.` : `You have ${money(savings)} in net income this period. What is the purchase price? For example, ask “Can I afford 3 million VND?” This demo uses your current cash flow, not a credit or investment assessment.`, highlight: 'summary', metrics: [{ label: 'Period surplus', value: money(savings) }] };
   }
   if (/budget|limit|reduce spending|ngân sách/.test(q) || (followUp === 'budgets' && /why|how|more/.test(q))) {

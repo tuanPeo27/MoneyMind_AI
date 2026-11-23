@@ -4,6 +4,7 @@ import { useId, useState, type FormEvent } from 'react';
 import { ArrowDownLeft, ArrowUpRight, Pencil, Trash2, ArrowDownUp, Sparkles, Wallet } from 'lucide-react';
 import { type Transaction, type Category, money, dateLabel, today } from '../data';
 import { Badge, Button, Empty, Field, IconButton, Modal, fieldClass } from './ui';
+import { AmountInput } from './AmountInput';
 import { CategoryIcon } from './CategoryIcon';
 import { Select } from './Select';
 
@@ -65,7 +66,7 @@ export function TransactionForm({ transaction, categories, accounts, onSave, onC
   transaction?: Transaction; categories: Category[]; accounts: string[];
   onSave: (transaction: Transaction) => void | Promise<void>; onClose: () => void; onAnalyze?: () => void;
 }) {
-  const { t, language } = useLanguage();
+  const { t, language, currency } = useLanguage();
   const formId = useId();
   const [type, setType] = useState<Transaction['type']>(transaction?.type || 'Expense');
   const [category, setCategory] = useState(transaction?.category || categories.find(c => c.type === type)?.name || '');
@@ -104,11 +105,8 @@ export function TransactionForm({ transaction, categories, accounts, onSave, onC
         <input required maxLength={150} name="description" defaultValue={transaction?.description} placeholder={t('e.g. Lunch at Phuc Long')} className={`${fieldClass} placeholder:text-muted/75`} />
       </Field>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label={t('Amount (VND)')}>
-          <span className="relative block">
-            <input required name="amount" type="number" inputMode="numeric" min="1" max="999999999999" step="1" defaultValue={transaction?.amount} placeholder="0" className={`${fieldClass} pr-14 tabular-nums`} />
-            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-medium text-muted">VND</span>
-          </span>
+        <Field label={t('Amount ({currency})', { currency })}>
+          <AmountInput name="amount" required defaultValue={transaction?.amount} />
         </Field>
         <Field label={t('Transaction type')}>
           <Select label={t('Transaction type')} value={type} onChange={value => {
