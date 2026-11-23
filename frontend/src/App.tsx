@@ -13,7 +13,9 @@ import SettingsPage from './pages/Settings';
 import WorkspacePage from './pages/Workspace';
 import NotificationsPage from './pages/Notifications';
 import AccountsPage from './pages/Accounts';
+import SavingsPage from './pages/Savings';
 import { useNotifications } from './hooks/useNotifications';
+import { useSavingsGoals } from './hooks/useSavingsGoals';
 import { UserLayout, type Profile } from './components/layout/UserLayout';
 import { useLocal } from './hooks/useLocal';
 import { useTheme } from './hooks/useTheme';
@@ -66,7 +68,9 @@ function Workspace() {
   const [userStats, setUserStats] = useState<AdminUserStats | null>(null);
   // One eye for every balance (Total balance, the accounts list, the Accounts page). Hidden by default, per account.
   const [hidden, setHidden] = useLocal(`mm-balance-hidden-v2:${session?.user.id ?? 'guest'}`, true);
-  const notifications = useNotifications(personalId);
+  // Budget and savings-goal alerts created by the server pop up as a toast as soon as the next refresh sees them.
+  const notifications = useNotifications(personalId, item => notify(item.message));
+  const savings = useSavingsGoals(personalId);
   const { path: rawPath, navigate: goTo } = useRoute();
   const { setContext, registerNavigator, openAssistant, closeAssistant, open: assistantOpen } = useAmbientAI();
   // The AI assistant is its own page at /assistant. The workspace stays mounted behind it, on the page the user came from.
@@ -230,7 +234,7 @@ function Workspace() {
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {page !== 'Settings' && page !== 'Accounts' && <Select
+            {page !== 'Settings' && page !== 'Accounts' && page !== 'Savings Funds' && <Select
               className="w-[230px] max-w-full" label={t("Select date range")} value={period}
               onChange={value => {
                 if (value === 'Custom') setDialog({ kind: 'date' });
@@ -242,10 +246,11 @@ function Workspace() {
                 icon: <CalendarDays aria-hidden="true" className="size-4 shrink-0 text-muted" />,
               }))}
             />}
-            {period === 'Custom' && page !== 'Settings' && page !== 'Accounts' && <button className="min-h-11 text-xs text-muted hover:text-ink" onClick={() => setDialog({ kind: 'date' })}>{t("Edit dates")}</button>}
+            {period === 'Custom' && page !== 'Settings' && page !== 'Accounts' && page !== 'Savings Funds' && <button className="min-h-11 text-xs text-muted hover:text-ink" onClick={() => setDialog({ kind: 'date' })}>{t("Edit dates")}</button>}
           </div>
         </div>
         {data.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(data.error)}</span><Button secondary onClick={() => void data.reload()}>{t('Try again')}</Button></p>}
+        {page === 'Savings Funds' && savings.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(savings.error)}</span><Button secondary onClick={() => void savings.reload()}>{t('Try again')}</Button></p>}
         {data.loading && !rows.length && <p role="status" className="mb-4 text-sm text-muted">{t('Loading your data...')}</p>}
         {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} accounts={data.activeAccounts} onNavigate={navigate} onEdit={editTransaction} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} />}
         {page === 'Accounts' && <AccountsPage accounts={data.activeAccounts} archived={data.archivedAccounts} hidden={hidden} setHidden={setHidden}
@@ -257,6 +262,17 @@ function Workspace() {
             return attempt(() => data.removeAccount(a.id), archives ? 'Account archived. Its transactions are kept.' : 'Account deleted.');
           }}
           onRestore={a => attempt(() => data.updateAccount(a.id, { name: a.name, type: a.type }, false), 'Account restored.')} />}
+        {page === 'Savings Funds' && <SavingsPage goals={savings.goals} loading={savings.loading} hidden={hidden}
+          onSave={(id, input) => attempt(() => id ? savings.update(id, input) : savings.create(input), id ? 'Savings fund saved.' : 'Savings fund created.')}
+          onContribute={async (goal, amount) => {
+            // A goal that reaches its target is completed by the server, which also sends the "goal reached" notification.
+            let reached = false;
+            const ok = await attempt(async () => { reached = (await savings.contribute(goal.id, amount)).status === 'Completed'; });
+            if (ok && !reached) notify('Money added to {name}.', { name: goal.name });
+            return ok;
+          }}
+          onStatus={(goal, status) => attempt(() => savings.setStatus(goal.id, status), status === 'Active' ? 'Savings fund reopened.' : 'Savings fund cancelled.')}
+          onDelete={goal => attempt(() => savings.remove(goal.id), 'Savings fund deleted.')} />}
         {page === 'Transactions' && <Transactions onManageCategories={() => navigate('Categories')} rows={filtered} categories={categories} search={search} setSearch={setSearch} onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} onEdit={editTransaction} onDelete={deleteTransaction} onExport={exportRows} />}
         {page === 'Budgets' && <Budgets budgets={budgets} rows={filtered} categories={categories}
           onAdd={() => setDialog({ kind: 'budget' })}

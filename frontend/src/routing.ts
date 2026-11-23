@@ -6,6 +6,7 @@ export const pagePaths: Record<Page, string> = {
   Accounts: '/accounts',
   Transactions: '/transactions',
   Budgets: '/budgets',
+  'Savings Funds': '/savings',
   Categories: '/categories',
   Reports: '/reports',
   'AI Financial Assistant': '/assistant',

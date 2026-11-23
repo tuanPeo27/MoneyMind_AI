@@ -90,8 +90,10 @@ export type AIChatMessageResponse = {
   id: string; conversationId: string; sequence: number; role: 'User' | 'Assistant' | 'System';
   content: string; intent?: string | null; status: 'Pending' | 'Completed' | 'Failed'; createdAt: string;
 };
+/** `dailyLimit` and `remaining` are null when the user has no limit. `resetsAt` is the user's next local midnight (UTC). */
+export type AIUsageResponse = { isUnlimited: boolean; dailyLimit: number | null; used: number; remaining: number | null; resetsAt: string };
 export type SendAIChatMessageResponse = {
-  conversationId: string; userMessage: AIChatMessageResponse; assistantMessage: AIChatMessageResponse;
+  conversationId: string; userMessage: AIChatMessageResponse; assistantMessage: AIChatMessageResponse; usage: AIUsageResponse;
 };
 
 export type UpdateProfileRequest = { fullName: string; phoneNumber?: string | null; avatarUrl?: string | null };
@@ -104,9 +106,18 @@ export type TransactionQuery = {
 export type NotificationQuery = { page?: number; pageSize?: number; unreadOnly?: boolean };
 
 // --- Admin: users (AdminUsersController / IAdminUserService) ---
+/** -1 means unlimited. */
+export const AI_UNLIMITED = -1;
+/**
+ * `customLimit` is what an admin set (null = follows the system default); `effectiveLimit` applies today
+ * (null = unlimited). `usedToday` counts answered chat messages since the user's local midnight.
+ */
+export type AdminAIQuota = { customLimit: number | null; effectiveLimit: number | null; isUnlimited: boolean; usedToday: number };
+export type AIQuotaSettingsResponse = { defaultDailyLimit: number; options: number[] };
 export type AdminUserResponse = {
   id: string; fullName: string; email: string; avatarUrl?: string | null; isActive: boolean;
   lockedAt?: string | null; lockedReason?: string | null; lastLoginAt?: string | null; createdAt: string; roles: string[];
+  aiQuota: AdminAIQuota;
 };
 /** `search` matches full name or email. `isActive` false = locked accounts. */
 export type AdminUserQuery = { page?: number; pageSize?: number; search?: string; isActive?: boolean };

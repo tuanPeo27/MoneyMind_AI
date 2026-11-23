@@ -2,6 +2,15 @@ using backend.Models;
 
 namespace backend.DTOs.Responses;
 
+/// <param name="CustomLimit">Limit an admin set for this user; null means the user follows the system default.</param>
+/// <param name="EffectiveLimit">Limit that applies today; null means unlimited.</param>
+/// <param name="UsedToday">Chat messages answered since the user's local midnight.</param>
+public sealed record AdminAIQuotaResponse(int? CustomLimit, int? EffectiveLimit, bool IsUnlimited, int UsedToday);
+
+/// <param name="DefaultDailyLimit">10, 20, 50 or -1 (unlimited).</param>
+/// <param name="Options">Values an admin can grant.</param>
+public sealed record AIQuotaSettingsResponse(int DefaultDailyLimit, IReadOnlyList<int> Options);
+
 public sealed record AdminUserResponse(
     Guid Id,
     string FullName,
@@ -12,7 +21,8 @@ public sealed record AdminUserResponse(
     string? LockedReason,
     DateTime? LastLoginAt,
     DateTime CreatedAt,
-    IReadOnlyList<string> Roles);
+    IReadOnlyList<string> Roles,
+    AdminAIQuotaResponse AiQuota);
 
 public sealed record AuditLogResponse(
     Guid Id,

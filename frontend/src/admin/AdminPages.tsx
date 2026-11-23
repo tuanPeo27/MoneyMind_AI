@@ -1,7 +1,7 @@
 import { useLanguage } from '../i18n';
 import { Pagination, usePagination, type Pager } from '../components/Pagination';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Search, Eye, Lock, LockOpen, Shield, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Search, Eye, Lock, LockOpen, MessageSquare, Shield, Plus, Pencil, Trash2 } from 'lucide-react';
 import { type PlatformUser, type PlatformTransaction, type SystemCategory, aiUsage, questionTopics } from './data';
 import { money, dateLabel, localDate } from '../data';
 import { Badge, Button, Card, Empty, Field, IconButton, Modal, Progress, SectionHead, fieldClass } from '../components/ui';
@@ -9,6 +9,7 @@ import { AdminChart } from './AdminCharts';
 import { FormSelect, Select } from '../components/Select';
 import { adminUsersApi, type AdminUserResponse, type PagedResult } from '../services';
 import { useErrorText } from '../pages/Auth';
+import { QuotaBadge, QuotaDialog, limitLabel } from './AIQuota';
 import { CategoryIcon, CategoryIconPicker, categoryIcons, getCategoryIcon, type CategoryIconId } from '../components/CategoryIcon';
 
 export type ConfirmAction = { title: string; text: string; action: () => void };
@@ -56,6 +57,8 @@ export function UserManagement({ currentUserId, onChanged }: { currentUserId?: s
   const [loading, setLoading] = useState(true), [error, setError] = useState<unknown>(null);
   const [detail, setDetail] = useState<AdminUserResponse | null>(null);
   const [locking, setLocking] = useState<AdminUserResponse | null>(null), [unlocking, setUnlocking] = useState<AdminUserResponse | null>(null);
+  const [quotaFor, setQuotaFor] = useState<AdminUserResponse | null>(null), [defaultLimit, setDefaultLimit] = useState<number | null>(null);
+  useEffect(() => { adminUsersApi.getAIQuotaSettings().then(s => setDefaultLimit(s.defaultDailyLimit)).catch(() => undefined); }, []);
   const [busy, setBusy] = useState(false), [actionError, setActionError] = useState(''), [notice, setNotice] = useState('');
   const request = useRef(0);
   // Wait for a pause in typing before searching, then start again from page 1.
@@ -97,14 +100,16 @@ export function UserManagement({ currentUserId, onChanged }: { currentUserId?: s
     {notice && <p role="status" className="mx-4 mb-3 rounded-lg bg-positive/10 px-4 py-2.5 text-sm text-positive">{notice}</p>}
     {error != null && <div role="alert" className="mx-4 mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 px-4 py-3 text-sm text-negative"><span>{errorText(error)}</span><Button secondary onClick={() => void load()}>{t('Try again')}</Button></div>}
     <div aria-busy={loading} className={loading && data ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
-      <AdminTable headers={['User', 'Email', 'Registered', 'Last sign-in', 'Role', 'Status', 'Actions']} empty={!loading && !error && !pager.items.length}>{pager.items.map(u => <tr key={u.id} className="hover:bg-line/30">
+      <AdminTable headers={['User', 'Email', 'Registered', 'Last sign-in', 'Role', 'Status', 'AI messages', 'Actions']} empty={!loading && !error && !pager.items.length}>{pager.items.map(u => <tr key={u.id} className="hover:bg-line/30">
         <td><span className="font-medium">{u.fullName}</span>{u.id === currentUserId && <span className="ml-2 text-xs text-muted">(you)</span>}</td>
         <td className="text-muted">{u.email}</td>
         <td className="text-muted">{dateLabel(u.createdAt.slice(0, 10))}</td>
         <td className="text-muted">{u.lastLoginAt ? dateLabel(u.lastLoginAt.slice(0, 10)) : 'Never'}</td>
         <td><Badge tone={isAdmin(u) ? 'blue' : 'neutral'}>{isAdmin(u) ? 'ADMIN' : 'USER'}</Badge></td>
         <td><Badge tone={u.isActive ? 'positive' : 'negative'}>{u.isActive ? 'Active' : 'Locked'}</Badge></td>
+        <td>{isAdmin(u) ? <span className="text-xs text-muted">—</span> : <QuotaBadge user={u} />}</td>
         <td><div className="flex"><IconButton icon={Eye} label={`View ${u.fullName}`} onClick={() => setDetail(u)} />
+          <IconButton icon={MessageSquare} label={`Set AI message limit for ${u.fullName}`} disabled={isAdmin(u)} title={isAdmin(u) ? 'Administrators do not use the AI assistant' : undefined} onClick={() => { setNotice(''); setQuotaFor(u); }} />
           {u.isActive
             ? <IconButton icon={Lock} label={`Lock ${u.fullName}`} disabled={lockDisabled(u)} title={lockDisabled(u) ? 'Administrators and your own account cannot be locked' : undefined} onClick={() => { setActionError(''); setNotice(''); setLocking(u); }} />
             : <IconButton icon={LockOpen} label={`Unlock ${u.fullName}`} onClick={() => { setActionError(''); setNotice(''); setUnlocking(u); }} />}
@@ -121,6 +126,10 @@ export function UserManagement({ currentUserId, onChanged }: { currentUserId?: s
       <div className="flex justify-between gap-4"><dt className="text-muted">Roles</dt><dd>{detail.roles.join(', ') || '—'}</dd></div>
       <div className="flex justify-between gap-4"><dt className="text-muted">Account ID</dt><dd className="truncate font-mono text-xs">{detail.id}</dd></div>
     </dl><Button secondary onClick={() => setDetail(null)}>Close details</Button></div></Modal>}
+    {quotaFor && <QuotaDialog user={quotaFor} defaultLimit={defaultLimit} onClose={() => setQuotaFor(null)} onSaved={user => {
+      replace(user); setQuotaFor(null);
+      setNotice(`AI message limit for ${user.fullName}: ${user.aiQuota.customLimit === null ? `system default (${limitLabel(user.aiQuota.effectiveLimit).toLowerCase()})` : limitLabel(user.aiQuota.customLimit).toLowerCase()}.`);
+    }} />}
     {locking && <Modal title="Lock this account?" onClose={() => !busy && setLocking(null)}><form className="space-y-5" onSubmit={e => {
       e.preventDefault(); const reason = String(new FormData(e.currentTarget).get('reason')).trim();
       if (!reason) { setActionError('Enter a reason for locking this account.'); return; }

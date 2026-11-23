@@ -9,6 +9,12 @@ public sealed class AdminUserQuery : PagingQuery
     public bool? IsActive { get; set; }
 }
 
+/// <param name="DailyLimit">10, 20, 50 or -1 (unlimited). null returns the user to the system default.</param>
+public sealed record SetAIQuotaRequest(int? DailyLimit);
+
+/// <param name="DailyLimit">10, 20, 50 or -1 (unlimited).</param>
+public sealed record SetDefaultAIQuotaRequest(int DailyLimit);
+
 public sealed record LockUserRequest([Required, StringLength(500)] string Reason);
 
 public sealed record UpsertAnnouncementRequest(

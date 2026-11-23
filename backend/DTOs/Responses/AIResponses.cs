@@ -19,10 +19,16 @@ public sealed record ChatMessageResponse(
     AIProcessingStatus Status,
     DateTime CreatedAt);
 
+/// <param name="DailyLimit">null when the user has no limit.</param>
+/// <param name="Remaining">null when the user has no limit.</param>
+/// <param name="ResetsAt">UTC time when the count starts again (the user's next local midnight).</param>
+public sealed record AIUsageResponse(bool IsUnlimited, int? DailyLimit, int Used, int? Remaining, DateTime ResetsAt);
+
 public sealed record SendChatMessageResponse(
     Guid? ConversationId,
     ChatMessageResponse UserMessage,
-    ChatMessageResponse AssistantMessage);
+    ChatMessageResponse AssistantMessage,
+    AIUsageResponse Usage);
 
 public sealed record InsightResponse(
     Guid Id,

@@ -8,7 +8,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace backend.Services.Implementations;
 
-public sealed class BudgetService(AppDbContext db, INotificationService notifications) : IBudgetService
+public sealed class BudgetService(
+    AppDbContext db,
+    INotificationService notifications,
+    ILogger<BudgetService> logger) : IBudgetService
 {
     public async Task<IReadOnlyList<BudgetResponse>> GetAllAsync(Guid userId, DateOnly? activeOn = null,
         CancellationToken cancellationToken = default)
@@ -55,6 +58,7 @@ public sealed class BudgetService(AppDbContext db, INotificationService notifica
         };
         db.Budgets.Add(budget);
         await db.SaveChangesAsync(cancellationToken);
+        await CheckAfterChangeAsync(userId, budget, cancellationToken);
         return await BuildAsync(userId, budget, cancellationToken);
     }
 
@@ -72,6 +76,7 @@ public sealed class BudgetService(AppDbContext db, INotificationService notifica
         budget.EndDate = request.EndDate;
         budget.AlertThreshold = request.AlertThreshold;
         await db.SaveChangesAsync(cancellationToken);
+        await CheckAfterChangeAsync(userId, budget, cancellationToken);
         return await BuildAsync(userId, budget, cancellationToken);
     }
 
@@ -104,7 +109,12 @@ public sealed class BudgetService(AppDbContext db, INotificationService notifica
             if (spent > budget.Amount)
             {
                 title = $"Vượt ngân sách {categoryName}";
-                message = $"Chi tiêu {categoryName} đã vượt ngân sách ({spent:N0} / {budget.Amount:N0}).";
+                message = $"Chi tiêu {categoryName} đã vượt ngân sách {spent - budget.Amount:N0} ({spent:N0} / {budget.Amount:N0}).";
+            }
+            else if (spent == budget.Amount)
+            {
+                title = $"Đạt ngân sách {categoryName}";
+                message = $"Bạn đã dùng hết ngân sách {categoryName} ({spent:N0} / {budget.Amount:N0}).";
             }
             else if (usedPercent >= budget.AlertThreshold)
             {
@@ -124,6 +134,24 @@ public sealed class BudgetService(AppDbContext db, INotificationService notifica
 
             await notifications.CreateAsync(userId, NotificationType.Warning, NotificationSource.Budget, title,
                 message, "Budget", budget.Id, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// A budget created or raised/lowered after spending already happened can be at or over its limit right away.
+    /// Alerts are secondary, so a failure here must not fail the saved budget.
+    /// </summary>
+    private async Task CheckAfterChangeAsync(Guid userId, Budget budget, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var date = today < budget.StartDate ? budget.StartDate : today > budget.EndDate ? budget.EndDate : today;
+            await CheckAlertsAsync(userId, budget.CategoryId, DateRange.StartOfDay(date), cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Budget alert check failed for budget {BudgetId}", budget.Id);
         }
     }
 

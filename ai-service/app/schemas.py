@@ -41,9 +41,18 @@ class ChatResponse(ApiModel):
     intent: str | None = None
     token_usage: int | None = None
     provider: str = "gemini"
+    # The model that actually answered. It differs from the first choice when the system fell back.
+    model: str | None = None
+
+
+class ModelState(ApiModel):
+    name: str
+    available: bool
+    cooldown_seconds: int = 0
 
 
 class HealthResponse(ApiModel):
     status: Literal["Healthy", "Unhealthy"]
     provider: str = "gemini"
     model: str
+    models: list[ModelState] = Field(default_factory=list)

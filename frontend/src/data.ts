@@ -1,6 +1,6 @@
 import type { CategoryIconId } from './components/CategoryIcon';
 
-export type Page = 'Overview' | 'Accounts' | 'Transactions' | 'Budgets' | 'Categories' | 'Reports' | 'AI Financial Assistant' | 'Smart Insights' | 'Settings' | 'Workspace' | 'Notifications';
+export type Page = 'Overview' | 'Accounts' | 'Transactions' | 'Budgets' | 'Savings Funds' | 'Categories' | 'Reports' | 'AI Financial Assistant' | 'Smart Insights' | 'Settings' | 'Workspace' | 'Notifications';
 export type Transaction = {
   id: string; description: string; amount: number; type: 'Income' | 'Expense';
   category: string; account: string; date: string; notes: string;

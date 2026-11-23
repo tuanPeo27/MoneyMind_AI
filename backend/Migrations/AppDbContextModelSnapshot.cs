@@ -459,6 +459,9 @@ namespace backend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int?>("AIDailyMessageLimit")
+                        .HasColumnType("int");
+
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("int");
 

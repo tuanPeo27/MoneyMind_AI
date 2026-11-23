@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Sparkles, ArrowUp, ArrowUpRight, ArrowLeft, Plus, ShieldCheck, ChevronRight, History, Trash2 } from 'lucide-react';
 import { useAmbientAI, type AIMessageData } from './AmbientAIProvider';
+import { useSession, type AIUsageResponse } from '../../services';
 import { type Highlight } from './mockAssistant';
 import { Button, IconButton, Modal } from '../ui';
 import { LiquidButton } from '../LiquidButton';
@@ -89,9 +90,22 @@ function useViewportZoom() {
   useEffect(() => { const update = () => setZoom(calc()); window.addEventListener('resize', update); return () => window.removeEventListener('resize', update); }, []);
   return zoom;
 }
+/** "18 / 20 messages left today", "Unlimited messages", or when none are left, the time the count resets. */
+function UsageNote({ usage }: { usage: AIUsageResponse }) {
+  const { t, locale } = useLanguage();
+  const { session } = useSession();
+  if (usage.isUnlimited) return <span className="ml-1">· {t('Unlimited messages')}</span>;
+  if (usage.remaining === 0) {
+    const time = new Date(usage.resetsAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: session?.user.timeZoneId });
+    return <span role="status" className="ml-1 font-medium text-negative">· {t('No messages left today. More at {time}.', { time })}</span>;
+  }
+  return <span className="ml-1">· {t('{left} / {limit} messages left today', { left: usage.remaining ?? 0, limit: usage.dailyLimit ?? 0 })}</span>;
+}
 export function AmbientAIOverlay() {
   const { t } = useLanguage();
-  const { open, closeAssistant, financial, messages, conversations, conversationId, historyBusy, selectConversation, removeConversation, busy, clear, storageError, send } = useAmbientAI();
+  const { open, closeAssistant, financial, messages, conversations, conversationId, historyBusy, selectConversation, removeConversation, busy, clear, storageError, send, usage } = useAmbientAI();
+  // Out of messages today: keep the history readable, but stop new questions until the count resets.
+  const exhausted = usage?.remaining === 0;
   const [historyOpen, setHistoryOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -110,8 +124,8 @@ export function AmbientAIOverlay() {
         </div>)}</div>}
       </div>}
       <div style={{ animationDelay: '70ms' }} className="ai-rise mb-4 flex shrink-0 flex-wrap items-center justify-center gap-2 text-xs text-muted"><span className="h-1.5 w-1.5 rounded-full bg-positive" />{t(financial.page)}<ChevronRight className="h-3 w-3" /><span>{t(financial.period)}</span>{financial.selection?.transaction && <span>· {financial.selection.transaction.description}</span>}</div>
-      {!messages.length ? <div className="flex min-h-0 flex-1 flex-col justify-center"><div style={{ animationDelay: '140ms' }} className="ai-rise mb-8 text-center"><div className="glass mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl !border-[#8B5CF6]/30 bg-gradient-to-br from-[#8B5CF6]/20 to-[#EC4899]/15"><Sparkles className="h-7 w-7 text-ai" /></div><p className="mb-3 text-xs font-medium tracking-[0.16em] text-ai">{t("A LITTLE CLARITY GOES A LONG WAY")}</p><h2 id="ambient-title" className="text-[26px] font-medium leading-tight tracking-[-0.04em] sm:text-[32px]">{t("How can I help with")}<br className="hidden sm:block" />{' ' + t("your finances today?")}</h2><p className="mt-4 text-sm text-muted">{t("Your numbers. Your context. A clearer perspective.")}</p></div><div style={{ animationDelay: '260ms' }} className="ai-rise mb-5"><AIInput onSubmit={send} busy={busy} /></div><div style={{ animationDelay: '380ms' }} className="ai-rise"><PromptChips /></div></div> : <><h2 id="ambient-title" className="sr-only">{t("Your financial conversation")}</h2><Conversation /><div className="shrink-0 space-y-3 pt-4"><PromptChips limit={2} /><AIInput onSubmit={send} busy={busy} /></div></>}
-      <p style={{ animationDelay: '480ms' }} className="ai-rise mt-5 flex shrink-0 items-center justify-center gap-2 text-center text-xs leading-5 text-muted"><ShieldCheck className="h-3.5 w-3.5 shrink-0" />{storageError ? t("Storage unavailable · Conversation lasts until refresh.") : t("Gemini AI · Encrypted chat history · Not financial advice")}</p>
+      {!messages.length ? <div className="flex min-h-0 flex-1 flex-col justify-center"><div style={{ animationDelay: '140ms' }} className="ai-rise mb-8 text-center"><div className="glass mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl !border-[#8B5CF6]/30 bg-gradient-to-br from-[#8B5CF6]/20 to-[#EC4899]/15"><Sparkles className="h-7 w-7 text-ai" /></div><p className="mb-3 text-xs font-medium tracking-[0.16em] text-ai">{t("A LITTLE CLARITY GOES A LONG WAY")}</p><h2 id="ambient-title" className="text-[26px] font-medium leading-tight tracking-[-0.04em] sm:text-[32px]">{t("How can I help with")}<br className="hidden sm:block" />{' ' + t("your finances today?")}</h2><p className="mt-4 text-sm text-muted">{t("Your numbers. Your context. A clearer perspective.")}</p></div><div style={{ animationDelay: '260ms' }} className="ai-rise mb-5"><AIInput onSubmit={send} busy={busy || exhausted} /></div><div style={{ animationDelay: '380ms' }} className="ai-rise"><PromptChips /></div></div> : <><h2 id="ambient-title" className="sr-only">{t("Your financial conversation")}</h2><Conversation /><div className="shrink-0 space-y-3 pt-4"><PromptChips limit={2} /><AIInput onSubmit={send} busy={busy || exhausted} /></div></>}
+      <p style={{ animationDelay: '480ms' }} className="ai-rise mt-5 flex shrink-0 items-center justify-center gap-2 text-center text-xs leading-5 text-muted"><ShieldCheck className="h-3.5 w-3.5 shrink-0" />{storageError ? t("Storage unavailable · Conversation lasts until refresh.") : t("Gemini AI · Encrypted chat history · Not financial advice")}{usage && <UsageNote usage={usage} />}</p>
       {pendingDelete && <Modal title={t('Delete this conversation?')} onClose={() => !deleting && setPendingDelete(null)}>
         <p className="text-sm leading-6 text-muted">{t('“{title}” and all of its messages will be deleted permanently. This cannot be undone.', { title: pendingDelete.title })}</p>
         <div className="mt-6 flex justify-end gap-3">

@@ -51,6 +51,7 @@ public static class DbSeeder
             provider.GetRequiredService<IOptions<SeedOptions>>().Value,
             logger);
         await SeedCategoriesAsync(provider.GetRequiredService<AppDbContext>(), logger, cancellationToken);
+        await SeedSettingsAsync(provider.GetRequiredService<AppDbContext>(), cancellationToken);
     }
 
     private static async Task SeedRolesAsync(RoleManager<IdentityRole<Guid>> roleManager)
@@ -100,6 +101,21 @@ public static class DbSeeder
             if (!added.Succeeded)
                 throw new InvalidOperationException($"Could not assign Admin role: {added.Describe()}");
         }
+    }
+
+    /// <summary>Creates the default AI message limit once. An admin can change it; it is never overwritten.</summary>
+    private static async Task SeedSettingsAsync(AppDbContext db, CancellationToken cancellationToken)
+    {
+        if (await db.SystemSettings.AnyAsync(setting => setting.Key == AIQuota.DefaultSettingKey, cancellationToken)) return;
+
+        db.SystemSettings.Add(new SystemSetting
+        {
+            Key = AIQuota.DefaultSettingKey,
+            Value = AIQuota.FallbackDefault.ToString(),
+            Description = "AI chat messages per user per day when an admin has not set a limit for that user. -1 means unlimited.",
+            UpdatedBy = "system"
+        });
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static async Task SeedCategoriesAsync(AppDbContext db, ILogger logger, CancellationToken cancellationToken)

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { emptyContext, getPrompts, type FinancialContext, type Highlight, type AIResponse } from './mockAssistant';
-import { aiChatApi, useSession, type AIChatMessageResponse, type AIConversationResponse } from '../../services';
+import { aiChatApi, ApiError, useSession, type AIChatMessageResponse, type AIConversationResponse, type AIUsageResponse } from '../../services';
 import { useLanguage } from '../../i18n';
 
 export type AIMessageData = AIResponse & {
@@ -13,6 +13,8 @@ type AmbientState = {
   conversations: AIConversationResponse[];
   conversationId: string | null;
   historyBusy: boolean;
+  /** Today's AI message limit; null until loaded. */
+  usage: AIUsageResponse | null;
   financial: FinancialContext;
   highlight: Highlight;
   prompts: string[];
@@ -75,6 +77,8 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<AIConversationResponse[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [historyBusy, setHistoryBusy] = useState(false);
+  const [usage, setUsage] = useState<AIUsageResponse | null>(null);
+  const refreshUsage = useCallback(() => { aiChatApi.getUsage().then(setUsage).catch(() => undefined); }, []);
   const storageError = false;
   const fadeTimer = useRef<ReturnType<typeof setTimeout>>();
   const navigate = useRef<(target: Highlight) => void>(() => {});
@@ -103,6 +107,7 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
 
     try {
       const response = await aiChatApi.sendMessage(conversationId, text, language);
+      setUsage(response.usage);
       setConversationId(response.conversationId);
       if (session?.user.id) localStorage.setItem(`mm-ai-conversation-${session.user.id}`, response.conversationId);
       setConversations(old => {
@@ -122,9 +127,12 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
         context: 'Gemini · Encrypted history',
         highlight: target,
       }]);
-    } catch {
+    } catch (e) {
+      // 429: out of messages today. 409: another request is still running. Show the server's explanation.
+      const known = e instanceof ApiError && (e.status === 429 || e.status === 409);
+      if (e instanceof ApiError && e.status === 429) refreshUsage();
       setMessages(old => [...old, {
-        id: crypto.randomUUID(), role: 'assistant', text: t('AI service is unavailable. Please try again.'),
+        id: crypto.randomUUID(), role: 'assistant', text: known ? e.message : t('AI service is unavailable. Please try again.'),
         time: chatTime(new Date(), locale, timeZone), context: 'Request failed', // translated when shown
       }]);
     } finally {
@@ -179,7 +187,9 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
     setMessages([]);
     setConversations([]);
     setConversationId(null);
+    setUsage(null);
     if (!userId) return () => { cancelled = true; };
+    refreshUsage();
 
     // Remove legacy plaintext chat copies; server-side history is encrypted at rest.
     localStorage.removeItem('mm-ambient-chat-v1');
@@ -223,7 +233,7 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
   }, []);
   useEffect(() => () => { clearTimeout(fadeTimer.current); }, []);
   return <Context.Provider value={{
-    open, busy, financial, highlight, messages, conversations, conversationId, historyBusy, storageError,
+    open, busy, financial, highlight, messages, conversations, conversationId, historyBusy, usage, storageError,
     // Suggestions in the current language; the chip sends the same (translated) text it shows.
     prompts: getPrompts(financial.route.startsWith('/admin') ? 'Admin' : financial.page).map(prompt => t(prompt)), setContext, openAssistant, closeAssistant,
     send, selectConversation, removeConversation, inspect, clearHighlight, registerNavigator,

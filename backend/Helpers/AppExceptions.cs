@@ -18,5 +18,8 @@ public sealed class NotFoundException(string message = "Resource not found.")
 
 public sealed class ConflictException(string message) : AppException(message, StatusCodes.Status409Conflict);
 
+public sealed class TooManyRequestsException(string message)
+    : AppException(message, StatusCodes.Status429TooManyRequests);
+
 public sealed class ServiceUnavailableException(string message)
     : AppException(message, StatusCodes.Status503ServiceUnavailable);

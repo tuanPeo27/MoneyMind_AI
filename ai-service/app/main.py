@@ -41,7 +41,7 @@ async def health(
     settings: Settings = Depends(get_settings),
     gemini: GeminiChatService = Depends(get_gemini),
 ) -> HealthResponse:
-    healthy = await gemini.is_healthy()
-    if not healthy:
+    reachable = await gemini.is_healthy()
+    if reachable is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Gemini is unavailable.")
-    return HealthResponse(status="Healthy", model=settings.gemini_model_respond)
+    return HealthResponse(status="Healthy", model=reachable, models=gemini.model_states())

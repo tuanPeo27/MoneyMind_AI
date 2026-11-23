@@ -167,6 +167,8 @@ builder.Services.AddScoped<IEncryptionService, EncryptionService>();
 builder.Services.AddScoped<IFinancialAnalysisService, FinancialAnalysisService>();
 builder.Services.AddScoped<IAIOrchestrationService, AIOrchestrationService>();
 builder.Services.AddScoped<IAIChatService, AIChatService>();
+builder.Services.AddScoped<IAIQuotaService, AIQuotaService>();
+builder.Services.AddSingleton<UserRequestGate>();
 builder.Services.AddHttpClient<IAIServiceClient, AIServiceClient>((provider, client) =>
 {
     var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AIServiceOptions>>().Value;

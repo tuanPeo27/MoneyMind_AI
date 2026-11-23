@@ -25,4 +25,13 @@ public sealed class AdminUsersController(IAdminUserService service) : AdminContr
     [HttpPost("{id:guid}/unlock")]
     public async Task<ActionResult<AdminUserResponse>> Unlock(Guid id, CancellationToken ct) =>
         Ok(await service.UnlockAsync(id, ct));
+
+    /// <summary>
+    /// Grants the user 10, 20 or 50 AI messages per day, or unlimited (-1).
+    /// A null dailyLimit returns the user to the system default.
+    /// </summary>
+    [HttpPut("{id:guid}/ai-quota")]
+    public async Task<ActionResult<AdminUserResponse>> SetAIQuota(Guid id, SetAIQuotaRequest request,
+        CancellationToken ct) =>
+        Ok(await service.SetAIQuotaAsync(id, request, ct));
 }

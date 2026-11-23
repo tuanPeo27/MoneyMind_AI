@@ -8,7 +8,8 @@ public sealed record AIChatTurn(string Role, string Content);
 public sealed record AIChatPayload(string Message, IReadOnlyList<AIChatTurn> History, string FinancialContext,
     string? Language = null);
 
-public sealed record AIChatResult(string Content, string? Intent, int? TokenUsage, string? Provider);
+/// <param name="Model">The model that answered. It differs from the first choice when the AI service fell back.</param>
+public sealed record AIChatResult(string Content, string? Intent, int? TokenUsage, string? Provider, string? Model = null);
 
 public sealed record AICategoryOption(Guid Id, string Name);
 

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ArrowLeftRight, Wallet, Shapes, Database, Bell, CheckCheck, Trash2, X, type LucideIcon } from 'lucide-react';
+import { ArrowLeftRight, Wallet, Shapes, Database, Bell, CheckCheck, PiggyBank, Trash2, X, type LucideIcon } from 'lucide-react';
 import { useLanguage } from '../i18n';
 import { Button, Card, Empty, IconButton } from '../components/ui';
 import type { AppNotification, NotificationKind } from '../hooks/useNotifications';
@@ -7,6 +7,7 @@ import type { AppNotification, NotificationKind } from '../hooks/useNotification
 const meta: Record<NotificationKind, { icon: LucideIcon; tone: string }> = {
   transaction: { icon: ArrowLeftRight, tone: 'text-brand bg-brand/10' },
   budget: { icon: Wallet, tone: 'text-ai bg-ai/10' },
+  goal: { icon: PiggyBank, tone: 'text-positive bg-positive/10' },
   category: { icon: Shapes, tone: 'text-chart-tertiary bg-chart-tertiary/10' },
   data: { icon: Database, tone: 'text-positive bg-positive/10' },
   system: { icon: Bell, tone: 'text-muted bg-line/60' },
@@ -54,7 +55,8 @@ export default function NotificationsPage({ items, onMarkAllRead, onMarkRead, on
           return <div key={n.id} className={`group flex items-start gap-3 px-4 py-4 transition-colors ${n.read ? '' : 'bg-brand/[0.04]'}`}>
             <span className={`mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl ${tone}`}><Icon className="size-4" aria-hidden="true" /></span>
             <button type="button" onClick={() => onMarkRead(n.id)} className="min-w-0 flex-1 text-left focus-visible:outline-none">
-              <p className="flex items-center gap-2 text-sm font-medium text-ink">{t(n.message, n.values)}{!n.read && <span className="size-1.5 shrink-0 rounded-full bg-brand" aria-label={t('Unread')} />}</p>
+              <p className="flex items-center gap-2 text-sm font-medium text-ink">{n.title ? n.title : t(n.message, n.values)}{!n.read && <span className="size-1.5 shrink-0 rounded-full bg-brand" aria-label={t('Unread')} />}</p>
+              {n.title && <p className="mt-0.5 text-sm text-muted">{t(n.message, n.values)}</p>}
               <p className="mt-0.5 text-xs text-muted">{relativeTime(n.time, locale, t)}</p>
             </button>
             <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"><IconButton icon={X} label={t('Dismiss notification')} onClick={() => onRemove(n.id)} /></span>

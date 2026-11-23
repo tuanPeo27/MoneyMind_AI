@@ -1,6 +1,6 @@
 import { useLanguage } from '../../i18n';
 import { type ReactNode } from 'react';
-import { ChartNoAxesCombined, CreditCard, LayoutDashboard, ArrowLeftRight, Wallet, Shapes, ChartColumn, Lightbulb, PanelLeftClose, PanelLeftOpen, Plus, Settings, ChevronRight, ChevronDown, Search, Bell, Menu, Eye, EyeOff, Download, LogIn, LogOut, ShieldCheck, ArrowUpRight } from 'lucide-react';
+import { ChartNoAxesCombined, CreditCard, PiggyBank, LayoutDashboard, ArrowLeftRight, Wallet, Shapes, ChartColumn, Lightbulb, PanelLeftClose, PanelLeftOpen, Plus, Settings, ChevronRight, ChevronDown, Search, Bell, Menu, Eye, EyeOff, Download, LogIn, LogOut, ShieldCheck, ArrowUpRight } from 'lucide-react';
 import { type Page, type Transaction, type Category } from '../../data';
 import { type DemoRole, pagePaths } from '../../routing';
 import { Badge, IconButton } from '../ui';
@@ -15,7 +15,7 @@ import { DropdownMenu, MenuHeader, MenuItem, MenuLabel, MenuRadioItem, MenuSepar
 
 export type Profile = { name: string; email: string; phone?: string; avatar?: string; notifications: boolean; insights: boolean };
 const groups = [
-  { label: 'WORKSPACE', items: [{ name: 'Overview', icon: LayoutDashboard }, { name: 'Accounts', icon: CreditCard }, { name: 'Transactions', icon: ArrowLeftRight }, { name: 'Budgets', icon: Wallet }, { name: 'Categories', icon: Shapes }, { name: 'Reports', icon: ChartColumn }] },
+  { label: 'WORKSPACE', items: [{ name: 'Overview', icon: LayoutDashboard }, { name: 'Accounts', icon: CreditCard }, { name: 'Transactions', icon: ArrowLeftRight }, { name: 'Budgets', icon: Wallet }, { name: 'Savings Funds', icon: PiggyBank }, { name: 'Categories', icon: Shapes }, { name: 'Reports', icon: ChartColumn }] },
   { label: 'INTELLIGENCE', items: [{ name: 'Smart Insights', icon: Lightbulb }] },
 ] as const;
 const mini = 'md:group-data-[mini=true]/side:hidden';

@@ -12,7 +12,9 @@ namespace backend.Services.Implementations;
 public sealed class AIChatService(
     AppDbContext db,
     IEncryptionService encryption,
-    IAIOrchestrationService orchestration) : IAIChatService
+    IAIOrchestrationService orchestration,
+    IAIQuotaService quota,
+    UserRequestGate gate) : IAIChatService
 {
     private const int ContextMessageLimit = 20;
 
@@ -52,6 +54,11 @@ public sealed class AIChatService(
     public async Task<SendChatMessageResponse> SendMessageAsync(Guid userId, SendChatMessageRequest request,
         CancellationToken cancellationToken = default)
     {
+        // One request per user at a time, and a limit check before anything is stored or sent to the AI.
+        using var slot = gate.TryEnter(userId)
+            ?? throw new ConflictException("Bạn đang có một yêu cầu AI đang xử lý. Vui lòng đợi hoàn tất.");
+        await quota.EnsureAvailableAsync(userId, cancellationToken);
+
         var text = request.Message.Trim();
         AIConversation conversation;
         var createdConversation = request.ConversationId is null;
@@ -134,8 +141,9 @@ public sealed class AIChatService(
         conversation.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
+        var usage = (await quota.GetStatusAsync(userId, cancellationToken)).ToUsage();
         return new SendChatMessageResponse(conversation.Id,
-            MapMessage(userMessage, text), MapMessage(assistantMessage, result.Content));
+            MapMessage(userMessage, text), MapMessage(assistantMessage, result.Content), usage);
     }
 
     public async Task<ConversationResponse> RenameConversationAsync(Guid userId, Guid conversationId,

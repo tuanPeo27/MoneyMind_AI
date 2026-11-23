@@ -21,7 +21,7 @@ public sealed class AIOrchestrationService(
         {
             var context = await analysis.BuildContextAsync(userId, cancellationToken);
             var result = await client.ChatAsync(new AIChatPayload(message, history, context, language), cancellationToken);
-            await LogSafelyAsync(userId, requestId, "Chat", result.Provider, watch, AIProcessingStatus.Completed,
+            await LogSafelyAsync(userId, requestId, AITasks.Chat, DescribeProvider(result), watch, AIProcessingStatus.Completed,
                 null, result.TokenUsage, cancellationToken);
             return result;
         }
@@ -31,7 +31,7 @@ public sealed class AIOrchestrationService(
         }
         catch (Exception ex)
         {
-            await LogSafelyAsync(userId, requestId, "Chat", "gemini", watch, AIProcessingStatus.Failed,
+            await LogSafelyAsync(userId, requestId, AITasks.Chat, "gemini", watch, AIProcessingStatus.Failed,
                 ex.GetType().Name, null, cancellationToken);
             logger.LogError(ex, "AI chat request {RequestId} failed for user {UserId}", requestId, userId);
             if (ex is ServiceUnavailableException) throw;
@@ -53,6 +53,10 @@ public sealed class AIOrchestrationService(
         var context = await analysis.BuildContextAsync(userId, cancellationToken);
         return await client.GenerateInsightsAsync(new AIInsightPayload(context), cancellationToken);
     }
+
+    /// <summary>"gemini/gemini-3.5-flash-lite": shows in the admin log which model answered, including fallbacks.</summary>
+    private static string? DescribeProvider(AIChatResult result) =>
+        result.Model is null ? result.Provider : $"{result.Provider}/{result.Model}";
 
     private async Task LogSafelyAsync(Guid userId, Guid requestId, string taskType, string? provider,
         Stopwatch watch, AIProcessingStatus status, string? errorCode, int? tokens, CancellationToken ct)

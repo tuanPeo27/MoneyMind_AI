@@ -13,7 +13,8 @@ public sealed class AdminUserService(
     AppDbContext db,
     UserManager<ApplicationUser> userManager,
     ICurrentUserService currentUser,
-    IAuditService audit) : IAdminUserService
+    IAuditService audit,
+    IAIQuotaService quota) : IAdminUserService
 {
     public async Task<PagedResult<AdminUserResponse>> GetPagedAsync(AdminUserQuery query,
         CancellationToken cancellationToken = default)
@@ -43,8 +44,9 @@ public sealed class AdminUserService(
             .GroupBy(x => x.UserId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(x => x.Name!).ToList());
 
+        var quotas = await quota.GetStatusesAsync(users, cancellationToken);
         var items = users
-            .Select(u => Map(u, rolesByUser.GetValueOrDefault(u.Id) ?? []))
+            .Select(u => Map(u, rolesByUser.GetValueOrDefault(u.Id) ?? [], quotas[u.Id]))
             .ToList();
         return new PagedResult<AdminUserResponse>(items, query.Page, query.PageSize, total);
     }
@@ -52,7 +54,7 @@ public sealed class AdminUserService(
     public async Task<AdminUserResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var user = await FindAsync(id);
-        return Map(user, await userManager.GetRolesAsync(user));
+        return Map(user, await userManager.GetRolesAsync(user), await quota.GetStatusAsync(id, cancellationToken));
     }
 
     public async Task<AdminUserResponse> LockAsync(Guid id, LockUserRequest request,
@@ -81,14 +83,14 @@ public sealed class AdminUserService(
             .ExecuteUpdateAsync(setters => setters.SetProperty(t => t.RevokedAt, now), cancellationToken);
 
         await audit.LogAsync("LockUser", "User", id, user.LockedReason, cancellationToken);
-        return Map(user, roles);
+        return Map(user, roles, await quota.GetStatusAsync(id, cancellationToken));
     }
 
     public async Task<AdminUserResponse> UnlockAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var user = await FindAsync(id);
         var roles = await userManager.GetRolesAsync(user);
-        if (user.IsActive) return Map(user, roles);
+        if (user.IsActive) return Map(user, roles, await quota.GetStatusAsync(id, cancellationToken));
 
         user.IsActive = true;
         user.LockedAt = null;
@@ -101,7 +103,15 @@ public sealed class AdminUserService(
         await userManager.ResetAccessFailedCountAsync(user);
 
         await audit.LogAsync("UnlockUser", "User", id, null, cancellationToken);
-        return Map(user, roles);
+        return Map(user, roles, await quota.GetStatusAsync(id, cancellationToken));
+    }
+
+    public async Task<AdminUserResponse> SetAIQuotaAsync(Guid id, SetAIQuotaRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await FindAsync(id);
+        var status = await quota.SetUserLimitAsync(id, request.DailyLimit, cancellationToken);
+        return Map(user, await userManager.GetRolesAsync(user), status);
     }
 
     private async Task<ApplicationUser> FindAsync(Guid id) =>
@@ -114,7 +124,7 @@ public sealed class AdminUserService(
         if (!result.Succeeded) throw new BadRequestException(result.Describe());
     }
 
-    private static AdminUserResponse Map(ApplicationUser u, IEnumerable<string> roles) =>
+    private static AdminUserResponse Map(ApplicationUser u, IEnumerable<string> roles, AIQuotaStatus aiQuota) =>
         new(u.Id, u.FullName, u.Email ?? string.Empty, u.AvatarUrl, u.IsActive, u.LockedAt, u.LockedReason, u.LastLoginAt,
-            u.CreatedAt, roles.ToList());
+            u.CreatedAt, roles.ToList(), aiQuota.ToAdmin());
 }
