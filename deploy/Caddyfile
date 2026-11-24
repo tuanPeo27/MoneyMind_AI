@@ -1,0 +1,9 @@
+# With a real domain in DOMAIN, Caddy gets and renews a Let's Encrypt certificate by itself.
+# With DOMAIN unset it serves https://localhost with a local certificate (for a quick test).
+{$DOMAIN:localhost} {
+	encode gzip
+	# flush_interval -1 sends AI answers to the browser as they are streamed.
+	reverse_proxy frontend:8080 {
+		flush_interval -1
+	}
+}

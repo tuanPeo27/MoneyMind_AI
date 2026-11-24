@@ -8,6 +8,7 @@ import { Badge, Button, Empty, Field, IconButton, Modal, fieldClass } from './ui
 import { AmountInput } from './AmountInput';
 import { CategoryIcon } from './CategoryIcon';
 import { Select } from './Select';
+import { Skeleton, useFadeIn } from './Skeleton';
 
 type TableProps = {
   rows: Transaction[];
@@ -16,9 +17,12 @@ type TableProps = {
   onDelete: (transaction: Transaction) => void;
   compact?: boolean;
   onSort?: (key: string) => void;
+  /** First load: skeleton rows (one page of 10, each as tall as a real row) instead of rows or the empty state. */
+  loading?: boolean;
 };
-export function TransactionTable({ rows, categories, onEdit, onDelete, compact: small = false, onSort }: TableProps) {
+export function TransactionTable({ rows, categories, onEdit, onDelete, compact: small = false, onSort, loading = false }: TableProps) {
   const { t, locale, language } = useLanguage();
+  const fade = useFadeIn(loading);
   return <div className="overflow-x-auto">
     <table className="w-full whitespace-nowrap text-left text-sm">
       <thead className="border-y border-line bg-base/50 text-xs text-muted">
@@ -36,7 +40,16 @@ export function TransactionTable({ rows, categories, onEdit, onDelete, compact: 
           {!small && <th className="px-3 py-4"><span className="sr-only">{t('Actions')}</span></th>}
         </tr>
       </thead>
-      <tbody className="divide-y divide-line/80">
+      {loading ? <tbody aria-hidden="true" className="divide-y divide-line/80">{Array.from({ length: 10 }, (_, i) => <tr key={i}>
+        <td className="px-5 py-2.5"><div className="flex min-h-11 items-center gap-3"><Skeleton className="size-9 shrink-0 !rounded-lg" /><Skeleton className={`h-3 ${i % 3 ? 'w-28' : 'w-40'}`} /></div></td>
+        <td className="px-4 py-3"><Skeleton className="h-5 w-20 !rounded-full" /></td>
+        {!small && <td className="px-4 py-3"><Skeleton className="h-3 w-16" /></td>}
+        <td className="px-4 py-3"><Skeleton className="h-3 w-20" /></td>
+        {!small && <td className="px-4 py-3"><Skeleton className="h-3 w-14" /></td>}
+        <td className="px-5 py-3"><Skeleton className="ml-auto h-3 w-20" /></td>
+        {!small && <td className="px-2 py-2.5"><div className="h-11 w-[88px]" /></td>}
+      </tr>)}</tbody>
+      : <tbody className={`divide-y divide-line/80 ${fade}`}>
         {rows.map(row => <tr key={row.id} className="transition-colors hover:bg-base/55">
           <td className="max-w-[290px] px-5 py-2.5">
             <button className="flex min-h-11 max-w-full items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-brand" onClick={() => onEdit(row)}>
@@ -57,9 +70,9 @@ export function TransactionTable({ rows, categories, onEdit, onDelete, compact: 
             <IconButton label={t('Delete {name}', { name: row.description })} icon={Trash2} onClick={() => onDelete(row)} />
           </div></td>}
         </tr>)}
-      </tbody>
+      </tbody>}
     </table>
-    {!rows.length && <Empty title={t('No transactions found')} />}
+    {!loading && !rows.length && <Empty title={t('No transactions found')} />}
   </div>;
 }
 

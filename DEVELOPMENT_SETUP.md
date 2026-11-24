@@ -35,7 +35,7 @@ React/Vite  ──>  ASP.NET Core API  ──>  Python/FastAPI
 | .NET SDK | 10.0 trở lên | `dotnet --version` |
 | SQL Server | 2019+ hoặc Express | SQL Server Configuration Manager |
 | Node.js | 20 trở lên | `node --version` |
-| pnpm | 9 trở lên | `pnpm --version` |
+| npm | Đi kèm Node.js | `npm --version` |
 | Python | 3.11 trở lên | `python --version` |
 | Git | Phiên bản hiện tại | `git --version` |
 | EF Core CLI | 10.0.0 | `dotnet ef --version` |
@@ -281,9 +281,8 @@ Mở terminal thứ ba:
 
 ```powershell
 cd frontend
-corepack enable
-pnpm install --frozen-lockfile
-pnpm dev
+npm ci --legacy-peer-deps
+npm run dev
 ```
 
 Mở trình duyệt:
@@ -295,8 +294,8 @@ http://localhost:5173
 ### Build production bundle
 
 ```powershell
-pnpm build
-pnpm preview
+npm run build
+npm run preview
 ```
 
 Vite proxy mặc định chuyển request `/api` tới backend
@@ -384,10 +383,10 @@ dotnet ef migrations remove
 
 ```powershell
 cd frontend
-pnpm install --frozen-lockfile
-pnpm dev
-pnpm build
-pnpm preview
+npm ci --legacy-peer-deps
+npm run dev
+npm run build
+npm run preview
 ```
 
 </details>

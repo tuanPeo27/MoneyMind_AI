@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the run that is still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (build + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/backend.csproj', 'backend.Tests/backend.Tests.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # The test project references backend, so this builds both and must end with 0 errors.
+      - name: Test
+        run: dotnet test backend.Tests/backend.Tests.csproj --nologo --logger "trx;LogFileName=backend.trx" --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: TestResults/*.trx
+          if-no-files-found: ignore
+
+  ai-service:
+    name: AI service (tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ai-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: ai-service/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      # No real key is needed: the tests never call Gemini.
+      - name: Test
+        run: python -m unittest discover -s tests
+        env:
+          GEMINI_API_KEY: ci-dummy-key-not-used-0000
+          SERVICE_KEY: ci-dummy-service-key-0000000000000000
+
+  frontend:
+    name: Frontend (types + tests + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Test
+        run: npm test
+
+      # `build` runs tsc --noEmit first, which also type-checks the test files.
+      - name: Build
+        run: npm run build
+
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [backend, ai-service, frontend]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: backend, context: backend }
+          - { name: migrate, context: backend, target: migrate }
+          - { name: ai-service, context: ai-service }
+          - { name: frontend, context: frontend }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.name }} (not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          target: ${{ matrix.target }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max

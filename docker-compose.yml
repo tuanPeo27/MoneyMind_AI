@@ -1,0 +1,79 @@
+# Runs the whole stack locally:  docker compose up --build
+# Copy .env.example to .env first (the real .env is git-ignored).
+# Open http://localhost:${WEB_PORT:-8080}
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - dbdata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  migrate:
+    build:
+      context: ./backend
+      target: migrate
+    environment:
+      ConnectionStrings__DefaultConnection: "Server=db;Database=MoneyMindAI;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  ai-service:
+    build: ./ai-service
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY in .env}
+      SERVICE_KEY: ${SERVICE_KEY:?Set SERVICE_KEY in .env}
+      GEMINI_MODEL_RESPOND: ${GEMINI_MODEL_RESPOND:-gemini-2.5-flash}
+      GEMINI_FALLBACK_MODELS: ${GEMINI_FALLBACK_MODELS:-gemini-3.5-flash-lite,gemini-3.1-flash-lite}
+    # No "ports": only the backend reaches it, over the compose network.
+    expose:
+      - "8001"
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    environment:
+      ConnectionStrings__DefaultConnection: "Server=db;Database=MoneyMindAI;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=true"
+      Jwt__Key: ${JWT_KEY:?Set JWT_KEY in .env}
+      Encryption__MasterKey: ${ENCRYPTION_MASTER_KEY:?Set ENCRYPTION_MASTER_KEY in .env}
+      AIService__BaseUrl: http://ai-service:8001
+      AIService__ServiceKey: ${SERVICE_KEY}
+      Seed__AdminEmail: ${SEED_ADMIN_EMAIL:-admin@example.com}
+      Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:?Set SEED_ADMIN_PASSWORD in .env}
+      Google__ClientId: ${GOOGLE_CLIENT_ID:-}
+      App__FrontendUrl: ${PUBLIC_URL:-http://localhost:8080}
+      Cors__AllowedOrigins__0: ${PUBLIC_URL:-http://localhost:8080}
+      Smtp__Host: ${SMTP_HOST:-}
+      Smtp__Username: ${SMTP_USERNAME:-}
+      Smtp__Password: ${SMTP_PASSWORD:-}
+      Smtp__FromAddress: ${SMTP_FROM_ADDRESS:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      ai-service:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  dbdata:

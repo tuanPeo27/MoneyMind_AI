@@ -1,5 +1,5 @@
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { ChartNoAxesCombined, Eye, EyeOff, Loader2, Mail, Lock, User, AlertCircle, CheckCircle2, ShieldCheck, Sparkles, PiggyBank, ArrowLeft, MailCheck } from 'lucide-react';
+import { ChartNoAxesCombined, Eye, EyeOff, Loader2, Mail, Lock, User, AlertCircle, CheckCircle2, ShieldCheck, ArrowLeft, MailCheck } from 'lucide-react';
 import { useLanguage } from '../i18n';
 import { Button, fieldClass } from '../components/ui';
 import { ApiError, forgotPassword, login, loginWithGoogle, register, resetPassword } from '../lib/auth';
@@ -27,46 +27,34 @@ export function useErrorText() {
   };
 }
 
+/**
+ * Sign-in / sign-up / password pages: a single centred card over the app background (no side panel), with the
+ * logo and language switch at the top and a footer at the bottom.
+ */
 function AuthShell({ title, subtitle, children, footer }: { title: string; subtitle: string; children: ReactNode; footer?: ReactNode }) {
   const { t, language, setLanguage } = useLanguage();
-  const perks = [
-    { icon: PiggyBank, text: 'Track spending and budgets in one place' },
-    { icon: Sparkles, text: 'AI insights that explain where your money goes' },
-    { icon: ShieldCheck, text: 'Your data stays protected and private' },
-  ];
-  return <div className="grid min-h-screen lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
-    <aside className="relative hidden overflow-hidden bg-gradient-to-br from-[#7b2457] via-[#9b326f] to-[#5b2a86] p-12 text-white lg:flex lg:flex-col lg:justify-between">
-      <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-white/10 blur-3xl" aria-hidden="true" />
-      <div className="pointer-events-none absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-[#ec4899]/25 blur-3xl" aria-hidden="true" />
-      <a href="/" className="relative flex items-center gap-3 text-xl font-semibold tracking-tight">
-        <BrandLogo className="size-10 ring-1 ring-white/25" rounded="rounded-xl" />MoneyMind AI
+  return <div className="flex min-h-screen flex-col px-5 py-6 sm:px-10">
+    <header className="flex items-center justify-between">
+      <a href="/" className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
+        <BrandLogo className="size-9" rounded="rounded-xl" />MoneyMind AI
       </a>
-      <div className="relative max-w-md">
-        <h2 className="text-4xl font-semibold leading-tight tracking-tight">{t('A clearer picture of your money.')}</h2>
-        <p className="mt-4 text-[1rem] leading-7 text-white/80">{t('Personal finance, budgets and smart insights in one friendly workspace.')}</p>
-        <ul className="mt-10 space-y-4">{perks.map(({ icon: Icon, text }) => <li key={text} className="flex items-center gap-3 text-sm text-white/90">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/20"><Icon className="h-4 w-4" aria-hidden="true" /></span>{t(text)}
-        </li>)}</ul>
+      <div role="group" aria-label={t('Language')} className="flex rounded-lg border border-line bg-surface p-0.5 text-xs font-medium">
+        {(['vi', 'en'] as const).map(code => <button key={code} type="button" aria-pressed={language === code} onClick={() => setLanguage(code)}
+          className={`min-h-9 min-w-11 rounded-md px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${language === code ? 'bg-brand text-on-brand' : 'text-muted hover:text-ink'}`}>{code.toUpperCase()}</button>)}
       </div>
-      <p className="relative text-xs text-white/60">{t('MoneyMind AI · Make room for what matters.')}</p>
-    </aside>
-    <main className="flex flex-col px-5 py-6 sm:px-10">
-      <div className="flex items-center justify-between">
-        <a href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight lg:invisible">
-          <BrandLogo className="size-8" />MoneyMind AI
-        </a>
-        <div role="group" aria-label={t('Language')} className="flex rounded-lg border border-line bg-surface p-0.5 text-xs font-medium">
-          {(['vi', 'en'] as const).map(code => <button key={code} type="button" aria-pressed={language === code} onClick={() => setLanguage(code)}
-            className={`min-h-9 min-w-11 rounded-md px-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${language === code ? 'bg-brand text-on-brand' : 'text-muted hover:text-ink'}`}>{code.toUpperCase()}</button>)}
-        </div>
-      </div>
-      <div className="glass-strong mx-auto my-auto flex w-full max-w-[460px] flex-col justify-center rounded-3xl p-7 sm:p-10">
+    </header>
+    <main className="flex flex-1 items-center justify-center py-10">
+      <div className="glass-strong flex w-full max-w-[460px] flex-col justify-center rounded-3xl p-7 sm:p-10">
         <h1 className="text-[28px] font-semibold tracking-[-0.04em]">{title}</h1>
         <p className="mt-2 text-sm leading-6 text-muted">{subtitle}</p>
         <div className="mt-8">{children}</div>
         {footer && <div className="mt-8 text-center text-sm text-muted">{footer}</div>}
       </div>
     </main>
+    <footer className="flex flex-col items-center justify-between gap-2 border-t border-line pt-5 text-xs text-muted sm:flex-row">
+      <p>© {new Date().getFullYear()} {t('MoneyMind AI · Make room for what matters.')}</p>
+      <p className="flex items-center gap-1.5"><ShieldCheck className="size-3.5" aria-hidden="true" />{t('Your data stays protected and private')}</p>
+    </footer>
   </div>;
 }
 

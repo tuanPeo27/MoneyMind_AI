@@ -1,19 +1,46 @@
 import { useLanguage } from '../i18n';
-import { useState, type FormEvent } from 'react';
+import { lazy, Suspense, useState, type FormEvent } from 'react';
 import { Search, Plus, ArrowDownUp, Download, Pencil, Trash2, ArrowUpRight, SlidersHorizontal, Check, FolderOpen, Shapes } from 'lucide-react';
 import { type Transaction, type Category, type Budget, money } from '../data';
 import { Button, Card, Badge, Empty, Field, Modal, Progress, IconButton, fieldClass, SectionHead } from '../components/ui';
 import { TransactionTable } from '../components/transactions';
 import { CategoryIcon, CategoryIconPicker, getCategoryIcon, type CategoryIconId } from '../components/CategoryIcon';
-import { ExpenseDonut, TrendChart, monthlyData } from '../components/charts';
-import { getTotals, percentChange, SummaryCards } from './Overview';
+import { monthlyData } from '../lib/chartData';
+// recharts (~110 KB gzip) only loads when Reports is opened, not with Transactions / Budgets / Categories.
+const loadCharts = () => import('../components/charts');
+const TrendChart = lazy(() => loadCharts().then(m => ({ default: m.TrendChart })));
+const ExpenseDonut = lazy(() => loadCharts().then(m => ({ default: m.ExpenseDonut })));
+/** Same height as the chart, so the card does not jump when it arrives. */
+const ChartSlot = ({ height }: { height: number }) => <Skeleton className="w-full !rounded-xl" style={{ height }} />;
+import { getTotals, percentChange } from '../lib/totals';
+import { SummaryCards } from './Overview';
 import { FormSelect, Select } from '../components/Select';
 import { AmountInput } from '../components/AmountInput';
 import { Pagination, usePagination } from '../components/Pagination';
+import { SegmentedTabs } from '../components/SegmentedTabs';
+import { LoadingStatus, Skeleton, SkeletonText, useFadeIn } from '../components/Skeleton';
 import { accountLabel, categoryLabel } from '../i18n/labels';
 
-export function Transactions({ rows, categories, search, setSearch, onAdd, onEdit, onDelete, onExport, onManageCategories }: { rows: Transaction[]; categories: Category[]; search: string; setSearch: (s: string) => void; onAdd: () => void; onEdit: (t: Transaction) => void; onDelete: (t: Transaction) => void; onExport: (rows: Transaction[]) => void; onManageCategories: () => void }) {
+/** A budget card while loading: header row (icon + 44px buttons), amount, bar, limits, status badge. */
+function BudgetSkeleton() {
+  return <Card className="p-5"><div aria-hidden="true">
+    <div className="mb-5 flex h-11 items-center gap-3"><Skeleton className="size-9 shrink-0 !rounded-lg" /><SkeletonText className="h-6 flex-1" bar="h-3.5" width="w-28" /></div>
+    <div className="mb-3 flex items-center justify-between gap-2"><SkeletonText className="h-8" bar="h-6" width="w-32" /><SkeletonText className="h-5" width="w-9" /></div>
+    <Skeleton className="h-1.5 w-full !rounded-full" />
+    <div className="mt-3 flex justify-between"><SkeletonText className="h-4" bar="h-2.5" width="w-24" /><SkeletonText className="h-4" bar="h-2.5" width="w-20" /></div>
+    <div className="mt-6 border-t border-line pt-4"><Skeleton className="h-[22px] w-24 !rounded-full" /></div>
+  </div></Card>;
+}
+/** A category card while loading: icon, name and type, then the transaction count and total. */
+function CategorySkeleton() {
+  return <Card className="p-5"><div aria-hidden="true">
+    <div className="flex min-h-11 items-center gap-3"><Skeleton className="size-9 shrink-0 !rounded-lg" /><span className="flex-1"><SkeletonText className="h-6" bar="h-3.5" width="w-28" /><SkeletonText className="mt-1 h-4" bar="h-2.5" width="w-24" /></span></div>
+    <div className="mt-5 flex justify-between border-t border-line pt-4"><SkeletonText className="h-5" width="w-24" /><SkeletonText className="h-5" width="w-20" /></div>
+  </div></Card>;
+}
+export function Transactions({ rows, categories, search, setSearch, onAdd, onEdit, onDelete, onExport, onManageCategories, loading = false }: { rows: Transaction[]; categories: Category[]; search: string; setSearch: (s: string) => void; onAdd: () => void; onEdit: (t: Transaction) => void; onDelete: (t: Transaction) => void; onExport: (rows: Transaction[]) => void; onManageCategories: () => void; loading?: boolean }) {
   const { t, language } = useLanguage();
+  const fade = useFadeIn(loading);
   const [type, setType] = useState('All types'), [category, setCategory] = useState('All categories');
   const [sort, setSort] = useState({ key: 'date', ascending: false });
   const filtered = rows.filter(row => {
@@ -32,7 +59,10 @@ export function Transactions({ rows, categories, search, setSearch, onAdd, onEdi
       { label: 'Money in', value: totals.income, color: 'text-positive' },
       { label: 'Money out', value: totals.expense, color: 'text-negative' },
       { label: 'Net cash flow', value: totals.savings, color: 'text-ink' },
-    ].map(item => <Card key={item.label} className="p-5"><p className="text-sm text-muted">{t(item.label)}</p><p className={`mt-3 text-2xl font-semibold tracking-tight tabular-nums ${item.color}`}>{money(item.value)}</p></Card>)}</div>
+    ].map(item => <Card key={item.label} className="p-5"><p className="text-sm text-muted">{t(item.label)}</p>{loading
+      ? <SkeletonText className="mt-3 h-8" bar="h-6" width="w-36" />
+      : <p className={`mt-3 text-2xl font-semibold tracking-tight tabular-nums ${item.color} ${fade}`}>{money(item.value)}</p>}</Card>)}</div>
+    {loading && <LoadingStatus label={t('Loading your data...')} />}
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 p-4">
         <div className="relative min-w-[190px] flex-1">
@@ -49,33 +79,35 @@ export function Transactions({ rows, categories, search, setSearch, onAdd, onEdi
         <Button secondary onClick={() => onExport(filtered)}><Download aria-hidden="true" className="size-4" />{t('Export')}</Button>
         <Button onClick={onAdd}><Plus aria-hidden="true" className="size-4" />{t('Add transaction')}</Button>
       </div>
-      <TransactionTable rows={pager.items} categories={categories} onEdit={onEdit} onDelete={onDelete} onSort={key => setSort({ key, ascending: sort.key === key ? !sort.ascending : false })} />
+      <TransactionTable loading={loading} rows={pager.items} categories={categories} onEdit={onEdit} onDelete={onDelete} onSort={key => setSort({ key, ascending: sort.key === key ? !sort.ascending : false })} />
       <Pagination pager={pager} sizes={[10, 20, 50]} className="border-t border-line" />
       <p className="border-t border-line px-5 py-3 text-xs text-muted">{t('Showing {count} of {total} transactions', { count: filtered.length, total: rows.length })} · {t('All amounts in VND · Stored on this browser')}</p>
     </Card>
   </div>;
 }
-export function Budgets({ budgets, rows, categories, onAdd, onEdit, onDelete }: { budgets: Budget[]; rows: Transaction[]; categories: Category[]; onAdd: () => void; onEdit: (b: Budget) => void; onDelete: (b: Budget) => void }) {
+export function Budgets({ budgets, rows, categories, onAdd, onEdit, onDelete, loading = false }: { budgets: Budget[]; rows: Transaction[]; categories: Category[]; onAdd: () => void; onEdit: (b: Budget) => void; onDelete: (b: Budget) => void; loading?: boolean }) {
   const { t } = useLanguage();
+  const fade = useFadeIn(loading);
   const items = budgets.map(b => ({ ...b, spent: rows.filter(t => t.category === b.category && t.type === 'Expense').reduce((s, t) => s + t.amount, 0) }));
   const pager = usePagination(items, 6, items.length);
   const limit = items.reduce((s, b) => s + b.limit, 0), spent = items.reduce((s, b) => s + b.spent, 0), utilization = limit ? spent / limit * 100 : 0;
-  return <div className="space-y-6"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[{ label: 'Total budget', value: money(limit) }, { label: 'Total spent', value: money(spent) }, { label: 'Remaining budget', value: money(limit - spent) }, { label: 'Budget utilization', value: `${utilization.toFixed(1)}%` }].map(s => <Card key={s.label} className="p-5"><p className="text-sm text-muted">{t(s.label)}</p><p className="mt-3 text-2xl font-semibold tracking-tight tabular-nums">{s.value}</p></Card>)}</div><div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{t("Your category budgets")}</h2><p className="mt-1 text-sm text-muted">{t("Give every đồng a purpose. Keep your spending on track.")}</p></div><Button onClick={onAdd}><Plus className="h-4 w-4" />{t("Add budget")}</Button></div><div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{pager.items.map(b => {
+  return <div className="space-y-6"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[{ label: 'Total budget', value: money(limit) }, { label: 'Total spent', value: money(spent) }, { label: 'Remaining budget', value: money(limit - spent) }, { label: 'Budget utilization', value: `${utilization.toFixed(1)}%` }].map(s => <Card key={s.label} className="p-5"><p className="text-sm text-muted">{t(s.label)}</p>{loading ? <SkeletonText className="mt-3 h-8" bar="h-6" width="w-32" /> : <p className={`mt-3 text-2xl font-semibold tracking-tight tabular-nums ${fade}`}>{s.value}</p>}</Card>)}</div>{loading && <LoadingStatus label={t('Loading your data...')} />}<div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{t("Your category budgets")}</h2><p className="mt-1 text-sm text-muted">{t("Give every đồng a purpose. Keep your spending on track.")}</p></div><Button onClick={onAdd}><Plus className="h-4 w-4" />{t("Add budget")}</Button></div>{loading ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{[0, 1, 2].map(i => <BudgetSkeleton key={i} />)}</div> : <div className={`grid gap-5 md:grid-cols-2 xl:grid-cols-3 ${fade}`}>{pager.items.map(b => {
     const used = b.spent / b.limit * 100, warning = used >= 85;
     return <Card key={b.id} className="p-5"><div className="mb-5 flex items-center gap-3"><CategoryIcon name={b.category} icon={categories.find(c => c.name === b.category)?.icon} /><h3 className="flex-1 text-[1rem] font-semibold">{b.category}</h3><IconButton label={t('Edit budget {name}', { name: b.category })} icon={Pencil} onClick={() => onEdit(b)} /><IconButton label={t('Delete budget {name}', { name: b.category })} icon={Trash2} onClick={() => onDelete(b)} /></div><div className="mb-3 flex items-baseline justify-between gap-2"><span className="text-2xl font-semibold tracking-tight">{money(b.spent)}</span><span className="text-sm text-muted">{Math.round(used)}%</span></div><Progress value={used} label={`${b.category} utilization`} color={warning ? 'var(--color-negative)' : undefined} /><div className="mt-3 flex justify-between text-xs text-muted"><span>{t('of')} {money(b.limit)}</span><span>{t('{amount} left', { amount: money(b.limit - b.spent) })}</span></div><div className="mt-6 border-t border-line pt-4"><Badge tone={warning ? 'negative' : 'positive'}>{used > 100 ? t("Over budget") : warning ? t("Approaching limit") : t("On track")}</Badge></div></Card>;
-  })}</div><Pagination pager={pager} sizes={[6, 12, 24]} className="glass rounded-2xl" />{!items.length && <Card><Empty title={t("Your budget starts here")} text={t("Create a category budget to take control of your spending.")} /></Card>}<p className="text-xs text-muted">{t("Spending is calculated from transactions in your selected period. Budget limits apply to that period.")}</p></div>;
+  })}</div>}{!loading && <Pagination pager={pager} sizes={[6, 12, 24]} className="glass rounded-2xl" />}{!loading && !items.length && <Card><Empty title={t("Your budget starts here")} text={t("Create a category budget to take control of your spending.")} /></Card>}<p className="text-xs text-muted">{t("Spending is calculated from transactions in your selected period. Budget limits apply to that period.")}</p></div>;
 }
 export function BudgetForm({ budget, categories, budgets, onClose, onSave }: { budget?: Budget; categories: Category[]; budgets: Budget[]; onClose: () => void; onSave: (b: Budget) => void }) {
   const { t, language, currency } = useLanguage();
   const available = categories.filter(c => c.type === 'Expense' && !budgets.some(b => b.category === c.name && b.id !== budget?.id));
   return <Modal title={budget ? t("Edit budget") : t("Create a budget")} onClose={onClose}><form className="space-y-5" onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); onSave({ id: budget?.id || crypto.randomUUID(), category: String(data.get('category')), limit: Number(data.get('limit')) }); }}><p className="text-sm leading-6 text-muted">{t("Set a realistic spending limit for a category. We’ll calculate your progress from your transactions.")}</p><Field label={t("Category")}><FormSelect name="category" label={t("Category")} defaultValue={budget?.category || available[0]?.name} placeholder={t("No categories available")} options={available.map(c => ({ value: c.name, label: categoryLabel(c.name, language), icon: <CategoryIcon name={c.name} icon={c.icon} small /> }))} /></Field><Field label={t("Budget limit ({currency})", { currency })}><AmountInput name="limit" required defaultValue={budget?.limit} /></Field>{!available.length && <p className="text-sm text-negative">{t("Every expense category already has a budget.")}</p>}<div className="flex justify-end gap-3 border-t border-line pt-5"><Button secondary type="button" onClick={onClose}>{t("Cancel")}</Button><Button disabled={!available.length}>{t("Save budget")}</Button></div></form></Modal>;
 }
-export function Categories({ categories, rows, onAdd, onEdit, onDelete }: { categories: Category[]; rows: Transaction[]; onAdd: () => void; onEdit: (c: Category) => void; onDelete: (c: Category) => void }) {
+export function Categories({ categories, rows, onAdd, onEdit, onDelete, loading = false }: { categories: Category[]; rows: Transaction[]; onAdd: () => void; onEdit: (c: Category) => void; onDelete: (c: Category) => void; loading?: boolean }) {
   const { t } = useLanguage();
+  const fade = useFadeIn(loading);
   const [filter, setFilter] = useState('All');
   const shown = categories.filter(c => filter === 'All' || c.type === filter);
   const pager = usePagination(shown, 9, filter);
-  return <div className="space-y-5"><div className="flex items-center justify-between gap-4"><div role="tablist" aria-label={t("Category type")} className="flex rounded-lg border border-line bg-surface p-1">{['All', 'Expense', 'Income'].map(f => <button key={f} role="tab" aria-selected={filter === f} onClick={() => setFilter(f)} className={`min-h-11 rounded-md px-5 text-sm ${filter === f ? 'bg-line text-ink' : 'text-muted hover:text-ink'}`}>{t(f)}</button>)}</div><Button onClick={onAdd}><Plus className="h-4 w-4" />{t("New category")}</Button></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{pager.items.map(c => <Card className="p-5" key={c.name}><div className="flex items-center gap-3"><CategoryIcon name={c.name} icon={c.icon} /><div className="flex-1"><h2 className="text-[1rem] font-semibold">{c.name}</h2><p className="mt-1 text-xs text-muted">{t(c.type === 'Income' ? 'Income category' : 'Expense category')}</p></div>{!c.isSystem && <><IconButton icon={Pencil} label={t('Edit {name}', { name: c.name })} onClick={() => onEdit(c)} /><IconButton icon={Trash2} label={t('Delete {name}', { name: c.name })} onClick={() => onDelete(c)} /></>}</div><div className="mt-5 flex justify-between border-t border-line pt-4"><span className="text-sm text-muted">{t('{count} transactions', { count: rows.filter(row => row.category === c.name).length })}</span><span className="text-sm font-medium tabular-nums">{money(rows.filter(t => t.category === c.name).reduce((s, t) => s + t.amount, 0))}</span></div></Card>)}</div><Pagination pager={pager} sizes={[9, 18, 36]} className="glass rounded-2xl" /></div>;
+  return <div className="space-y-5"><div className="flex items-center justify-between gap-4"><SegmentedTabs label={t("Category type")} value={filter} onChange={setFilter} options={['All', 'Expense', 'Income'].map(f => ({ value: f, label: t(f) }))} /><Button onClick={onAdd}><Plus className="h-4 w-4" />{t("New category")}</Button></div>{loading && <LoadingStatus label={t('Loading your data...')} />}{loading ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{[0, 1, 2, 3, 4, 5].map(i => <CategorySkeleton key={i} />)}</div> : <div className={`grid gap-4 md:grid-cols-2 xl:grid-cols-3 ${fade}`}>{pager.items.map(c => <Card className="p-5" key={c.name}><div className="flex items-center gap-3"><CategoryIcon name={c.name} icon={c.icon} /><div className="flex-1"><h2 className="text-[1rem] font-semibold">{c.name}</h2><p className="mt-1 text-xs text-muted">{t(c.type === 'Income' ? 'Income category' : 'Expense category')}</p></div>{!c.isSystem && <><IconButton icon={Pencil} label={t('Edit {name}', { name: c.name })} onClick={() => onEdit(c)} /><IconButton icon={Trash2} label={t('Delete {name}', { name: c.name })} onClick={() => onDelete(c)} /></>}</div><div className="mt-5 flex justify-between border-t border-line pt-4"><span className="text-sm text-muted">{t('{count} transactions', { count: rows.filter(row => row.category === c.name).length })}</span><span className="text-sm font-medium tabular-nums">{money(rows.filter(t => t.category === c.name).reduce((s, t) => s + t.amount, 0))}</span></div></Card>)}</div>}{!loading && <Pagination pager={pager} sizes={[9, 18, 36]} className="glass rounded-2xl" />}</div>;
 }
 export function CategoryForm({ category, categories, onClose, onSave }: { category?: Category; categories: Category[]; onClose: () => void; onSave: (c: Category) => void }) {
   const { t } = useLanguage();
@@ -99,14 +131,15 @@ export function CategoryForm({ category, categories, onClose, onSave }: { catego
     </form>
   </Modal>;
 }
-export function Reports({ rows, allRows, previous, categories, onExport, hidden = false }: {
+export function Reports({ rows, allRows, previous, categories, onExport, hidden = false, loading = false }: {
   rows: Transaction[]; allRows: Transaction[]; previous: Transaction[]; categories: Category[];
-  onExport: (r: Transaction[]) => void; hidden?: boolean;
+  onExport: (r: Transaction[]) => void; hidden?: boolean; loading?: boolean;
 }) {
   const { t } = useLanguage();
+  const fade = useFadeIn(loading);
   const totals = getTotals(rows), p = getTotals(previous), trends = monthlyData(allRows);
   return <div className="space-y-5">
-    <SummaryCards totals={totals} previous={p} hidden={hidden} />
+    <SummaryCards totals={totals} previous={p} hidden={hidden} loading={loading} />
     <div className="grid gap-5 xl:grid-cols-2">
       <Card className="p-5">
         <SectionHead title={t("Income & expense trends")} subtitle={t("Your last six months at a glance.")} />
@@ -114,10 +147,10 @@ export function Reports({ rows, allRows, previous, categories, onExport, hidden 
           <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-sm bg-positive" />{t("Income")}</span>
           <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-sm bg-negative" />{t("Expenses")}</span>
         </div>
-        <TrendChart data={trends} />
+        {loading ? <ChartSlot height={225} /> : <div className={fade}><Suspense fallback={<ChartSlot height={225} />}><TrendChart data={trends} /></Suspense></div>}
       </Card>
-      <Card className="p-5"><SectionHead title={t("Monthly cash flow")} subtitle={t("Track how much you keep each month.")} /><TrendChart data={trends} line /></Card>
-      <Card className="p-5"><SectionHead title={t("Spending by category")} subtitle={t("Selected period breakdown")} /><ExpenseDonut transactions={rows} categories={categories} /></Card>
+      <Card className="p-5"><SectionHead title={t("Monthly cash flow")} subtitle={t("Track how much you keep each month.")} />{loading ? <ChartSlot height={225} /> : <div className={fade}><Suspense fallback={<ChartSlot height={225} />}><TrendChart data={trends} line /></Suspense></div>}</Card>
+      <Card className="p-5"><SectionHead title={t("Spending by category")} subtitle={t("Selected period breakdown")} />{loading ? <ChartSlot height={210} /> : <div className={fade}><Suspense fallback={<ChartSlot height={210} />}><ExpenseDonut transactions={rows} categories={categories} /></Suspense></div>}</Card>
       <Card className="p-5">
         <SectionHead title={t("Period comparison")} subtitle={t("Selected period vs. the preceding equivalent period")} />
         <div className="space-y-5">{[
@@ -125,10 +158,10 @@ export function Reports({ rows, allRows, previous, categories, onExport, hidden 
           { name: 'Expenses', current: totals.expense, prev: p.expense },
           { name: 'Net savings', current: totals.savings, prev: p.savings },
         ].map(r => <div key={r.name} className="flex justify-between gap-3 border-b border-line pb-4">
-          <div><p className="text-sm">{t(r.name)}</p><p className="mt-1 text-xs text-muted">{t("Previously") + ' '}{money(r.prev)}</p></div>
-          <div className="text-right"><p className="text-sm font-semibold">{money(r.current)}</p><p className={`mt-1 text-xs ${(r.name === 'Expenses' ? r.current <= r.prev : r.current >= r.prev) ? 'text-positive' : 'text-negative'}`}>{percentChange(r.current, r.prev).toFixed(1)}%</p></div>
+          <div><p className="text-sm">{t(r.name)}</p>{loading ? <SkeletonText className="mt-1 h-4" bar="h-2.5" width="w-28" /> : <p className={`mt-1 text-xs text-muted ${fade}`}>{t("Previously") + ' '}{money(r.prev)}</p>}</div>
+          {loading ? <div className="flex flex-col items-end"><SkeletonText className="h-5" width="w-24" /><SkeletonText className="mt-1 h-4" bar="h-2.5" width="w-10" /></div> : <div className={`text-right ${fade}`}><p className="text-sm font-semibold">{money(r.current)}</p><p className={`mt-1 text-xs ${(r.name === 'Expenses' ? r.current <= r.prev : r.current >= r.prev) ? 'text-positive' : 'text-negative'}`}>{percentChange(r.current, r.prev).toFixed(1)}%</p></div>}
         </div>)}
-          <div className="flex justify-between"><span className="text-sm text-muted">{t("Savings rate")}</span><span className="text-lg font-semibold text-positive">{totals.rate.toFixed(1)}%</span></div>
+          <div className="flex justify-between"><span className="text-sm text-muted">{t("Savings rate")}</span>{loading ? <SkeletonText className="h-7" bar="h-4" width="w-14" /> : <span className={`text-lg font-semibold text-positive ${fade}`}>{totals.rate.toFixed(1)}%</span>}</div>
         </div>
       </Card>
     </div>

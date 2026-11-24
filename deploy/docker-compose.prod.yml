@@ -1,0 +1,72 @@
+# Production stack on one Linux server. Images come from GHCR (built by .github/workflows/deploy.yml).
+# The database is NOT in this file: use Azure SQL (free offer) or any SQL Server and put its connection string in .env.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+  frontend:
+    image: ${IMAGE_PREFIX:?}-frontend:${IMAGE_TAG:-latest}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    image: ${IMAGE_PREFIX:?}-backend:${IMAGE_TAG:-latest}
+    environment:
+      ConnectionStrings__DefaultConnection: ${DB_CONNECTION:?Set DB_CONNECTION in .env}
+      Jwt__Key: ${JWT_KEY:?}
+      Encryption__MasterKey: ${ENCRYPTION_MASTER_KEY:?}
+      AIService__BaseUrl: http://ai-service:8001
+      AIService__ServiceKey: ${SERVICE_KEY:?}
+      Seed__AdminEmail: ${SEED_ADMIN_EMAIL:-admin@example.com}
+      Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:?}
+      Google__ClientId: ${GOOGLE_CLIENT_ID:-}
+      App__FrontendUrl: ${PUBLIC_URL:?}
+      Cors__AllowedOrigins__0: ${PUBLIC_URL:?}
+      Smtp__Host: ${SMTP_HOST:-}
+      Smtp__Username: ${SMTP_USERNAME:-}
+      Smtp__Password: ${SMTP_PASSWORD:-}
+      Smtp__FromAddress: ${SMTP_FROM_ADDRESS:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      ai-service:
+        condition: service_started
+    restart: unless-stopped
+
+  migrate:
+    image: ${IMAGE_PREFIX:?}-migrate:${IMAGE_TAG:-latest}
+    environment:
+      ConnectionStrings__DefaultConnection: ${DB_CONNECTION:?}
+    restart: "no"
+
+  ai-service:
+    image: ${IMAGE_PREFIX:?}-ai-service:${IMAGE_TAG:-latest}
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?}
+      SERVICE_KEY: ${SERVICE_KEY:?}
+      GEMINI_MODEL_RESPOND: ${GEMINI_MODEL_RESPOND:-gemini-2.5-flash}
+      GEMINI_FALLBACK_MODELS: ${GEMINI_FALLBACK_MODELS:-gemini-3.5-flash-lite,gemini-3.1-flash-lite}
+    # Private: only the backend reaches it over the compose network.
+    expose:
+      - "8001"
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

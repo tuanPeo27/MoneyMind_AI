@@ -1,0 +1,118 @@
+name: Deploy
+
+# Runs after CI is green on main. Does nothing until the repository variable DEPLOY_ENABLED is set to "true"
+# (Settings > Secrets and variables > Actions > Variables), so it cannot fail before the server exists.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  images:
+    name: Build and push images
+    if: ${{ vars.DEPLOY_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      prefix: ${{ steps.meta.outputs.prefix }}
+      tag: ${{ steps.meta.outputs.tag }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { name: backend, context: backend }
+          - { name: migrate, context: backend, target: migrate }
+          - { name: ai-service, context: ai-service }
+          - { name: frontend, context: frontend }
+    steps:
+      # Deploy exactly the commit that passed CI.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Image names
+        id: meta
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"   # GHCR names must be lower case
+          echo "prefix=ghcr.io/${owner}/moneymind" >> "$GITHUB_OUTPUT"
+          echo "tag=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          target: ${{ matrix.target }}
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.prefix }}-${{ matrix.name }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.prefix }}-${{ matrix.name }}:latest
+          build-args: |
+            VITE_GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+  deploy:
+    name: Deploy to server
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # Only the compose file and Caddyfile are copied. Secrets stay in the server's own .env.
+      - name: Copy deploy files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: deploy/docker-compose.prod.yml,deploy/Caddyfile
+          target: ${{ vars.DEPLOY_PATH || '~/moneymind' }}
+          strip_components: 1
+
+      - name: Pull and restart
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE_PREFIX: ${{ needs.images.outputs.prefix }}
+          IMAGE_TAG: ${{ needs.images.outputs.tag }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          envs: IMAGE_PREFIX,IMAGE_TAG,REGISTRY_USER,REGISTRY_TOKEN
+          script_stop: true
+          script: |
+            cd "${{ vars.DEPLOY_PATH || '~/moneymind' }}"
+            test -f .env || { echo "Missing .env on the server (copy deploy/.env.example)"; exit 1; }
+            echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+            export IMAGE_PREFIX IMAGE_TAG
+            docker compose -f docker-compose.prod.yml --env-file .env pull
+            # "up" runs the migrate service first; the backend only starts if it succeeds.
+            docker compose -f docker-compose.prod.yml --env-file .env up -d --remove-orphans
+            docker logout ghcr.io
+            docker image prune -f
+            docker compose -f docker-compose.prod.yml --env-file .env ps
