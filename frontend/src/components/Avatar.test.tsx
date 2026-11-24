@@ -110,8 +110,8 @@ describe('Avatar', () => {
 describe('BrandLogo', () => {
   it('shows the logo image', () => {
     const { container } = renderApp(<BrandLogo />);
-    expect(LOGO_SRC).toBe('/logo.png');
-    expect(container.querySelector('img')).toHaveAttribute('src', '/logo.png');
+    expect(LOGO_SRC).toBe('/logo-96.png');
+    expect(container.querySelector('img')).toHaveAttribute('src', '/logo-96.png');
   });
 
   it('is decorative', () => {

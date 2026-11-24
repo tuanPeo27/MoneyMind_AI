@@ -37,7 +37,7 @@ describe('Button', () => {
 
   it('uses a different style for secondary buttons', () => {
     renderApp(<><Button>Primary</Button><Button secondary>Secondary</Button></>);
-    expect(screen.getByRole('button', { name: 'Primary' }).className).toContain('from-brand');
+    expect(screen.getByRole('button', { name: 'Primary' }).className).toContain('from-accent');
     expect(screen.getByRole('button', { name: 'Secondary' }).className).toContain('glass');
   });
 
