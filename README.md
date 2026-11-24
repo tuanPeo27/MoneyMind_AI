@@ -1,114 +1,313 @@
-<div align="center">
+# MoneyMind AI
 
-# ✦ MoneyMind AI
+MoneyMind AI is a personal-finance web application that combines transaction management,
+budgets, savings goals, financial reports and conversational AI.
 
-### Hiểu tiền của bạn. Làm chủ tương lai của bạn.
+The project uses a three-tier architecture:
 
-Ứng dụng quản lý tài chính cá nhân kết hợp **Conversational AI** và **Proactive AI** —
-biến những con số thu chi thành thông tin dễ hiểu, hữu ích và đúng lúc.
+- React + TypeScript frontend
+- ASP.NET Core 10 Web API
+- Python FastAPI service for Gemini integration
+- SQL Server database
 
-<br />
+## Features
 
-![Project status](https://img.shields.io/badge/Project-MVP%20proposal-8b5cf6?style=for-the-badge)
-![Domain](https://img.shields.io/badge/FinTech-Personal%20Finance-14b8a6?style=for-the-badge)
-![AI](https://img.shields.io/badge/AI-Hybrid%20Assistant-f59e0b?style=for-the-badge)
+### Personal finance
 
-</div>
+- Account registration and login
+- Google sign-in
+- Transaction management
+- Account, category and budget management
+- Savings goals and contributions
+- Monthly summaries, trends and reports
+- Financial notifications and reminders
+- Profile, time-zone and security settings
 
----
+### AI
 
-## ✨ MoneyMind AI là gì?
+- Vietnamese conversational financial assistant
+- Chat history and conversation management
+- Financial context restricted to the authenticated user's data
+- AI feedback and usage quota
+- Gemini model fallback and cooldown handling
+- Proactive budget, savings and transaction notifications
 
-MoneyMind AI là đề tài ứng dụng quản lý tài chính cá nhân dành cho những ai muốn theo dõi thu nhập, chi tiêu, ngân sách và mục tiêu tiết kiệm ở một nơi. Thay vì chỉ hiển thị biểu đồ hay đưa ra câu trả lời chung chung, ứng dụng hướng đến việc giúp bạn **hỏi về dữ liệu tài chính của chính mình** và nhận được những phân tích chủ động, có căn cứ.
+### Administration
 
-> **Một nguyên tắc cốt lõi:** nghiệp vụ và dữ liệu đã xác minh tạo ra con số; AI giúp bạn hiểu con số đó.
+- User, lock and unlock management
+- Per-user AI quota management
+- Announcement management
+- Category and transaction management
+- System settings and audit logs
+- AI processing logs and health checks
 
-## 🌱 Hai cách AI đồng hành
-
-| | Conversational AI | Proactive AI |
-|---|---|---|
-| **Cách hoạt động** | Bạn hỏi bằng ngôn ngữ tự nhiên; trợ lý truy vấn dữ liệu phù hợp rồi giải thích kết quả. | Hệ thống phân tích theo sự kiện hoặc lịch và chủ động gửi insight, báo cáo, cảnh báo. |
-| **Ví dụ** | “Tháng này mình chi nhiều nhất vào khoản nào?” | “Bạn đã sử dụng 80% ngân sách ăn uống.” |
-| **Giá trị** | Hiểu tình hình tài chính mà không cần tự lọc nhiều báo cáo. | Nhận ra xu hướng đáng chú ý mà không phải liên tục đặt câu hỏi. |
-
-## 💎 Những trải nghiệm hướng tới
-
-- **Ghi chép thu chi:** thêm, sửa, xóa, tìm kiếm và lọc giao dịch theo thời gian, danh mục hoặc tài khoản.
-- **Tổng quan tài chính:** theo dõi thu nhập, chi tiêu, chênh lệch thu chi và biểu đồ theo kỳ.
-- **Ngân sách & mục tiêu:** theo dõi mức sử dụng ngân sách và tiến độ tiết kiệm.
-- **Trợ lý tiếng Việt:** hỏi về tổng chi, danh mục chi nhiều nhất, ngân sách còn lại hoặc so sánh giữa các tháng.
-- **Gợi ý phân loại:** đề xuất danh mục kèm độ tin cậy; bạn vẫn là người quyết định.
-- **Phân tích thông minh:** nhận diện xu hướng, khoản chi khác thường và dự báo khi dữ liệu đủ cơ sở.
-- **Insight chủ động:** cảnh báo ngân sách, báo cáo định kỳ và nhắc xem lại mục tiêu.
-
-## 🧠 Hybrid AI — thông minh nhưng có kiểm soát
-
-MoneyMind AI phân chia trách nhiệm để câu trả lời hữu ích mà không đánh đổi độ tin cậy:
-
-1. **Backend và cơ sở dữ liệu** xử lý quyền truy cập, dữ liệu giao dịch và các phép tính tài chính.
-2. **Dịch vụ phân tích** hỗ trợ phân loại, nhận diện bất thường và dự báo khi phù hợp.
-3. **LLM** hiểu câu hỏi, diễn đạt và giải thích kết quả đã được hệ thống cung cấp.
-4. **Người dùng** kiểm tra, xác nhận và luôn kiểm soát thay đổi trên dữ liệu của mình.
-
-AI không tự tạo số liệu tài chính, không tự thực hiện giao dịch và không thay đổi dữ liệu nghiệp vụ nếu chưa được xác nhận. Cảnh báo bất thường là tín hiệu thống kê — **không phải kết luận gian lận**; dự báo là ước tính — **không phải cam kết chắc chắn**.
-
-## 🏗️ Kiến trúc dự kiến
+## Architecture
 
 ```mermaid
 flowchart LR
-    U[Người dùng] --> FE[React + TypeScript]
-    FE -->|HTTPS / JWT| API[ASP.NET Core Web API]
+    Browser[React + TypeScript] -->|REST / JWT| API[ASP.NET Core Web API]
+    Browser -->|WebSocket / JWT| Hub[SignalR Notification Hub]
     API --> DB[(SQL Server)]
     API --> AI[Python FastAPI]
-    API --> LLM[LLM Provider]
-    AI --> API
-    LLM --> API
-    API --> FE
+    AI --> Gemini[Google Gemini]
+    API --> Mail[SMTP / reset-link log]
 ```
 
-| Thành phần | Công nghệ dự kiến | Trách nhiệm |
+The frontend must not call the Gemini provider or internal AI service directly. The ASP.NET
+Core backend authenticates requests, authorizes the user's data, applies AI quotas and calls
+the internal Python service.
+
+| Component | Technology | Main responsibility |
 |---|---|---|
-| Giao diện | React, TypeScript, Bootstrap hoặc Tailwind CSS | Dashboard, biểu đồ và giao diện hội thoại |
-| Backend | ASP.NET Core 10 Web API | Xác thực, nghiệp vụ tài chính, phân quyền và điều phối AI |
-| Cơ sở dữ liệu | SQL Server | Lưu người dùng, tài khoản, giao dịch và dữ liệu ứng dụng |
-| Dịch vụ AI | Python, FastAPI | Phân tích dữ liệu và cung cấp các chức năng AI |
-| Phân tích dữ liệu | scikit-learn, pandas, NumPy | Phân loại, phát hiện bất thường và dự báo |
-| Ngôn ngữ tự nhiên | LLM API hoặc mô hình triển khai riêng | Hiểu câu hỏi, tóm tắt và giải thích kết quả |
+| Frontend | React 18, TypeScript 5, Vite 6, Tailwind CSS 4 | User interface and client session handling |
+| Backend | ASP.NET Core 10, Entity Framework Core 10 | Authentication, authorization and financial/business logic |
+| Database | SQL Server | Persistent application data |
+| AI service | Python, FastAPI, Google Gen AI SDK | Structured Gemini calls and model fallback |
+| Real-time | ASP.NET Core SignalR | Notifications |
 
-> Đây là **kiến trúc và công nghệ đề xuất trong thuyết minh đề tài**, không phải xác nhận rằng toàn bộ thành phần đã được triển khai.
+## Repository layout
 
-## 🛣️ Lộ trình MVP
+```text
+MoneyMind_AI/
+├── frontend/          React application
+├── backend/           ASP.NET Core Web API
+├── ai-service/        Internal FastAPI and Gemini integration
+├── README.md
+└── DEVELOPMENT_SETUP.md
+```
 
-1. **Nền tảng:** xác thực, tài khoản, danh mục và quản lý giao dịch.
-2. **Thống kê:** dashboard thu chi, ngân sách và mục tiêu tiết kiệm.
-3. **Conversational AI:** hỏi đáp theo dữ liệu người dùng.
-4. **Proactive AI:** insight, cảnh báo ngân sách và phân tích xu hướng.
-5. **Hoàn thiện:** kiểm thử phân quyền, độ chính xác, hiệu năng và trải nghiệm.
+## Requirements
 
-### Phạm vi MVP
+- Windows 10/11 or a compatible development environment
+- .NET SDK 10
+- SQL Server 2019+ or SQL Server Express
+- Node.js 20+ and pnpm
+- Python 3.11+
+- Git
 
-Giao dịch được **người dùng nhập thủ công** để ưu tiên kiểm soát dữ liệu và tập trung vào nghiệp vụ tài chính cùng chất lượng phân tích.
+Python 3.11 or later is recommended for the current FastAPI and Pydantic dependencies.
 
-**Chưa thuộc phạm vi MVP:** đồng bộ tự động với ngân hàng, thanh toán/chuyển tiền thay người dùng, khuyến nghị đầu tư hoặc tự ý sửa/xóa dữ liệu.
+## Quick start
 
-## 🔐 Quyền riêng tư & độ tin cậy
+The complete setup is documented in [DEVELOPMENT_SETUP.md](./DEVELOPMENT_SETUP.md).
 
-- Chỉ truy vấn dữ liệu thuộc về người dùng đã xác thực.
-- Ưu tiên gửi cho AI lượng dữ liệu tối thiểu cần thiết; số liệu được tính từ dữ liệu nghiệp vụ.
-- Không để trình duyệt gọi trực tiếp dịch vụ AI hoặc nhà cung cấp LLM.
-- Phân biệt rõ số liệu thực tế, ước tính và gợi ý; nêu giới hạn khi dữ liệu chưa đủ.
-- Mọi thay đổi ảnh hưởng đến dữ liệu cần có sự kiểm soát của người dùng.
+### 1. Configure environment files
 
-## 🚧 Trạng thái dự án
+Create local configuration from the provided examples:
 
-README này được biên soạn từ **thuyết minh đề tài MoneyMind AI**. Tài liệu mô tả ý tưởng, tính năng mục tiêu, kiến trúc và kế hoạch MVP; repository hiện chưa cung cấp đủ mã nguồn hoặc hướng dẫn chạy ứng dụng để công bố lệnh cài đặt chính xác.
+```powershell
+Copy-Item backend/.env.example backend/.env
+Copy-Item ai-service/.env.example ai-service/.env
+Copy-Item frontend/.env.example frontend/.env.local
+```
 
-## 🎯 Tầm nhìn
+At minimum, set a SQL Server connection string, JWT key, encryption master key, AI service key
+and Gemini API key in the appropriate files. Never commit real secrets.
 
-MoneyMind AI hướng đến một người bạn đồng hành tài chính giúp bạn không chỉ biết **đã chi bao nhiêu**, mà còn hiểu **tiền đang đi đâu** — và có thêm cơ sở để quyết định bước tiếp theo.
+### 2. Start SQL Server
 
-<div align="center">
+Use SQL Server or SQL Server Express and make sure the server instance used by the connection
+string is running.
 
-**Your money, understood.**
+### 3. Start the AI service
 
-</div>
+```powershell
+cd ai-service
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python run.py
+```
+
+The AI service listens on `http://127.0.0.1:8001` by default.
+
+### 4. Start the backend
+
+Open a second terminal:
+
+```powershell
+cd backend
+dotnet restore
+dotnet tool install --global dotnet-ef --version 10.0.0
+dotnet ef database update
+dotnet run --launch-profile http
+```
+
+The backend listens on `http://localhost:5146`.
+
+The database migration creates the schema and the seeder creates roles, default categories,
+default AI quota settings and an optional configured administrator.
+
+### 5. Start the frontend
+
+Open a third terminal:
+
+```powershell
+cd frontend
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+Open `http://localhost:5173`.
+
+The Vite development server proxies `/api` requests to
+`http://localhost:5146`, so a separate CORS origin is not required for the default setup.
+
+## Configuration
+
+Configuration examples are provided for each runtime:
+
+| File | Purpose |
+|---|---|
+| `backend/.env.example` | SQL Server, JWT, encryption, seed admin, SMTP and AI settings |
+| `ai-service/.env.example` | Gemini credentials, model priority and service listener |
+| `frontend/.env.example` | Optional API and Google sign-in overrides |
+
+Important shared values:
+
+- `Jwt__Key` and `Encryption__MasterKey` must be set in `backend/.env`.
+- `AIService__ServiceKey` in `backend/.env` must equal `SERVICE_KEY` in `ai-service/.env`.
+- `Google__ClientId` and `VITE_GOOGLE_CLIENT_ID` must use the same Web OAuth client ID.
+- The encryption master key must not be changed after application data is encrypted.
+
+Generate local secrets with PowerShell:
+
+```powershell
+[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+The first command is suitable for `Encryption__MasterKey`. Use at least 32 random characters
+for `Jwt__Key` and both AI service keys.
+
+## Local endpoints
+
+| Service | URL |
+|---|---|
+| Frontend | `http://localhost:5173` |
+| Backend API | `http://localhost:5146` |
+| Swagger/OpenAPI UI | `http://localhost:5146/swagger` |
+| Backend health check | `http://localhost:5146/api/health` |
+| Notification hub | `ws://localhost:5146/hubs/notifications` |
+| Internal AI health | `http://127.0.0.1:8001/health` |
+
+The AI service health and chat endpoints require `X-Service-Key`.
+
+Example backend health check:
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:5146/api/health"
+```
+
+Example AI health check:
+
+```powershell
+$headers = @{ "X-Service-Key" = "<same AI service key>" }
+Invoke-RestMethod -Uri "http://127.0.0.1:8001/health" -Headers $headers
+```
+
+## Development commands
+
+### Backend
+
+```powershell
+cd backend
+dotnet restore
+dotnet build
+dotnet run --launch-profile http
+dotnet ef migrations add <MigrationName>
+dotnet ef database update
+dotnet ef migrations remove
+```
+
+### Frontend
+
+```powershell
+cd frontend
+pnpm install --frozen-lockfile
+pnpm dev
+pnpm build
+pnpm preview
+```
+
+### AI service
+
+```powershell
+cd ai-service
+.\.venv\Scripts\Activate.ps1
+python run.py
+python -m unittest discover -s tests -v
+```
+
+## Testing
+
+The AI service currently includes unit tests for Gemini model fallback and error classification.
+Run them before changing the model router or provider integration:
+
+```powershell
+cd ai-service
+python -m unittest discover -s tests -v
+```
+
+Backend and frontend test infrastructure is not yet included. Before release, add coverage for:
+
+- Authentication and authorization
+- Session refresh and logout
+- Transactions, budgets and savings goals
+- User and data isolation
+- Dashboard and report calculations
+- AI quota and model fallback
+- Admin role restrictions
+- Critical frontend workflows
+
+## Security
+
+- Keep `.env`, `.env.local`, private keys and credentials out of Git.
+- Use separate development and production secrets.
+- The frontend never receives Gemini or SMTP credentials.
+- AI requests are limited to data belonging to the authenticated user.
+- Every admin endpoint must be checked with `Admin` role authorization.
+- Never change `Encryption__MasterKey` after encrypted chat or key data has been stored.
+- Use HTTPS and restricted CORS origins in production.
+- Do not expose provider responses or API credentials through the AI service.
+
+## Troubleshooting
+
+### Backend cannot start
+
+Check that:
+
+- `.NET 10 SDK` is installed.
+- `backend/.env` exists and contains `ConnectionStrings__DefaultConnection`.
+- `Jwt__Key`, `AIService__ServiceKey` and `Encryption__MasterKey` satisfy validation.
+- SQL Server is running and the instance name is correct.
+- Entity Framework migrations have been applied.
+
+### Frontend cannot reach the API
+
+Confirm that:
+
+- Backend is listening on `http://localhost:5146`.
+- `frontend/.env.local` has no incompatible `VITE_API_URL` value.
+- Vite was restarted after changing environment variables.
+
+### Database migration fails
+
+Verify the connection string, SQL Server permissions and running database engine. If SQL Server
+Express is used, a value such as `localhost\SQLEXPRESS` may be required.
+
+### AI service cannot answer
+
+Verify that:
+
+- Gemini and service keys are configured.
+- `AIService__ServiceKey` matches `SERVICE_KEY`.
+- The selected Gemini models are available to the configured API key.
+- The backend can reach `http://127.0.0.1:8001`.
+- `python run.py` is running in the AI service terminal.
+
+## Further documentation
+
+- [Development setup](./DEVELOPMENT_SETUP.md)
+- [AI service documentation](./ai-service/README.md)
