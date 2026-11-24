@@ -156,6 +156,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         {
             entity.Property(conversation => conversation.TitleCipher).IsRequired();
             entity.Property(conversation => conversation.TitleNonce).HasColumnType("varbinary(12)").IsRequired();
+            entity.Property(conversation => conversation.Kind).HasConversion<byte>();
             entity.HasIndex(conversation => new { conversation.UserId, conversation.UpdatedAt })
                 .HasFilter("[DeletedAt] IS NULL");
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(conversation => conversation.UserId)

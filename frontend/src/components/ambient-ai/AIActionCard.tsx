@@ -56,7 +56,7 @@ const meta: Record<AIActionType, { title: string; icon: LucideIcon }> = {
 };
 
 /** What still has to be chosen before the action can be saved (empty when it is ready). */
-function missing(type: AIActionType, p: AIActionPayload): string[] {
+export function missing(type: AIActionType, p: AIActionPayload): string[] {
   const out: string[] = [];
   const amount = type === 'create_savings_goal' ? p.targetAmount : p.amount;
   if (type !== 'create_category' && !(amount && amount > 0)) out.push('amount');

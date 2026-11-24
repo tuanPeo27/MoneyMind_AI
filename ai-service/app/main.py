@@ -7,7 +7,8 @@ from fastapi.responses import StreamingResponse
 
 from .config import Settings, get_settings
 from .gemini_service import GeminiChatService, GeminiUnavailableError
-from .schemas import ChatRequest, ChatResponse, HealthResponse
+from .schemas import (CategorizeRequest, CategorizeResponse, ChatRequest, ChatResponse, HealthResponse, InsightRequest,
+                      InsightResponse)
 from .security import require_service_key
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -62,6 +63,22 @@ async def chat_stream(request: ChatRequest, gemini: GeminiChatService = Depends(
             yield _line({"type": "error", "message": _UNAVAILABLE})
 
     return StreamingResponse(body(), media_type="application/x-ndjson", headers={"Cache-Control": "no-cache"})
+
+
+@app.post("/v1/categorize", response_model=CategorizeResponse, dependencies=[Depends(require_service_key)])
+async def categorize(request: CategorizeRequest, gemini: GeminiChatService = Depends(get_gemini)) -> CategorizeResponse:
+    try:
+        return await gemini.categorize(request)
+    except GeminiUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_UNAVAILABLE) from exc
+
+
+@app.post("/v1/insights", response_model=InsightResponse, dependencies=[Depends(require_service_key)])
+async def insights(request: InsightRequest, gemini: GeminiChatService = Depends(get_gemini)) -> InsightResponse:
+    try:
+        return await gemini.insights(request)
+    except GeminiUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_UNAVAILABLE) from exc
 
 
 @app.get("/health", response_model=HealthResponse, dependencies=[Depends(require_service_key)])

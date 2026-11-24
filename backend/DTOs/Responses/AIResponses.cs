@@ -53,6 +53,23 @@ public sealed record RecommendationResponse(
     DateTime CreatedAt,
     DateTime? ExpiresAt);
 
+/// <param name="WrittenByAI">false when the AI was unavailable and the summary only lists the numbers.</param>
+public sealed record WeeklySummaryResponse(
+    Guid Id,
+    DateOnly WeekStart,
+    DateOnly WeekEnd,
+    string Title,
+    string Summary,
+    AIInsightSeverity Severity,
+    IReadOnlyList<AIInsightItem> Items,
+    IReadOnlyList<RecommendationResponse> Recommendations,
+    bool WrittenByAI,
+    bool IsRead,
+    DateTime CreatedAt);
+
+/// <param name="Action">The proposed change to confirm, or null for a tip without an action.</param>
+public sealed record AcceptRecommendationResponse(RecommendationResponse Recommendation, AIActionResponse? Action);
+
 public sealed record AISettingsResponse(
     bool ProactiveEnabled,
     string ReportFrequency,

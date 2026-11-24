@@ -13,6 +13,7 @@ import type { Highlight } from '../components/ambient-ai/mockAssistant';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { HighlightCard, MORPH_SPRING } from '../components/ambient-ai/AmbientAI';
 import { useAmbientAI } from '../components/ambient-ai/AmbientAIProvider';
+import { QuickEntry } from '../components/ambient-ai/QuickEntry';
 
 export type Totals = { income: number; expense: number; savings: number; balance: number; rate: number };
 export function getTotals(rows: Transaction[]): Totals {
@@ -62,12 +63,15 @@ export function BudgetList({ budgets, rows, categories, onView }: { budgets: Bud
   </Card>;
 }
 const slideOfHighlight: Partial<Record<NonNullable<Highlight>, number>> = { cashflow: 0, expenses: 1, budgets: 2, transactions: 3 };
-export default function Overview({ rows, allRows, previous, budgets, categories, accounts = [], onNavigate, onEdit, hidden = false, setHidden, rangeEnd, showInsight = true }: {
+export default function Overview({ rows, allRows, previous, budgets, categories, accounts = [], onNavigate, onEdit, onQuickAddManual, hidden = false, setHidden, rangeEnd, showInsight = true }: {
   rows: Transaction[]; allRows: Transaction[]; previous: Transaction[]; budgets: Budget[]; categories: Category[];
   /** Active accounts with their current balance, for the short list under the summary cards. */
   accounts?: WalletAccount[];
   onNavigate: (page: 'Transactions' | 'Budgets' | 'Smart Insights' | 'AI Financial Assistant' | 'Accounts') => void;
-  onEdit: (t: Transaction) => void; hidden?: boolean; setHidden?: (value: boolean) => void; rangeEnd?: string; showInsight?: boolean;
+  onEdit: (t: Transaction) => void;
+  /** Opens the manual form prefilled from a quick entry the AI could not handle. */
+  onQuickAddManual?: (draft: Partial<Transaction>) => void;
+  hidden?: boolean; setHidden?: (value: boolean) => void; rangeEnd?: string; showInsight?: boolean;
 }) {
   const { t, locale } = useLanguage();
   const { openAssistant, highlight, clearHighlight } = useAmbientAI();
@@ -252,6 +256,7 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
     go(next); tabs.current[next]?.focus();
   }
   return <div className="space-y-5">
+    {onQuickAddManual && <QuickEntry onManual={onQuickAddManual} />}
     <SummaryCards totals={totals} previous={past} hidden={hidden} onToggleHidden={setHidden} />
     <AccountsStrip accounts={accounts} hidden={hidden} onManage={() => onNavigate('Accounts')} />
     <section aria-label={t("Overview sections")}>

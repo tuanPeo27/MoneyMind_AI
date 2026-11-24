@@ -25,4 +25,11 @@ public interface IAIChatService
     Task DeleteConversationAsync(Guid userId, Guid conversationId, CancellationToken cancellationToken = default);
     Task SubmitFeedbackAsync(Guid userId, Guid messageId, ChatFeedbackRequest request,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Stores proposals that did not come from a chat reply (e.g. a weekly-summary recommendation) as an assistant
+    /// message in the user's quick-entry conversation, so they are confirmed like any other AI action. No AI call.
+    /// </summary>
+    Task<IReadOnlyList<backend.DTOs.AIActionResponse>> ProposeActionsAsync(Guid userId, string text,
+        IReadOnlyList<backend.DTOs.AIProposedAction> proposals, CancellationToken cancellationToken = default);
 }

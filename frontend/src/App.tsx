@@ -36,7 +36,7 @@ import { adminNav, aiUsage } from './admin/data';
 import type { AdminUserStats } from './admin/AdminPages';
 
 type Dialog =
-  | { kind: 'transaction'; value?: Transaction }
+  | { kind: 'transaction'; value?: Transaction; draft?: Partial<Transaction> }
   | { kind: 'budget'; value?: Budget }
   | { kind: 'category'; value?: Category }
   | { kind: 'delete'; title: string; text: string; action: () => void }
@@ -264,7 +264,7 @@ function Workspace() {
         {data.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(data.error)}</span><Button secondary onClick={() => void data.reload()}>{t('Try again')}</Button></p>}
         {page === 'Savings Funds' && savings.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(savings.error)}</span><Button secondary onClick={() => void savings.reload()}>{t('Try again')}</Button></p>}
         {data.loading && !rows.length && <p role="status" className="mb-4 text-sm text-muted">{t('Loading your data...')}</p>}
-        {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} accounts={data.activeAccounts} onNavigate={navigate} onEdit={editTransaction} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} />}
+        {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} accounts={data.activeAccounts} onNavigate={navigate} onEdit={editTransaction} onQuickAddManual={draft => { setSelection(undefined); setDialog({ kind: 'transaction', draft }); }} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} />}
         {page === 'Accounts' && <AccountsPage accounts={data.activeAccounts} archived={data.archivedAccounts} hidden={hidden} setHidden={setHidden}
           onCreate={input => attempt(() => data.createAccount(input), 'Account added.')}
           onUpdate={(id, input) => attempt(() => data.updateAccount(id, input), 'Account saved.')}
@@ -320,7 +320,7 @@ function Workspace() {
         {page === 'Settings' && <SettingsPage profile={profile} onSave={p => { setProfile({ ...storedProfile, notifications: p.notifications, insights: p.insights }); notify('Preferences saved on this browser.'); }} onExport={() => exportRows(rows)} role={role} theme={theme} setTheme={setTheme} />}
       </UserLayout></BalanceContext.Provider>}
     </AmbientShell>
-    {dialog?.kind === 'transaction' && <TransactionForm transaction={dialog.value} categories={categories} accounts={data.accountNames} onClose={close}
+    {dialog?.kind === 'transaction' && <TransactionForm transaction={dialog.value} draft={dialog.draft} categories={categories} accounts={data.accountNames} onClose={close}
       onAnalyze={dialog.value ? () => { close(); openAssistant('Explain this selected transaction.'); } : undefined}
       onSave={async t => {
         const editing = !!dialog.value;

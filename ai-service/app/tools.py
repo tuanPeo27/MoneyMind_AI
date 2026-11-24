@@ -82,6 +82,15 @@ _DECLARATIONS = [
 TOOLS = [types.Tool(function_declarations=_DECLARATIONS)]
 ACTION_NAMES = frozenset(d.name for d in _DECLARATIONS)
 
+# Quick entry only records transactions (and a missing category for them).
+CAPTURE_TOOLS = [types.Tool(function_declarations=[d for d in _DECLARATIONS if d.name in {"create_transaction", "create_category"}])]
+CAPTURE_ACTION_NAMES = frozenset({"create_transaction", "create_category"})
+
+
+def lite_first(models: list[str]) -> list[str]:
+    """Short structured tasks (quick entry, categorizing) run on lite models first to save the main model's quota."""
+    return sorted(models, key=lambda name: "lite" not in name)
+
 
 def thinking_for(model: str) -> types.ThinkingConfig | None:
     """

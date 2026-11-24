@@ -17,13 +17,16 @@ public sealed class AIChatService(
     UserRequestGate gate,
     IAIActionService actions) : IAIChatService
 {
-    private const int ContextMessageLimit = 20;
+    // History is resent with every message, so it is the largest token cost of a long chat. The last 12 turns, each
+    // clipped, are enough to follow the conversation.
+    private const int ContextMessageLimit = 12;
+    private const int HistoryTurnMaxChars = 1200;
 
     public async Task<PagedResult<ConversationResponse>> GetConversationsAsync(Guid userId, PagingQuery paging,
         CancellationToken cancellationToken = default)
     {
         var source = db.AIConversations.AsNoTracking()
-            .Where(c => c.UserId == userId && c.DeletedAt == null);
+            .Where(c => c.UserId == userId && c.DeletedAt == null && c.Kind == AIConversationKind.Chat);
         var total = await source.CountAsync(cancellationToken);
         var rows = await source.OrderByDescending(c => c.UpdatedAt)
             .Skip((paging.Page - 1) * paging.PageSize).Take(paging.PageSize)
@@ -63,27 +66,34 @@ public sealed class AIChatService(
         await quota.EnsureAvailableAsync(userId, cancellationToken);
 
         var text = request.Message.Trim();
+        var capture = request.Mode == AIChatModes.Capture;
+        // Quick entries live in one hidden conversation per user, so they never clutter the chat history.
+        var existing = capture
+            ? await FindQuickEntryConversationAsync(userId, cancellationToken)
+            : request.ConversationId is { } id ? await FindConversationAsync(userId, id, tracked: true, cancellationToken)
+            : null;
+        if (!capture && existing is { Kind: not AIConversationKind.Chat }) throw new NotFoundException("Không tìm thấy hội thoại.");
+        if (!capture && existing is { IsArchived: true }) throw new BadRequestException("Hội thoại đã được lưu trữ.");
+
+        var createdConversation = existing is null;
         AIConversation conversation;
-        var createdConversation = request.ConversationId is null;
-        if (request.ConversationId is { } id)
-        {
-            conversation = await FindConversationAsync(userId, id, tracked: true, cancellationToken);
-            if (conversation.IsArchived) throw new BadRequestException("Hội thoại đã được lưu trữ.");
-        }
+        if (existing is not null) conversation = existing;
         else
         {
-            var title = await encryption.EncryptAsync(userId, CreateTitle(text), cancellationToken);
+            var title = await encryption.EncryptAsync(userId, capture ? "Nhập nhanh" : CreateTitle(text), cancellationToken);
             conversation = new AIConversation
             {
                 UserId = userId,
                 TitleCipher = title.Cipher,
                 TitleNonce = title.Nonce,
-                KeyVersion = title.KeyVersion
+                KeyVersion = title.KeyVersion,
+                Kind = capture ? AIConversationKind.QuickEntry : AIConversationKind.Chat
             };
             db.AIConversations.Add(conversation);
         }
 
-        var historyRows = await db.AIChatMessages.AsNoTracking()
+        // Each quick entry stands alone: no history, which also keeps the request small.
+        List<AIChatMessage> historyRows = capture ? [] : await db.AIChatMessages.AsNoTracking()
             .Where(m => m.ConversationId == conversation.Id && m.Status == AIProcessingStatus.Completed)
             .OrderByDescending(m => m.Sequence).Take(ContextMessageLimit).ToListAsync(cancellationToken);
         historyRows.Reverse();
@@ -96,6 +106,7 @@ public sealed class AIChatService(
             var turn = await DecryptAsync(userId, row, cancellationToken);
             if (earlierActions.TryGetValue(row.Id, out var outcomes))
                 turn = string.Join('\n', [turn, .. outcomes.Select(AIActionService.DescribeForHistory)]);
+            if (turn.Length > HistoryTurnMaxChars) turn = turn[..HistoryTurnMaxChars] + "…";
             history.Add(new AIChatTurn(row.Role == ChatMessageRole.Assistant ? "assistant" : "user", turn));
         }
 
@@ -123,7 +134,8 @@ public sealed class AIChatService(
         IReadOnlyList<AIProposedAction> proposals;
         try
         {
-            result = await orchestration.ChatAsync(userId, text, history, request.Language, callbacks?.OnDelta, cancellationToken);
+            result = await orchestration.ChatAsync(userId, text, history, request.Language, callbacks?.OnDelta,
+                capture ? AIChatModes.Capture : AIChatModes.Chat, cancellationToken);
             proposals = (result.Actions ?? []).Where(a => AIActionTypes.All.Contains(a.Name)).Take(AIActionTypes.MaxPerMessage).ToList();
             // A model that only calls functions writes no text, so the reply explains what is waiting for the user.
             content = result.Content.Length > 0 ? result.Content
@@ -215,6 +227,46 @@ public sealed class AIChatService(
         feedback.FeedbackText = string.IsNullOrWhiteSpace(request.FeedbackText) ? null : request.FeedbackText.Trim();
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<AIActionResponse>> ProposeActionsAsync(Guid userId, string text,
+        IReadOnlyList<AIProposedAction> proposals, CancellationToken cancellationToken = default)
+    {
+        var conversation = await FindQuickEntryConversationAsync(userId, cancellationToken);
+        if (conversation is null)
+        {
+            var title = await encryption.EncryptAsync(userId, "Nhập nhanh", cancellationToken);
+            conversation = new AIConversation
+            {
+                UserId = userId, TitleCipher = title.Cipher, TitleNonce = title.Nonce, KeyVersion = title.KeyVersion,
+                Kind = AIConversationKind.QuickEntry
+            };
+            db.AIConversations.Add(conversation);
+        }
+
+        var sequence = await db.AIChatMessages.Where(m => m.ConversationId == conversation.Id)
+            .MaxAsync(m => (int?)m.Sequence, cancellationToken) ?? 0;
+        var encrypted = await encryption.EncryptAsync(userId, text, cancellationToken);
+        var message = new AIChatMessage
+        {
+            ConversationId = conversation.Id,
+            Sequence = sequence + 1,
+            Role = ChatMessageRole.Assistant,
+            ContentCipher = encrypted.Cipher,
+            Nonce = encrypted.Nonce,
+            KeyVersion = encrypted.KeyVersion,
+            Intent = IntentFor(proposals),
+            Status = AIProcessingStatus.Completed
+        };
+        db.AIChatMessages.Add(message);
+        var proposed = await actions.ProposeAsync(userId, message.Id, proposals, cancellationToken);
+        conversation.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return proposed;
+    }
+
+    private Task<AIConversation?> FindQuickEntryConversationAsync(Guid userId, CancellationToken cancellationToken) =>
+        db.AIConversations.FirstOrDefaultAsync(c => c.UserId == userId && c.DeletedAt == null
+            && c.Kind == AIConversationKind.QuickEntry, cancellationToken);
 
     private async Task<AIConversation> FindConversationAsync(Guid userId, Guid id, bool tracked,
         CancellationToken cancellationToken)

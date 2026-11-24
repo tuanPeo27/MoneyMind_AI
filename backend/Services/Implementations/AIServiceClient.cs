@@ -63,13 +63,25 @@ public sealed class AIServiceClient(HttpClient http, ILogger<AIServiceClient> lo
         return new AIChatResult(text.ToString().Trim(), done.Intent, done.TokenUsage, done.Provider, done.Model, actions);
     }
 
-    public Task<AICategorizeResult> CategorizeAsync(AICategorizePayload payload,
+    public Task<AICategorizeReply> CategorizeAsync(AICategorizePayload payload,
         CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException("AI categorization has not been implemented by the AI service yet.");
+        PostAsync<AICategorizeReply>("v1/categorize", payload, cancellationToken);
+
+    private async Task<T> PostAsync<T>(string path, object payload, CancellationToken cancellationToken)
+    {
+        using var response = await http.PostAsJsonAsync(path, payload, Json, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogWarning("AI service returned {StatusCode} for {Path}", (int)response.StatusCode, path);
+            throw new ServiceUnavailableException("Dịch vụ AI tạm thời không khả dụng.");
+        }
+        return await response.Content.ReadFromJsonAsync<T>(Json, cancellationToken)
+            ?? throw new ServiceUnavailableException("Dịch vụ AI trả về dữ liệu không hợp lệ.");
+    }
 
     public Task<AIInsightResult> GenerateInsightsAsync(AIInsightPayload payload,
         CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException("AI insight generation has not been implemented by the AI service yet.");
+        PostAsync<AIInsightResult>("v1/insights", payload, cancellationToken);
 
     public async Task<bool> IsHealthyAsync(CancellationToken cancellationToken = default)
     {

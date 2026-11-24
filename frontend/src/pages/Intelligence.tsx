@@ -5,6 +5,7 @@ import { type Transaction, type Budget, money } from '../data';
 import { Badge, Card, Empty } from '../components/ui';
 import { getTotals, percentChange } from './Overview';
 import { useLocal } from '../hooks/useLocal';
+import { WeeklySummary } from '../components/ambient-ai/WeeklySummary';
 
 // Conversations now live in the global AmbientAIProvider; insights reuse the
 // same personal records and navigation callbacks as the original workspace.
@@ -53,6 +54,7 @@ export function Insights({ rows, previous, budgets, onNavigate }: {
   ];
   const shown = items.filter(i => filter === 'All insights' || (filter === 'Reviewed' ? reviewed.includes(i.id) : !reviewed.includes(i.id)));
   return <div className="space-y-5">
+    <WeeklySummary />
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div role="tablist" aria-label={t("Insight status")} className="flex rounded-lg border border-line bg-surface p-1">{['All insights', 'To review', 'Reviewed'].map(f =>
         <button key={f} role="tab" aria-selected={filter === f} onClick={() => setFilter(f)} className={`min-h-11 rounded-md px-4 text-sm focus-visible:ring-2 focus-visible:ring-brand ${filter === f ? 'bg-line' : 'text-muted'}`}>{t(f)}</button>,

@@ -270,6 +270,9 @@ namespace backend.Migrations
                     b.Property<int>("KeyVersion")
                         .HasColumnType("int");
 
+                    b.Property<byte>("Kind")
+                        .HasColumnType("tinyint");
+
                     b.Property<byte[]>("TitleCipher")
                         .IsRequired()
                         .HasColumnType("varbinary(max)");

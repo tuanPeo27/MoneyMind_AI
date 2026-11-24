@@ -78,7 +78,15 @@ def make_service(behaviour: dict, clock: FakeClock | None = None, models=MODELS)
     service = GeminiChatService(settings, router)
     fake = FakeModels(behaviour)
     service._client = SimpleNamespace(aio=SimpleNamespace(models=fake))
+    service._sleep = _advance(router)
     return service, fake, router
+
+
+def _advance(router):
+    """Fake sleep: moves the router's clock forward instead of waiting."""
+    async def sleep(seconds):
+        router._clock.now += seconds
+    return sleep
 
 
 REQUEST = ChatRequest(message="hi", history=[], financial_context="{}")

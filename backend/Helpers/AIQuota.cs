@@ -4,6 +4,10 @@ namespace backend.Helpers;
 public static class AITasks
 {
     public const string Chat = "Chat";
+    /// <summary>Category suggestion by AI. Has its own daily cap, separate from the chat limit.</summary>
+    public const string Categorize = "Categorize";
+    /// <summary>Weekly summary written by AI (one per user per week).</summary>
+    public const string WeeklyInsight = "WeeklyInsight";
 }
 
 /// <summary>Rules for the number of AI chat messages a user may send per day.</summary>

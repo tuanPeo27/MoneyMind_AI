@@ -13,6 +13,7 @@ export * as goalsApi from './goals';
 export * as dashboardApi from './dashboard';
 export * as notificationsApi from './notifications';
 export * as aiChatApi from './aiChat';
+export * as insightsApi from './insights';
 export * as adminUsersApi from './adminUsers';
 
 export * as adminTransactionsApi from './adminTransactions';

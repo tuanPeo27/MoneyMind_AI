@@ -27,6 +27,17 @@ export const sendMessage = (conversationId: string | null, message: string, lang
     { timeout: 65_000 },
   ));
 
+/**
+ * Quick entry ("cà phê 35k"): the AI turns the text into proposed transactions on the assistant message.
+ * It is stored in the user's hidden quick-entry conversation and counts as one AI message.
+ */
+export const captureEntry = (message: string, language?: 'vi' | 'en') =>
+  getData(http.post<SendAIChatMessageResponse>(
+    '/ai/chat/messages',
+    { conversationId: null, message, language, mode: 'capture' },
+    { timeout: 65_000 },
+  ));
+
 export type StreamHandlers = {
   /** The user's message is stored; `conversationId` is new when this message started the conversation. */
   onStart?: (conversationId: string, userMessage: AIChatMessageResponse) => void;

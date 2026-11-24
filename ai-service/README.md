@@ -23,7 +23,13 @@ The service listens on `127.0.0.1:8001` by default. Internal calls require `X-Se
   - `{"type": "done", "intent", "tokenUsage", "model", "provider"}`: the end.
   - `{"type": "error", "message"}`: the model failed after the answer had started.
   - A plain HTTP 503 means no model could start an answer.
+  - `"mode": "capture"` (quick entry): a short prompt, only `create_transaction` and `create_category`, lite models
+    first.
 - `POST /v1/chat`: the same answer collected into one JSON response.
+- `POST /v1/categorize`: picks one of the given category ids for a description (`categoryId` is null when none fits).
+  Lite models first.
+- `POST /v1/insights`: writes the weekly summary, up to 4 items and up to 2 recommendations for facts the backend
+  computed. Both use JSON-schema output and return 503 when no model answers.
 - `GET /health`: reports the first reachable model and the state of every model in the list.
 
 ## Proposed actions

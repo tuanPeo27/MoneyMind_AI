@@ -82,6 +82,10 @@ AI không bao giờ tự lưu. Thêm một loại thao tác mới phải sửa *
 
 Hiện có 5 loại: thêm giao dịch, thêm danh mục, tạo ngân sách, tạo quỹ, góp quỹ. Chưa có sửa hay xóa.
 
+**Nhập nhanh** (`QuickEntry.tsx` trên trang Tổng quan): `POST api/ai/chat/messages` với `mode: "capture"`. Tin nhắn
+được lưu vào một hội thoại ẩn mỗi user (`AIConversation.Kind = QuickEntry`, không hiện trong danh sách chat, không gửi
+lịch sử) và vẫn tính vào hạn mức tin nhắn. Truy vấn danh sách hội thoại chat phải lọc `Kind == Chat`.
+
 ## Quy ước frontend
 
 - Gọi API qua `src/services/` (`http` axios + `getData`); kiểu trong `src/services/types.ts` khớp DTO backend.

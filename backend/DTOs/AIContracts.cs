@@ -6,9 +6,17 @@ namespace backend.DTOs;
 
 public sealed record AIChatTurn(string Role, string Content);
 
+public static class AIChatModes
+{
+    public const string Chat = "chat";
+    /// <summary>Quick entry: the model only turns the text into transactions (and categories).</summary>
+    public const string Capture = "capture";
+}
+
 /// <param name="Language">`vi` or `en`: the language the answer must be written in. null = follow the user.</param>
+/// <param name="Mode">See <see cref="AIChatModes"/>.</param>
 public sealed record AIChatPayload(string Message, IReadOnlyList<AIChatTurn> History, string FinancialContext,
-    string? Language = null);
+    string? Language = null, string Mode = AIChatModes.Chat);
 
 /// <summary>A function call from the model, exactly as the AI service received it (arguments not yet checked).</summary>
 public sealed record AIProposedAction(string Name, JsonElement Args);
@@ -25,25 +33,35 @@ public sealed record AIStreamEvent(string Type, string? Text = null, string? Nam
 
 public sealed record AICategoryOption(Guid Id, string Name);
 
+/// <param name="Id">A short id ("1", "2", ...) instead of the Guid: a Guid costs about 20 tokens.</param>
+public sealed record AICategoryChoice(string Id, string Name);
+
 public sealed record AICategorizePayload(
     string Description,
     decimal? Amount,
     string Type,
-    IReadOnlyList<AICategoryOption> Categories);
+    IReadOnlyList<AICategoryChoice> Categories);
+
+/// <summary>The AI service's answer; CategoryId is one of the short ids that were sent, or null.</summary>
+public sealed record AICategorizeReply(string? CategoryId, decimal Confidence, string? Reason, int? TokenUsage,
+    string? Provider, string? Model);
 
 public sealed record AICategorizeResult(Guid? CategoryId, decimal Confidence, string? Reason, int? TokenUsage, string? Provider);
 
-public sealed record AIInsightPayload(string FinancialContext);
+/// <param name="Facts">Compact JSON of numbers the backend computed; the AI only writes about them.</param>
+public sealed record AIInsightPayload(string Facts, string? Language = "vi");
 
-public sealed record AIInsightItem(
-    string Kind,
-    string Type,
-    string Title,
-    string Content,
-    string Severity,
-    string? DataJson);
+/// <param name="Severity">info, warning or critical.</param>
+public sealed record AIInsightItem(string Title, string Content, string Severity);
 
-public sealed record AIInsightResult(IReadOnlyList<AIInsightItem> Items, int? TokenUsage, string? Provider);
+/// <summary>Same argument meaning as the chat functions; FundName is the name of a new savings fund.</summary>
+public sealed record AIInsightAction(string Name, string? Category, decimal? Amount, string? Goal, string? FundName,
+    decimal? TargetAmount, string? Deadline);
+
+public sealed record AIInsightRecommendation(string Title, string Description, AIInsightAction? Action);
+
+public sealed record AIInsightResult(string Summary, IReadOnlyList<AIInsightItem> Items,
+    IReadOnlyList<AIInsightRecommendation> Recommendations, int? TokenUsage, string? Provider, string? Model);
 
 /// <summary>Candidate insight produced by deterministic rules (no AI call).</summary>
 public sealed record InsightCandidate(

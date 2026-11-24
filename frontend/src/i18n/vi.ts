@@ -622,4 +622,32 @@ export const vi: Record<string, string> = {
   // Phone number validation
   'A phone number can only contain digits, spaces and + ( ) . -': 'Số điện thoại chỉ được chứa chữ số, khoảng trắng và các ký tự + ( ) . -',
   'Enter a valid phone number, e.g. 0901 234 567 or +84 901 234 567.': 'Số điện thoại không hợp lệ. Ví dụ: 0901 234 567 hoặc +84 901 234 567.',
+  // Quick entry (Overview)
+  'Quick add': 'Nhập nhanh',
+  'Quick add, e.g. “coffee 35k, grab 50k yesterday”': 'Nhập nhanh, ví dụ “cà phê 35k, grab 50k hôm qua”',
+  'Reading...': 'Đang đọc...',
+  'Add with AI': 'Thêm bằng AI',
+  'You have used all AI messages for today. Enter the transaction manually.': 'Bạn đã dùng hết lượt AI hôm nay. Hãy nhập giao dịch thủ công.',
+  'The AI is unavailable right now. Enter the transaction manually.': 'AI đang tạm thời không khả dụng. Hãy nhập giao dịch thủ công.',
+  '{count} items could not be saved. Check them below.': 'Có {count} mục chưa lưu được. Hãy kiểm tra bên dưới.',
+  'Close': 'Đóng',
+  'Save all ({count})': 'Lưu tất cả ({count})',
+  // Category suggestion
+  'Suggested by AI': 'AI gợi ý',
+  'Suggested from your history': 'Gợi ý từ lịch sử của bạn',
+  'Suggested from keywords': 'Gợi ý theo từ khóa',
+  // Weekly summary (Smart Insights)
+  'Weekly summary': 'Tổng kết tuần',
+  'Written by AI from your numbers': 'AI viết dựa trên số liệu của bạn',
+  'AI was unavailable; numbers only': 'AI tạm không khả dụng, chỉ có số liệu',
+  'Every Monday morning the AI reviews your last week.': 'Mỗi sáng thứ Hai, AI tổng kết tuần trước của bạn.',
+  'Writing...': 'Đang viết...',
+  'Summarize last week': 'Tổng kết tuần trước',
+  'No transactions last week, so there is nothing to summarize yet.': 'Tuần trước chưa có giao dịch nên chưa có gì để tổng kết.',
+  'Dismiss': 'Bỏ qua',
+  'Do it': 'Làm ngay',
+  'Got it': 'Đã hiểu',
+  'Dismissed': 'Đã bỏ qua',
+  // Weekly summary retry
+  'Try again with AI': 'Thử lại với AI',
 };

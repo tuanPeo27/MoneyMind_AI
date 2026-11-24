@@ -115,6 +115,19 @@ export type AIChatMessageResponse = {
 };
 /** `dailyLimit` and `remaining` are null when the user has no limit. `resetsAt` is the user's next local midnight (UTC). */
 export type AIUsageResponse = { isUnlimited: boolean; dailyLimit: number | null; used: number; remaining: number | null; resetsAt: string };
+export type InsightSeverity = 'info' | 'warning' | 'critical';
+export type WeeklyRecommendation = {
+  id: string; recommendationType: string; title: string; description: string; dataJson?: string | null;
+  status: 'Pending' | 'Accepted' | 'Dismissed'; createdAt: string; expiresAt?: string | null;
+};
+/** Weekly summary of the last complete week. `writtenByAI` is false when only the numbers could be listed. */
+export type WeeklySummaryResponse = {
+  id: string; weekStart: string; weekEnd: string; title: string; summary: string;
+  severity: 'Info' | 'Warning' | 'Critical';
+  items: { title: string; content: string; severity: InsightSeverity }[];
+  recommendations: WeeklyRecommendation[]; writtenByAI: boolean; isRead: boolean; createdAt: string;
+};
+export type AcceptRecommendationResponse = { recommendation: WeeklyRecommendation; action?: AIActionResponse | null };
 export type SendAIChatMessageResponse = {
   conversationId: string; userMessage: AIChatMessageResponse; assistantMessage: AIChatMessageResponse; usage: AIUsageResponse;
 };

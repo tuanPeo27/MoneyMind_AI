@@ -287,14 +287,7 @@ public sealed class AIActionService(
             ?? list.FirstOrDefault(i => Fold(i.Name) == folded);
     }
 
-    private static string Fold(string value)
-    {
-        var decomposed = value.Trim().ToLowerInvariant().Replace('đ', 'd').Normalize(NormalizationForm.FormD);
-        var builder = new StringBuilder(decomposed.Length);
-        foreach (var ch in decomposed)
-            if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark) builder.Append(ch);
-        return string.Join(' ', builder.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
-    }
+    private static string Fold(string value) => TextFold.Fold(value);
 
     private static string? Str(JsonElement args, string name) =>
         args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
