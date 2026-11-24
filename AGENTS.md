@@ -137,7 +137,9 @@ AI không bao giờ tự lưu. Thêm một loại thao tác mới phải sửa *
 3. `backend/Services/Implementations/AIActionService.cs`: `Normalize`, `Resolve`, `ExecuteAsync` (gọi service có sẵn).
 4. `frontend/src/components/ambient-ai/AIActionCard.tsx`: tiêu đề, dòng tóm tắt, form sửa, `missing()`.
 
-Hiện có 5 loại: thêm giao dịch, thêm danh mục, tạo ngân sách, tạo quỹ, góp quỹ. Chưa có sửa hay xóa.
+Hiện có 6 loại: thêm giao dịch, thêm tài khoản, thêm danh mục, tạo ngân sách, tạo quỹ, góp quỹ. Chưa có sửa hay xóa.
+Ngân hàng / ví (Vietcombank, MoMo) là **tài khoản**, không phải danh mục: `ProposeAsync` bỏ `create_category` trùng tên
+một tài khoản. Tiền nhận vào tài khoản mới là `create_transaction` riêng, không đặt vào `initial_balance`.
 
 **Nhập nhanh** (`QuickEntry.tsx` trên trang Tổng quan): `POST api/ai/chat/messages` với `mode: "capture"`. Tin nhắn
 được lưu vào một hội thoại ẩn mỗi user (`AIConversation.Kind = QuickEntry`, không hiện trong danh sách chat, không gửi

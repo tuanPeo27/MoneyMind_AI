@@ -16,6 +16,7 @@ public sealed class AIActionService(
     AppDbContext db,
     IEncryptionService encryption,
     ITransactionService transactions,
+    IAccountService accounts,
     ICategoryService categories,
     IBudgetService budgets,
     IFinancialGoalService goals) : IAIActionService
@@ -40,6 +41,14 @@ public sealed class AIActionService(
         if (accepted.Count == 0) return [];
 
         var lookup = await LoadLookupAsync(userId, cancellationToken);
+        // A bank or wallet is an account. Drop a category the model named after an existing account or one it
+        // proposes in this same reply (it used to create a "Vietcombank" category instead of an account).
+        var accountNames = lookup.Accounts.Select(a => Fold(a.Name))
+            .Concat(accepted.Where(p => p.Name == AIActionTypes.CreateAccount).Select(p => Fold(Str(p.Args, "name") ?? "")))
+            .Where(n => n.Length > 0).ToHashSet();
+        accepted = accepted.Where(p => p.Name != AIActionTypes.CreateCategory
+            || !accountNames.Contains(Fold(Str(p.Args, "name") ?? ""))).ToList();
+        if (accepted.Count == 0) return [];
         var responses = new List<AIActionResponse>(accepted.Count);
         foreach (var proposal in accepted)
         {
@@ -146,6 +155,14 @@ public sealed class AIActionService(
                     TransactionSource.AIDraft);
                 return (await transactions.CreateAsync(userId, request, cancellationToken)).Id;
             }
+            case AIActionTypes.CreateAccount:
+            {
+                var balance = p.InitialBalance ?? 0m;
+                if (balance is < 0 or > MaxAmount) throw new BadRequestException("Số dư ban đầu không hợp lệ.");
+                var request = new CreateAccountRequest(RequireText(p.Name, 100, "Hãy nhập tên tài khoản."),
+                    ParseAccountType(p.AccountType) ?? throw new BadRequestException("Hãy chọn loại tài khoản."), balance);
+                return (await accounts.CreateAsync(userId, request, cancellationToken)).Id;
+            }
             case AIActionTypes.CreateCategory:
             {
                 var request = new UpsertCategoryRequest(RequireText(p.Name, 100, "Hãy nhập tên danh mục."),
@@ -193,6 +210,10 @@ public sealed class AIActionService(
             AccountName: Str(args, "account"),
             Date: Day(args, "date") ?? lookup.Today,
             Description: Clip(Str(args, "description"), 500)), lookup),
+        AIActionTypes.CreateAccount => new AIActionPayload(
+            Name: Clip(Str(args, "name"), 100),
+            AccountType: (ParseAccountType(Str(args, "account_type")) ?? GuessAccountType(Str(args, "name"))).ToString(),
+            InitialBalance: Num(args, "initial_balance") is { } initial && initial >= 0 ? initial : 0m),
         AIActionTypes.CreateCategory => new AIActionPayload(
             Type: ParseType(Str(args, "type"))?.ToString() ?? nameof(CategoryType.Expense),
             Name: Clip(Str(args, "name"), 100)),
@@ -309,6 +330,19 @@ public sealed class AIActionService(
 
     private static CategoryType? ParseType(string? value) =>
         Enum.TryParse<CategoryType>(value, ignoreCase: true, out var type) && Enum.IsDefined(type) ? type : null;
+
+    private static AccountType? ParseAccountType(string? value) =>
+        Enum.TryParse<AccountType>(value, ignoreCase: true, out var type) && Enum.IsDefined(type) ? type : null;
+
+    private static readonly string[] WalletWords = ["momo", "zalopay", "zalo pay", "vnpay", "shopeepay", "viettel money"];
+
+    /// <summary>When the model leaves the type out: "MoMo" is a wallet, "Tiền mặt" is cash, anything else a bank.</summary>
+    private static AccountType GuessAccountType(string? name)
+    {
+        var folded = Fold(name ?? "");
+        if (folded.StartsWith("tien mat") || folded.StartsWith("cash")) return AccountType.Cash;
+        return WalletWords.Any(folded.Contains) || folded.StartsWith("vi ") ? AccountType.EWallet : AccountType.Bank;
+    }
 
     private static CategoryType RequireType(string? value) =>
         ParseType(value) ?? throw new BadRequestException("Loại phải là Chi tiêu hoặc Thu nhập.");

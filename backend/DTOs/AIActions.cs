@@ -6,6 +6,7 @@ namespace backend.DTOs;
 public static class AIActionTypes
 {
     public const string CreateTransaction = "create_transaction";
+    public const string CreateAccount = "create_account";
     public const string CreateCategory = "create_category";
     public const string CreateBudget = "create_budget";
     public const string CreateSavingsGoal = "create_savings_goal";
@@ -15,7 +16,7 @@ public static class AIActionTypes
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>
     {
-        CreateTransaction, CreateCategory, CreateBudget, CreateSavingsGoal, ContributeToGoal
+        CreateTransaction, CreateAccount, CreateCategory, CreateBudget, CreateSavingsGoal, ContributeToGoal
     };
 }
 
@@ -25,7 +26,9 @@ public static class AIActionTypes
 /// </summary>
 /// <param name="Type">create_transaction / create_category: "Expense" or "Income".</param>
 /// <param name="Date">create_transaction: the day of the transaction.</param>
-/// <param name="Name">create_category / create_savings_goal.</param>
+/// <param name="Name">create_account / create_category / create_savings_goal.</param>
+/// <param name="AccountType">create_account: "Cash", "Bank" or "EWallet".</param>
+/// <param name="InitialBalance">create_account: money already in the account (VND).</param>
 /// <param name="AccountId">contribute_to_goal: null means the money is only recorded in the fund.</param>
 public sealed record AIActionPayload(
     string? Type = null,
@@ -43,7 +46,9 @@ public sealed record AIActionPayload(
     decimal? TargetAmount = null,
     DateOnly? Deadline = null,
     Guid? GoalId = null,
-    string? GoalName = null);
+    string? GoalName = null,
+    string? AccountType = null,
+    decimal? InitialBalance = null);
 
 /// <param name="ResultId">The record created when the user confirmed it.</param>
 public sealed record AIActionResponse(

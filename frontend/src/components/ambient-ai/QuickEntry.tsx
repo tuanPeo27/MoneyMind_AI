@@ -26,21 +26,25 @@ export function parseQuickEntry(text: string): Partial<Transaction> {
 }
 
 /**
- * Pending actions that can be saved without asking anything: complete ones, plus transactions whose only gap is a
- * category proposed in the same batch (it is saved first, and the server matches the name again on confirm).
- * Categories come first for that reason.
+ * Pending actions that can be saved without asking anything: complete ones, plus transactions whose only gaps are a
+ * category or account proposed in the same batch (saved first; the server matches the name again on confirm).
  */
-function readyToSave(actions: AIActionResponse[]): AIActionResponse[] {
+export function readyToSave(actions: AIActionResponse[]): AIActionResponse[] {
   const pending = actions.filter(a => a.status === 'Pending');
-  const newCategories = pending.filter(a => a.type === 'create_category' && !missing(a.type, a.payload).length);
+  const complete = (type: AIActionResponse['type']) => pending.filter(a => a.type === type && !missing(a.type, a.payload).length);
+  const newCategories = complete('create_category'), newAccounts = complete('create_account');
+  const covered = (a: AIActionResponse, gap: string) =>
+    gap === 'category' ? newCategories.some(c => fold(c.payload.name) === fold(a.payload.categoryName)
+      && (c.payload.type ?? 'Expense') === (a.payload.type ?? 'Expense'))
+    : gap === 'account' ? newAccounts.some(c => fold(c.payload.name) === fold(a.payload.accountName))
+    : false;
   const ready = pending.filter(a => {
     const gaps = missing(a.type, a.payload);
-    if (!gaps.length) return true;
-    return a.type === 'create_transaction' && gaps.length === 1 && gaps[0] === 'category'
-      && newCategories.some(c => fold(c.payload.name) === fold(a.payload.categoryName)
-        && (c.payload.type ?? 'Expense') === (a.payload.type ?? 'Expense'));
+    return !gaps.length || (a.type === 'create_transaction' && gaps.every(gap => covered(a, gap)));
   });
-  return [...ready.filter(a => a.type === 'create_category'), ...ready.filter(a => a.type !== 'create_category')];
+  // New accounts and categories first: the transactions that use them are matched by name when confirmed.
+  const rank = (a: AIActionResponse) => a.type === 'create_account' || a.type === 'create_category' ? 0 : 1;
+  return [...ready].sort((a, b) => rank(a) - rank(b));
 }
 
 /** Quick entry on the overview: type "cà phê 35k, grab 50k", check the cards, save. */

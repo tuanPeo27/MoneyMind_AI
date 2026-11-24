@@ -16,8 +16,8 @@ _DECLARATIONS = [
             "properties": {
                 "type": {"type": "string", "enum": ["Expense", "Income"]},
                 "amount": _VND,
-                "category": {"type": "string", "description": "Exact category name from FINANCIAL_CONTEXT.categories, or one proposed with create_category in this turn."},
-                "account": {"type": "string", "description": "Exact account name from FINANCIAL_CONTEXT.accounts. Omit if the user did not say."},
+                "category": {"type": "string", "description": "Exact name from FINANCIAL_CONTEXT.expenseCategories or incomeCategories, or one proposed with create_category in this turn."},
+                "account": {"type": "string", "description": "Exact account name from FINANCIAL_CONTEXT.accounts, or one proposed with create_account in this turn. Omit if the user did not say."},
                 "date": _DATE,
                 "description": {"type": "string", "description": "Short note, e.g. 'Ăn trưa'."},
             },
@@ -25,8 +25,25 @@ _DECLARATIONS = [
         },
     ),
     types.FunctionDeclaration(
+        name="create_account",
+        description="Propose a new account (wallet) that holds money: cash, a bank such as Vietcombank, or an "
+                    "e-wallet such as MoMo. Banks and wallets are accounts, never categories.",
+        parameters_json_schema={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "e.g. 'Vietcombank', 'MoMo'."},
+                "account_type": {"type": "string", "enum": ["Cash", "Bank", "EWallet"]},
+                "initial_balance": {**_VND, "description": "Only when the user states money already in it (e.g. 'số dư 2tr'). "
+                                    "Omit otherwise. Never put the amount of a transaction here: money received into the "
+                                    "account is a separate create_transaction, or it would be counted twice."},
+            },
+            "required": ["name", "account_type"],
+        },
+    ),
+    types.FunctionDeclaration(
         name="create_category",
-        description="Propose a new category when no existing one fits.",
+        description="Propose a new spending or income category (what the money is for, e.g. 'Thú cưng') when no "
+                    "existing one fits. Never use it for a bank, wallet or account.",
         parameters_json_schema={
             "type": "object",
             "properties": {
@@ -42,7 +59,7 @@ _DECLARATIONS = [
         parameters_json_schema={
             "type": "object",
             "properties": {
-                "category": {"type": "string", "description": "Exact expense category name from FINANCIAL_CONTEXT.categories."},
+                "category": {"type": "string", "description": "Exact name from FINANCIAL_CONTEXT.expenseCategories."},
                 "amount": _VND,
                 "start_date": _DATE,
                 "end_date": _DATE,
@@ -82,9 +99,9 @@ _DECLARATIONS = [
 TOOLS = [types.Tool(function_declarations=_DECLARATIONS)]
 ACTION_NAMES = frozenset(d.name for d in _DECLARATIONS)
 
-# Quick entry only records transactions (and a missing category for them).
-CAPTURE_TOOLS = [types.Tool(function_declarations=[d for d in _DECLARATIONS if d.name in {"create_transaction", "create_category"}])]
-CAPTURE_ACTION_NAMES = frozenset({"create_transaction", "create_category"})
+# Quick entry only records transactions (and a missing category or account for them).
+CAPTURE_ACTION_NAMES = frozenset({"create_transaction", "create_category", "create_account"})
+CAPTURE_TOOLS = [types.Tool(function_declarations=[d for d in _DECLARATIONS if d.name in CAPTURE_ACTION_NAMES])]
 
 
 def lite_first(models: list[str]) -> list[str]:

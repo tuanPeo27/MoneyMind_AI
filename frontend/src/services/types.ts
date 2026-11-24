@@ -90,7 +90,7 @@ export type UpsertGoalRequest = { name: string; targetAmount: number; deadline?:
 export type AIConversationResponse = {
   id: string; title: string; createdAt: string; updatedAt: string; isArchived: boolean;
 };
-export type AIActionType = 'create_transaction' | 'create_category' | 'create_budget' | 'create_savings_goal' | 'contribute_to_goal';
+export type AIActionType = 'create_transaction' | 'create_account' | 'create_category' | 'create_budget' | 'create_savings_goal' | 'contribute_to_goal';
 export type AIActionStatus = 'Pending' | 'Confirmed' | 'Cancelled';
 /**
  * Details of a change the AI proposed. Each type uses only its own fields. Names are what the AI said; ids are the
@@ -102,6 +102,8 @@ export type AIActionPayload = {
   date?: string | null; description?: string | null; name?: string | null;
   startDate?: string | null; endDate?: string | null; alertThreshold?: number | null;
   targetAmount?: number | null; deadline?: string | null; goalId?: string | null; goalName?: string | null;
+  /** create_account: the kind of account and the money already in it. */
+  accountType?: AccountType | null; initialBalance?: number | null;
 };
 export type AIActionResponse = {
   id: string; type: AIActionType; status: AIActionStatus; payload: AIActionPayload;

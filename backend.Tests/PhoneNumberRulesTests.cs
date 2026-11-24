@@ -38,7 +38,8 @@ public class PhoneNumberRulesTests
         var request = new UpdateProfileRequest("Nguyen Van A", phone);
         var results = new List<ValidationResult>();
 
-        var actual = Validator.TryValidateObject(request, new ValidationContext(request), results, true);
+        // Same rules as ASP.NET model binding, which reads the attributes from the record's constructor parameters.
+        var actual = DtoValidationTests.IsValid(request);
 
         Assert.Equal(valid, actual);
     }
@@ -57,7 +58,8 @@ public class PhoneNumberRulesTests
             "Lunch", DateTime.UtcNow);
         var results = new List<ValidationResult>();
 
-        var actual = Validator.TryValidateObject(request, new ValidationContext(request), results, true);
+        // Same rules as ASP.NET model binding, which reads the attributes from the record's constructor parameters.
+        var actual = DtoValidationTests.IsValid(request);
 
         Assert.Equal(valid, actual);
     }

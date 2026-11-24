@@ -99,8 +99,14 @@ class ToolDeclarationTests(unittest.TestCase):
         return TOOLS[0].function_declarations
 
     def test_action_names(self):
-        self.assertEqual(ACTION_NAMES, {"create_transaction", "create_category", "create_budget",
+        self.assertEqual(ACTION_NAMES, {"create_transaction", "create_account", "create_category", "create_budget",
                                         "create_savings_goal", "contribute_to_goal"})
+
+    def test_account_types_match_the_backend_enum(self):
+        account = next(d for d in self.declarations() if d.name == "create_account")
+        self.assertEqual(account.parameters_json_schema["properties"]["account_type"]["enum"], ["Cash", "Bank", "EWallet"])
+        category = next(d for d in self.declarations() if d.name == "create_category")
+        self.assertIn("never use it for a bank", category.description.lower())
 
     def test_names_match_the_backend_action_types(self):
         source = (Path(__file__).resolve().parents[2] / "backend" / "DTOs" / "AIActions.cs").read_text(encoding="utf-8")
@@ -142,6 +148,7 @@ class ToolDeclarationTests(unittest.TestCase):
         # Mirrors the keys AIActionService.Normalize reads.
         expected = {
             "create_transaction": {"type", "amount", "category", "account", "date", "description"},
+            "create_account": {"name", "account_type", "initial_balance"},
             "create_category": {"name", "type"},
             "create_budget": {"amount", "category", "start_date", "end_date", "alert_threshold"},
             "create_savings_goal": {"name", "target_amount", "deadline"},

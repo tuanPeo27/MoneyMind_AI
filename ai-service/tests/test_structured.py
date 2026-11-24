@@ -177,7 +177,7 @@ class CaptureModeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fake.calls, ["gemini-3.5-flash-lite"])
         self.assertEqual([a.name for a in result.actions], ["create_transaction"])
         names = {fn.name for tool in fake.configs[0].tools for fn in tool.function_declarations}
-        self.assertEqual(names, {"create_transaction", "create_category"})
+        self.assertEqual(names, {"create_transaction", "create_category", "create_account"})
 
     async def test_chat_mode_keeps_main_model(self):
         service, fake = make_service({m: answer() for m in MODELS})

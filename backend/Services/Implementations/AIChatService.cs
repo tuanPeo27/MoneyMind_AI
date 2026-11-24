@@ -300,7 +300,7 @@ public sealed class AIChatService(
     /// <summary>Highlight for a reply that only proposes actions (the model writes no intent tag then).</summary>
     private static string? IntentFor(IReadOnlyList<AIProposedAction> proposals) => proposals.FirstOrDefault()?.Name switch
     {
-        AIActionTypes.CreateTransaction or AIActionTypes.CreateCategory => "transaction_help",
+        AIActionTypes.CreateTransaction or AIActionTypes.CreateCategory or AIActionTypes.CreateAccount => "transaction_help",
         AIActionTypes.CreateBudget => "budget_advice",
         AIActionTypes.CreateSavingsGoal or AIActionTypes.ContributeToGoal => "saving_goal",
         _ => null

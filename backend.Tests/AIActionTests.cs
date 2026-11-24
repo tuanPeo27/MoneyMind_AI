@@ -24,7 +24,7 @@ public class AIActionServiceTests : DbTestBase
         var notifications = new FakeNotifications();
         var budgets = new BudgetService(Db, notifications, NullLogger<BudgetService>.Instance, _cache);
         var transactions = new TransactionService(Db, budgets, NullLogger<TransactionService>.Instance);
-        _sut = new AIActionService(Db, new EncryptionService(new FakeKeys()), transactions,
+        _sut = new AIActionService(Db, new EncryptionService(new FakeKeys()), transactions, new AccountService(Db),
             new CategoryService(Db, new FakeAudit()), budgets, new FinancialGoalService(Db, notifications, _cache));
 
         var conversation = new AIConversation { UserId = UserId, TitleCipher = [1], TitleNonce = new byte[12], KeyVersion = 1 };
@@ -70,6 +70,74 @@ public class AIActionServiceTests : DbTestBase
     {
         var many = Enumerable.Range(0, 8).Select(i => Proposal(AIActionTypes.CreateCategory, new { name = "C" + i })).ToList();
         Assert.Equal(AIActionTypes.MaxPerMessage, (await _sut.ProposeAsync(UserId, _messageId, many)).Count);
+    }
+
+    // ---- create_account ----
+
+    [Theory]
+    [InlineData("Vietcombank", null, "Bank")]
+    [InlineData("MoMo", null, "EWallet")]
+    [InlineData("Ví ZaloPay", null, "EWallet")]
+    [InlineData("Tiền mặt 2", null, "Cash")]
+    [InlineData("Techcombank", "EWallet", "EWallet")]
+    public async Task ProposeAccount_UsesTheGivenTypeOrGuessesItFromTheName(string name, string? type, string expected)
+    {
+        var action = await ProposeOne(AIActionTypes.CreateAccount, new { name, account_type = type });
+        Assert.Equal(expected, action.Payload.AccountType);
+        Assert.Equal(0m, action.Payload.InitialBalance);
+    }
+
+    [Fact]
+    public async Task ConfirmAccount_CreatesTheAccountWithItsOpeningBalance()
+    {
+        var action = await ProposeOne(AIActionTypes.CreateAccount,
+            new { name = "Vietcombank", account_type = "Bank", initial_balance = 2_000_000 });
+        var confirmed = await _sut.ConfirmAsync(UserId, action.Id, null);
+        var account = await Db.Accounts.AsNoTracking().SingleAsync(a => a.Id == confirmed.ResultId);
+        Assert.Equal(("Vietcombank", AccountType.Bank, 2_000_000m, UserId),
+            (account.Name, account.AccountType, account.InitialBalance, account.UserId));
+    }
+
+    [Fact]
+    public async Task ConfirmAccount_NegativeBalanceIsRejected()
+    {
+        var action = await ProposeOne(AIActionTypes.CreateAccount, new { name = "Vietcombank", account_type = "Bank" });
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.ConfirmAsync(UserId, action.Id,
+            action.Payload with { InitialBalance = -1 }));
+        Assert.Equal(AIActionStatus.Pending, (await Db.AIActions.AsNoTracking().SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task Propose_DropsACategoryNamedAfterAnAccount()
+    {
+        AddAccount(name: "Vietcombank");
+        var result = await _sut.ProposeAsync(UserId, _messageId, [
+            Proposal(AIActionTypes.CreateCategory, new { name = "vietcombank", type = "Income" }),
+            Proposal(AIActionTypes.CreateAccount, new { name = "MoMo" }),
+            Proposal(AIActionTypes.CreateCategory, new { name = "Momo", type = "Expense" }),
+            Proposal(AIActionTypes.CreateCategory, new { name = "Thú cưng", type = "Expense" }),
+        ]);
+        Assert.Equal([AIActionTypes.CreateAccount, AIActionTypes.CreateCategory], result.Select(a => a.Type));
+        Assert.Equal("Thú cưng", result[1].Payload.Name);
+    }
+
+    [Fact]
+    public async Task ConfirmTransaction_FindsAnAccountCreatedInTheSameReply()
+    {
+        var salary = AddCategory("Lương", CategoryType.Income);
+        AddAccount(name: "Tiền mặt");
+        var proposed = await _sut.ProposeAsync(UserId, _messageId, [
+            Proposal(AIActionTypes.CreateAccount, new { name = "Vietcombank", account_type = "Bank" }),
+            Proposal(AIActionTypes.CreateTransaction, new { type = "Income", amount = 5_000_000, category = "Lương", account = "Vietcombank" }),
+        ]);
+        await Db.SaveChangesAsync();
+        Db.ChangeTracker.Clear();
+        Assert.Null(proposed[1].Payload.AccountId); // the account does not exist yet
+
+        var account = await _sut.ConfirmAsync(UserId, proposed[0].Id, null);
+        var transaction = await _sut.ConfirmAsync(UserId, proposed[1].Id, null);
+        Assert.Equal(account.ResultId, transaction.Payload.AccountId);
+        Assert.Equal(salary.Id, transaction.Payload.CategoryId);
     }
 
     [Fact]

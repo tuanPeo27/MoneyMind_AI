@@ -42,6 +42,24 @@ public class DtoValidationTests
         return true;
     }
 
+    /// <summary>
+    /// ASP.NET MVC throws InvalidOperationException (a 500 on every request) when a record has validation attributes
+    /// on a property that comes from its primary constructor, e.g. <c>[property: Required]</c>. They must be on the
+    /// constructor parameter, which the helper above validates.
+    /// </summary>
+    [Fact]
+    public void RequestRecordsKeepValidationOnConstructorParameters()
+    {
+        var offenders =
+            from type in typeof(RefreshTokenRequest).Assembly.GetTypes()
+            where type.Namespace == typeof(RefreshTokenRequest).Namespace && type.GetMethod("<Clone>$") is not null
+            from parameter in type.GetConstructors().SelectMany(c => c.GetParameters())
+            let property = type.GetProperty(parameter.Name!)
+            where property is not null && property.GetCustomAttributes(typeof(ValidationAttribute), true).Length > 0
+            select $"{type.Name}.{property.Name}";
+        Assert.Empty(offenders.Distinct());
+    }
+
     private static string Text(int length) => new('a', length);
 
     // ---- RegisterRequest ----

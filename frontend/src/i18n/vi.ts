@@ -650,4 +650,7 @@ export const vi: Record<string, string> = {
   'Dismissed': 'Đã bỏ qua',
   // Weekly summary retry
   'Try again with AI': 'Thử lại với AI',
+  // AI action: create an account
+  'Add an account': 'Thêm tài khoản',
+  'Opening balance': 'Số dư ban đầu',
 };
