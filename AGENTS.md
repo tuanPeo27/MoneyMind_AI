@@ -20,13 +20,57 @@ Trình duyệt **không bao giờ** gọi ai-service hay Gemini. Khóa Gemini ch
 ## Kiểm tra trước khi báo xong
 
 ```powershell
-cd backend;    dotnet build                                  # phải 0 Error(s)
-cd frontend;   pnpm build                                    # chạy tsc --noEmit rồi vite build
-cd ai-service; .\.venv\Scripts\python -m unittest discover -s tests
+cd backend.Tests; dotnet test --nologo                       # build cả backend, phải 0 lỗi và 0 test fail
+cd frontend;      npm test                                   # vitest
+cd frontend;      npm run build                              # tsc --noEmit (gồm cả file test) rồi vite build
+cd ai-service;    .\.venv\Scripts\python -m unittest discover -s tests
 ```
 
-Backend và frontend chưa có test project. Khi đổi API, hãy thử thật qua Swagger (`http://localhost:5146/swagger`)
-hoặc script, và **xóa dữ liệu thử** sau đó (người dùng thử đặt email dạng `zz-...@example.com`).
+GitHub Actions (`.github/workflows/ci.yml`) chạy đúng các lệnh này cho mỗi push và pull request vào `main`.
+Đỏ trên CI nghĩa là chưa xong, kể cả khi `dotnet build` ở máy vẫn qua.
+
+Khi đổi API, ngoài test hãy thử thật qua Swagger (`http://localhost:5146/swagger`) hoặc script, và **xóa dữ liệu thử**
+sau đó (người dùng thử đặt email dạng `zz-...@example.com`).
+
+## Test
+
+| Phần | Công cụ | Vị trí | Ghi chú |
+|---|---|---|---|
+| Backend | xUnit + SQLite in-memory | `backend.Tests/` | Không dùng EF InMemory vì `ExecuteUpdate`/`ExecuteDelete` cần provider quan hệ. Decimal lưu dạng double (`DecimalAsDoubleModelCustomizer`). Fake viết tay, không dùng Moq. |
+| AI service | `unittest` (stdlib) | `ai-service/tests/` | Không cần key thật, không gọi Gemini. Gọi thẳng hàm endpoint, không dùng `TestClient`. |
+| Frontend | vitest (+ jsdom, Testing Library cho component) | `src/**/*.test.ts(x)` | Test chạy trong môi trường Node; file component cần docblock `// @vitest-environment jsdom` và `src/test/dom.tsx`. |
+
+- Thêm hoặc đổi dịch vụ AI, loại thao tác, controller: sửa test tương ứng trong cùng commit.
+  `ApiSecurityContractTests` đếm số controller và liệt kê endpoint ẩn danh. Thêm controller thì cập nhật số đó, và
+  endpoint mới phải có `[Authorize]` (hoặc `[AllowAnonymous]` có chủ đích).
+- Thêm chuỗi vào `vi.ts`: `vi.test.ts` kiểm tra placeholder (`{name}`) ở hai bản phải khớp.
+- `test_intent_filter_and_tools.py` đối chiếu tên action và giới hạn 5 với `backend/DTOs/AIActions.cs`. Thêm loại
+  thao tác AI mới mà quên một trong hai phía thì test này báo.
+- File test frontend nằm trong `src/` và được `tsc` kiểm tra: lỗi kiểu trong test làm hỏng `npm run build`.
+- `AmountInput.test.tsx` có một `it.fails` ghi lại lỗi đã biết (gõ `.5` ở USD ra `5.`). Khi sửa lỗi, test này sẽ
+  báo và cần đổi thành `it`.
+
+## Docker
+
+Mỗi phần có `Dockerfile` riêng (`backend/`, `ai-service/`, `frontend/`) và `docker-compose.yml` ở gốc chạy cả hệ thống:
+
+```powershell
+Copy-Item .env.example .env      # điền DB_PASSWORD, SERVICE_KEY, GEMINI_API_KEY, JWT_KEY, ENCRYPTION_MASTER_KEY, SEED_ADMIN_PASSWORD
+docker compose up --build        # mở http://localhost:8080
+```
+
+- Backend **không tự migrate khi khởi động**. Compose chạy service `migrate` (target `migrate` của `backend/Dockerfile`,
+  là EF bundle) trước backend. Đổi model thì tạo migration như mục dưới, image tự áp dụng khi chạy lại.
+- ai-service chỉ ở mạng nội bộ của compose (không mở cổng ra ngoài). Trong container nó nghe `0.0.0.0`.
+- nginx của frontend chuyển `/api` và `/hubs` (SignalR/WebSocket) sang `backend:8080`, tắt buffer để câu trả lời AI
+  stream được. Không đặt proxy khác chen giữa mà bật buffer.
+- Bí mật chỉ nằm trong `.env` (git-ignored) hoặc biến môi trường của nơi chạy, không đưa vào image.
+
+## Deploy
+
+`.github/workflows/deploy.yml` chạy sau khi CI xanh trên `main`: build image lên GHCR rồi SSH vào máy chủ chạy
+`deploy/docker-compose.prod.yml`. Nó chỉ chạy khi biến repo `DEPLOY_ENABLED=true`. Hướng dẫn cài máy chủ, secret cần
+khai báo và cách rollback nằm ở [deploy/README.md](./deploy/README.md). Database production là Azure SQL, không chạy trong compose.
 
 ## Quy ước backend
 
@@ -90,11 +134,13 @@ Hiện có 5 loại: thêm giao dịch, thêm danh mục, tạo ngân sách, t�
   **Khóa trùng trong `vi.ts` làm hỏng build (TS1117)**: tìm khóa trước khi thêm.
 - Sau khi một thao tác ngoài trang hiện tại đổi dữ liệu, phát `window` event `mm-finance-changed`
   (`FINANCE_CHANGED_EVENT`) để App tải lại giao dịch, ngân sách, quỹ, thông báo.
-- README dùng `pnpm`; repo có cả `package-lock.json`. Đừng tự đổi lock file khi không được yêu cầu.
+- Team dùng **npm** (`frontend/package-lock.json`, cài bằng `npm ci --legacy-peer-deps`). `pnpm-lock.yaml` là phần thừa từ trước.
+  Thêm hoặc đổi dependency thì chạy `npm install --legacy-peer-deps` và commit `package-lock.json`, nếu không CI và Docker sẽ lỗi.
 
 ## Bẫy trên Windows / PowerShell
 
 - In tiếng Việt từ Python ra console: đặt `$env:PYTHONIOENCODING='utf-8'`, nếu không sẽ gặp `UnicodeEncodeError`.
+- `npm test` bị chặn bởi execution policy của PowerShell: dùng `npm.cmd test`, hoặc `node node_modules\vitest\vitest.mjs run`.
 - Hashtable PowerShell **không phân biệt hoa thường** (`'Amount'` và `'amount'` là trùng khóa).
 - Ghi file bằng `[IO.File]::WriteAllText(..., UTF8 không BOM)`; giữ nguyên kiểu xuống dòng (repo có cả CRLF và LF).
 - Lỗi `Errno 10048` / exe bị khóa: một tiến trình cũ đang giữ cổng. Kiểm tra `Get-NetTCPConnection -LocalPort <cổng>`
