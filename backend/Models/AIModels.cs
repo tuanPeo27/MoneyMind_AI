@@ -113,3 +113,24 @@ public sealed class CategorySuggestionLog
     public string? Reason { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+/// <summary>
+/// A change the AI assistant proposed in a reply (add a transaction, a category, ...). It is only carried out when the
+/// user confirms it. The details are encrypted with the user's key, like the chat message they came from.
+/// </summary>
+public sealed class AIAction
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    /// <summary>The assistant message that proposed it.</summary>
+    public Guid MessageId { get; set; }
+    public string ActionType { get; set; } = string.Empty;
+    public byte[] PayloadCipher { get; set; } = [];
+    public byte[] PayloadNonce { get; set; } = [];
+    public int KeyVersion { get; set; }
+    public AIActionStatus Status { get; set; } = AIActionStatus.Pending;
+    /// <summary>Id of the record created when the action was confirmed (transaction, category, budget or goal).</summary>
+    public Guid? ResultId { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ResolvedAt { get; set; }
+}

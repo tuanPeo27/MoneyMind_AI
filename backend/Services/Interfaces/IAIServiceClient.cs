@@ -6,6 +6,10 @@ namespace backend.Services.Interfaces;
 public interface IAIServiceClient
 {
     Task<AIChatResult> ChatAsync(AIChatPayload payload, CancellationToken cancellationToken = default);
+
+    /// <summary>Same as <see cref="ChatAsync"/>, calling <paramref name="onDelta"/> with each piece of text as it arrives.</summary>
+    Task<AIChatResult> StreamChatAsync(AIChatPayload payload, Func<string, Task>? onDelta,
+        CancellationToken cancellationToken = default);
     Task<AICategorizeResult> CategorizeAsync(AICategorizePayload payload,
         CancellationToken cancellationToken = default);
     Task<AIInsightResult> GenerateInsightsAsync(AIInsightPayload payload,

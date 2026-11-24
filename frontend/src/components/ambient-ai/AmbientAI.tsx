@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Sparkles, ArrowUp, ArrowUpRight, ArrowLeft, Plus, ShieldCheck, ChevronRight, History, Trash2 } from 'lucide-react';
 import { useAmbientAI, type AIMessageData } from './AmbientAIProvider';
+import { AIActionCard } from './AIActionCard';
 import { useSession, type AIUsageResponse } from '../../services';
 import { type Highlight } from './mockAssistant';
 import { Button, IconButton, Modal } from '../ui';
@@ -68,13 +69,17 @@ export function AmbientAIFab() {
   </div>;
 }export function AIMessage({ message }: { message: AIMessageData }) {
   const { t } = useLanguage();
-  const { inspect } = useAmbientAI();
+  const { inspect, confirmAction, cancelAction } = useAmbientAI();
+  // Until the first words arrive the "reading your financial context" placeholder stands in for this message.
+  if (message.streaming && !message.text) return null;
   return <article className={`motion-safe:animate-[message-in_250ms_ease-out] ${message.role === 'user' ? 'ml-auto max-w-[90%] glass rounded-2xl px-4 py-3' : 'space-y-3 py-3'}`}>
     <div className="flex items-center gap-2 text-xs text-muted">{message.role === 'assistant' && <Sparkles className="h-3.5 w-3.5 shrink-0 text-ai" aria-hidden="true" />}<span>{message.role === 'user' ? t("You") : 'MoneyMind · Gemini'}</span><span className="ml-auto">{message.time}</span></div>
     <p className="break-words text-sm leading-7 text-ink">{message.text}</p>
     {message.metrics && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{message.metrics.map(metric => <div key={metric.label} className="glass rounded-xl px-4 py-3"><p className="text-xs text-muted">{metric.label}</p><p className="mt-1 text-[1rem] font-semibold tabular-nums">{metric.value}</p></div>)}</div>}
-    {message.role === 'assistant' && message.highlight && <button onClick={() => inspect(message.highlight!)} className="flex min-h-11 items-center gap-2 text-sm font-medium text-ai hover:text-ink focus-visible:ring-2 focus-visible:ring-ai">{t("Show me in my dashboard")}<ArrowUpRight className="h-4 w-4 shrink-0" /></button>}
-    {message.role === 'assistant' && message.context && <p className="text-xs text-muted">{t(message.context)}</p>}
+    {message.actions?.length ? <div className="space-y-2">{message.actions.map(action => <AIActionCard key={action.id} action={action}
+      onConfirm={payload => confirmAction(message.id, action.id, payload)} onCancel={() => cancelAction(message.id, action.id)} />)}</div> : null}
+    {message.role === 'assistant' && !message.streaming && message.highlight && <button onClick={() => inspect(message.highlight!)} className="flex min-h-11 items-center gap-2 text-sm font-medium text-ai hover:text-ink focus-visible:ring-2 focus-visible:ring-ai">{t("Show me in my dashboard")}<ArrowUpRight className="h-4 w-4 shrink-0" /></button>}
+    {message.role === 'assistant' && !message.streaming && message.context && <p className="text-xs text-muted">{t(message.context)}</p>}
   </article>;
 }
 export function EdgeGlow() {
@@ -216,10 +221,13 @@ function FocusedAssistant({ children, onClose }: { children: ReactNode; onClose:
   const { t } = useLanguage();
   const { messages, busy } = useAmbientAI();
   const ref = useRef<HTMLDivElement>(null);
+  const last = messages[messages.length - 1];
+  // Waiting for the first words: nothing of the reply is on screen yet.
+  const waiting = busy && !(last?.role === 'assistant' && last.text);
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
-  }, [messages.length, busy]);
-  return <div ref={ref} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-2"><div aria-live="polite" aria-relevant="additions" className="space-y-4">{messages.map(message => <AIMessage key={message.id} message={message} />)}</div>{busy && <div role="status" className="space-y-3 py-5"><span className="flex items-center gap-2 text-xs text-ai"><Sparkles className="h-4 w-4 motion-safe:animate-pulse" />{t("Reading your financial context")}<span className="flex gap-1">{[0, 1, 2].map(i => <span key={i} className="h-1 w-1 rounded-full bg-ai motion-safe:animate-pulse" style={{ animationDelay: `${i * 180}ms` }} />)}</span></span><div className="h-2.5 w-5/6 rounded bg-line motion-safe:animate-pulse" /><div className="h-2.5 w-2/3 rounded bg-line motion-safe:animate-pulse" /></div>}</div>;
+  }, [messages.length, busy, last?.text.length, last?.actions?.length]);
+  return <div ref={ref} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-2"><div aria-live="polite" aria-relevant="additions" className="space-y-4">{messages.map(message => <AIMessage key={message.id} message={message} />)}</div>{waiting && <div role="status" className="space-y-3 py-5"><span className="flex items-center gap-2 text-xs text-ai"><Sparkles className="h-4 w-4 motion-safe:animate-pulse" />{t("Reading your financial context")}<span className="flex gap-1">{[0, 1, 2].map(i => <span key={i} className="h-1 w-1 rounded-full bg-ai motion-safe:animate-pulse" style={{ animationDelay: `${i * 180}ms` }} />)}</span></span><div className="h-2.5 w-5/6 rounded bg-line motion-safe:animate-pulse" /><div className="h-2.5 w-2/3 rounded bg-line motion-safe:animate-pulse" /></div>}</div>;
 }
 export function HighlightCard({ target, children, onInspect }: { target: Highlight; children: ReactNode; onInspect: () => void }) {
   const { t } = useLanguage();

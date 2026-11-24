@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace backend.DTOs;
 
 // Contracts exchanged with the external AI service (see IAIServiceClient).
@@ -8,8 +10,18 @@ public sealed record AIChatTurn(string Role, string Content);
 public sealed record AIChatPayload(string Message, IReadOnlyList<AIChatTurn> History, string FinancialContext,
     string? Language = null);
 
+/// <summary>A function call from the model, exactly as the AI service received it (arguments not yet checked).</summary>
+public sealed record AIProposedAction(string Name, JsonElement Args);
+
 /// <param name="Model">The model that answered. It differs from the first choice when the AI service fell back.</param>
-public sealed record AIChatResult(string Content, string? Intent, int? TokenUsage, string? Provider, string? Model = null);
+/// <param name="Actions">Changes the model proposed. They still need the user's confirmation.</param>
+public sealed record AIChatResult(string Content, string? Intent, int? TokenUsage, string? Provider, string? Model = null,
+    IReadOnlyList<AIProposedAction>? Actions = null);
+
+/// <summary>One line of the AI service's streamed answer.</summary>
+/// <param name="Type">delta, action, done or error.</param>
+public sealed record AIStreamEvent(string Type, string? Text = null, string? Name = null, JsonElement? Args = null,
+    string? Intent = null, int? TokenUsage = null, string? Model = null, string? Provider = null, string? Message = null);
 
 public sealed record AICategoryOption(Guid Id, string Name);
 

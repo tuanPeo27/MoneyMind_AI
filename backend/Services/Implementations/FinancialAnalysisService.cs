@@ -7,12 +7,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace backend.Services.Implementations;
 
-public sealed class FinancialAnalysisService(AppDbContext db) : IFinancialAnalysisService
+public sealed class FinancialAnalysisService(AppDbContext db, FinancialContextCache contextCache) : IFinancialAnalysisService
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     public async Task<FinancialSummary> GetSummaryAsync(Guid userId, DateTime start, DateTime end,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await GetSummaryAsync(userId, start, end, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
+
+    private async Task<FinancialSummary> GetSummaryAsync(Guid userId, DateTime start, DateTime end, DateOnly today,
+        CancellationToken cancellationToken)
     {
         var categoryRows = await (from t in db.Transactions.AsNoTracking()
                                   join c in db.Categories on t.CategoryId equals c.Id
@@ -24,26 +28,28 @@ public sealed class FinancialAnalysisService(AppDbContext db) : IFinancialAnalys
         var income = categoryRows.Where(x => x.Type == TransactionType.Income).Sum(x => x.Total);
         var expense = categoryRows.Where(x => x.Type == TransactionType.Expense).Sum(x => x.Total);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        // One query for every active budget; the amount spent is a subquery per row instead of a round trip per budget.
+        // Transaction dates are stored at midnight UTC of their day, so a budget covers [StartDate, EndDate + 1 day).
         var budgetRows = await (from b in db.Budgets.AsNoTracking()
                                 join c in db.Categories on b.CategoryId equals c.Id
                                 where b.UserId == userId && b.StartDate <= today && b.EndDate >= today
-                                select new { Budget = b, CategoryName = c.Name })
+                                select new
+                                {
+                                    c.Name,
+                                    b.Amount,
+                                    Spent = db.Transactions
+                                        .Where(t => t.UserId == userId && t.CategoryId == b.CategoryId
+                                            && t.Type == TransactionType.Expense
+                                            && DateOnly.FromDateTime(t.TransactionDate) >= b.StartDate
+                                            && DateOnly.FromDateTime(t.TransactionDate) <= b.EndDate)
+                                        .Sum(t => (decimal?)t.Amount) ?? 0m
+                                })
             .ToListAsync(cancellationToken);
 
-        var budgets = new List<BudgetStatus>(budgetRows.Count);
-        foreach (var row in budgetRows)
-        {
-            var budgetFrom = row.Budget.StartDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-            var budgetTo = row.Budget.EndDate.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-            var spent = await db.Transactions.AsNoTracking()
-                .Where(t => t.UserId == userId && t.CategoryId == row.Budget.CategoryId
-                    && t.Type == TransactionType.Expense && t.TransactionDate >= budgetFrom
-                    && t.TransactionDate < budgetTo)
-                .SumAsync(t => (decimal?)t.Amount, cancellationToken) ?? 0m;
-            budgets.Add(new BudgetStatus(row.CategoryName, row.Budget.Amount, spent,
-                row.Budget.Amount > 0 ? Math.Round(spent / row.Budget.Amount * 100m, 2) : 0m));
-        }
+        var budgets = budgetRows
+            .Select(r => new BudgetStatus(r.Name, r.Amount, r.Spent,
+                r.Amount > 0 ? Math.Round(r.Spent / r.Amount * 100m, 2) : 0m))
+            .ToList();
 
         var goals = await db.FinancialGoals.AsNoTracking()
             .Where(g => g.UserId == userId && g.Status == FinancialGoalStatus.Active)
@@ -61,9 +67,16 @@ public sealed class FinancialAnalysisService(AppDbContext db) : IFinancialAnalys
 
     public async Task<string> BuildContextAsync(Guid userId, CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
-        var from = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-        var summary = await GetSummaryAsync(userId, from, from.AddMonths(1), cancellationToken);
+        // Take the key before reading: if the data changes while this runs, the result is stored under a stale key.
+        var key = contextCache.KeyFor(userId);
+        if (contextCache.TryGet(key, out var cached)) return cached;
+
+        var timeZoneId = await db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.TimeZoneId)
+            .FirstOrDefaultAsync(cancellationToken) ?? "UTC";
+        var today = LocalToday(timeZoneId);
+        var from = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var summary = await GetSummaryAsync(userId, from, from.AddMonths(1), today, cancellationToken);
+
         var balances = await (from a in db.Accounts.AsNoTracking()
                               where a.UserId == userId && !a.IsArchived
                               let net = db.Transactions.Where(t => t.UserId == userId && t.AccountId == a.Id)
@@ -72,12 +85,22 @@ public sealed class FinancialAnalysisService(AppDbContext db) : IFinancialAnalys
                               select new { a.Name, a.AccountType, Balance = a.InitialBalance + net - saved, a.Currency })
             .ToListAsync(cancellationToken);
 
+        // Names the AI must use when it proposes an action (the backend matches them to the user's own records).
+        var categories = await db.Categories.AsNoTracking()
+            .Where(c => c.IsActive && (c.IsSystem || c.UserId == userId))
+            .OrderBy(c => c.Type).ThenBy(c => c.Name)
+            .Select(c => new { c.Name, c.Type })
+            .ToListAsync(cancellationToken);
+
         // No transaction descriptions or personal identifiers are sent to the AI provider.
-        return JsonSerializer.Serialize(new
+        var context = JsonSerializer.Serialize(new
         {
-            generatedAtUtc = now,
+            today = today.ToString("yyyy-MM-dd"),
+            timeZone = timeZoneId,
+            currency = "VND",
             period = new { summary.From, summary.To },
             accounts = balances,
+            categories,
             summary.TotalIncome,
             summary.TotalExpense,
             netSavings = summary.TotalIncome - summary.TotalExpense,
@@ -85,6 +108,9 @@ public sealed class FinancialAnalysisService(AppDbContext db) : IFinancialAnalys
             summary.Budgets,
             summary.Goals
         }, Json);
+
+        contextCache.Set(key, context);
+        return context;
     }
 
     public async Task<IReadOnlyList<InsightCandidate>> DetectInsightsAsync(Guid userId,
@@ -108,5 +134,13 @@ public sealed class FinancialAnalysisService(AppDbContext db) : IFinancialAnalys
                 "Tổng chi trong tháng đang cao hơn tổng thu.", AIInsightSeverity.Warning, null));
 
         return insights;
+    }
+
+    public static DateOnly LocalToday(string timeZoneId)
+    {
+        TimeZoneInfo zone;
+        try { zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException) { zone = TimeZoneInfo.Utc; }
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zone));
     }
 }

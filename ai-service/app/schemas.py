@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,17 +23,11 @@ class ChatRequest(ApiModel):
     language: Literal["vi", "en"] | None = None
 
 
-class GeminiChatOutput(BaseModel):
-    content: str = Field(description="A useful financial-assistant answer in the user's language.")
-    intent: Literal[
-        "general_finance",
-        "spending_analysis",
-        "budget_advice",
-        "saving_goal",
-        "transaction_help",
-        "account_help",
-        "out_of_scope",
-    ]
+class ProposedAction(ApiModel):
+    """A change the model wants to make. The backend shows it to the user, who confirms it before it is saved."""
+
+    name: str
+    args: dict[str, Any] = Field(default_factory=dict)
 
 
 class ChatResponse(ApiModel):
@@ -43,6 +37,7 @@ class ChatResponse(ApiModel):
     provider: str = "gemini"
     # The model that actually answered. It differs from the first choice when the system fell back.
     model: str | None = None
+    actions: list[ProposedAction] = Field(default_factory=list)
 
 
 class ModelState(ApiModel):

@@ -1,10 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { emptyContext, getPrompts, type FinancialContext, type Highlight, type AIResponse } from './mockAssistant';
-import { aiChatApi, ApiError, useSession, type AIChatMessageResponse, type AIConversationResponse, type AIUsageResponse } from '../../services';
+import { aiChatApi, ApiError, useSession, type AIActionPayload, type AIActionResponse, type AIChatMessageResponse, type AIConversationResponse, type AIUsageResponse } from '../../services';
+import { FINANCE_CHANGED_EVENT } from './AIActionCard';
 import { useLanguage } from '../../i18n';
 
 export type AIMessageData = AIResponse & {
   id: string; role: 'user' | 'assistant'; time: string; context?: string;
+  /** Changes this reply proposed (the user confirms or cancels each one). */
+  actions?: AIActionResponse[];
+  /** The answer is still being written. */
+  streaming?: boolean;
 };
 type AmbientState = {
   open: boolean;
@@ -25,6 +30,8 @@ type AmbientState = {
   send: (question: string) => void;
   selectConversation: (id: string) => Promise<void>;
   removeConversation: (id: string) => Promise<void>;
+  confirmAction: (messageId: string, actionId: string, payload?: AIActionPayload) => Promise<void>;
+  cancelAction: (messageId: string, actionId: string) => Promise<void>;
   clear: () => void;
   clearHighlight: () => void;
   inspect: (target: Highlight) => void;
@@ -57,6 +64,7 @@ function mapServerMessage(message: AIChatMessageResponse, locale: string, timeZo
     time: chatTime(message.createdAt, locale, timeZone),
     context: message.role === 'Assistant' ? 'Gemini · Encrypted history' : undefined,
     highlight: intentHighlight(message.intent),
+    actions: message.actions?.length ? message.actions : undefined,
   };
 }
 
@@ -102,11 +110,18 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
     locked.current = true;
     setBusy(true);
     const time = chatTime(new Date(), locale, timeZone);
-    setMessages(old => [...old, { id: crypto.randomUUID(), role: 'user', text, time, context: financial.page }]);
+    // The reply appears as it is written: an empty assistant message grows with each piece the server sends.
+    const draftId = crypto.randomUUID();
+    const startedNew = conversationId === null;
+    setMessages(old => [...old, { id: crypto.randomUUID(), role: 'user', text, time, context: financial.page },
+      { id: draftId, role: 'assistant', text: '', time, streaming: true, context: 'Gemini · Encrypted history' }]);
     clearTimeout(fadeTimer.current);
 
     try {
-      const response = await aiChatApi.sendMessage(conversationId, text, language);
+      const response = await aiChatApi.streamMessage(conversationId, text, language, {
+        onStart: id => setConversationId(id),
+        onDelta: piece => setMessages(old => old.map(m => m.id === draftId ? { ...m, text: m.text + piece } : m)),
+      });
       setUsage(response.usage);
       setConversationId(response.conversationId);
       if (session?.user.id) localStorage.setItem(`mm-ai-conversation-${session.user.id}`, response.conversationId);
@@ -119,22 +134,20 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
       const target = intentHighlight(response.assistantMessage.intent);
       lastTarget.current = target;
       setHighlight(target);
-      setMessages(old => [...old, {
-        id: response.assistantMessage.id,
-        role: 'assistant',
-        text: response.assistantMessage.content,
-        time: chatTime(response.assistantMessage.createdAt, locale, timeZone),
-        context: 'Gemini · Encrypted history',
-        highlight: target,
-      }]);
+      setMessages(old => old.map(m => m.id === draftId ? { ...mapServerMessage(response.assistantMessage, locale, timeZone), highlight: target } : m));
     } catch (e) {
       // 429: out of messages today. 409: another request is still running. Show the server's explanation.
       const known = e instanceof ApiError && (e.status === 429 || e.status === 409);
       if (e instanceof ApiError && e.status === 429) refreshUsage();
-      setMessages(old => [...old, {
-        id: crypto.randomUUID(), role: 'assistant', text: known ? e.message : t('AI service is unavailable. Please try again.'),
+      // The server removes a conversation whose first answer failed, so do not keep sending to it.
+      if (startedNew) {
+        setConversationId(null);
+        if (session?.user.id) localStorage.removeItem(`mm-ai-conversation-${session.user.id}`);
+      }
+      setMessages(old => old.map(m => m.id === draftId ? {
+        ...m, streaming: false, text: known ? e.message : t('AI service is unavailable. Please try again.'),
         time: chatTime(new Date(), locale, timeZone), context: 'Request failed', // translated when shown
-      }]);
+      } : m));
     } finally {
       setBusy(false);
       locked.current = false;
@@ -169,6 +182,20 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
     } finally {
       setHistoryBusy(false);
     }
+  }
+
+  const replaceAction = (messageId: string, updated: AIActionResponse) =>
+    setMessages(old => old.map(m => m.id === messageId
+      ? { ...m, actions: m.actions?.map(a => a.id === updated.id ? updated : a) } : m));
+
+  async function confirmAction(messageId: string, actionId: string, payload?: AIActionPayload) {
+    replaceAction(messageId, await aiChatApi.confirmAction(actionId, payload));
+    // Budgets, funds and the transaction list changed on the server; budget alerts may have been created too.
+    window.dispatchEvent(new Event(FINANCE_CHANGED_EVENT));
+  }
+
+  async function cancelAction(messageId: string, actionId: string) {
+    replaceAction(messageId, await aiChatApi.cancelAction(actionId));
   }
 
   function openAssistant(question?: string) {
@@ -236,7 +263,7 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
     open, busy, financial, highlight, messages, conversations, conversationId, historyBusy, usage, storageError,
     // Suggestions in the current language; the chip sends the same (translated) text it shows.
     prompts: getPrompts(financial.route.startsWith('/admin') ? 'Admin' : financial.page).map(prompt => t(prompt)), setContext, openAssistant, closeAssistant,
-    send, selectConversation, removeConversation, inspect, clearHighlight, registerNavigator,
+    send, selectConversation, removeConversation, confirmAction, cancelAction, inspect, clearHighlight, registerNavigator,
     clear: () => {
       if (!locked.current) {
         if (session?.user.id) localStorage.removeItem(`mm-ai-conversation-${session.user.id}`);
