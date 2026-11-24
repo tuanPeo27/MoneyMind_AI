@@ -180,6 +180,8 @@ html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; scrollbar-g
   50% { transform: translate3d(-10%, -8%, 0) scale(0.95); }
 }
 .ai-theme { --color-ai: light-dark(#6d28d9, #c4b5fd); }
+/* AI page intro (components/ambient-ai/aiIntro.ts): parts stay hidden until GSAP has set their start state. */
+.ai-intro-pending [data-ai-intro] { visibility: hidden; }
 .ai-backdrop {
   background:
     radial-gradient(60% 55% at 12% 6%, light-dark(rgba(99, 102, 241, 0.32), rgba(99, 102, 241, 0.34)), transparent 70%),

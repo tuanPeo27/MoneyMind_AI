@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { emptyContext, getPrompts, type FinancialContext, type Highlight, type AIResponse } from './mockAssistant';
 import { aiChatApi, ApiError, useSession, type AIActionPayload, type AIActionResponse, type AIChatMessageResponse, type AIConversationResponse, type AIUsageResponse } from '../../services';
 import { FINANCE_CHANGED_EVENT } from './AIActionCard';
@@ -71,6 +71,18 @@ function mapServerMessage(message: AIChatMessageResponse, locale: string, timeZo
 const Context = createContext<AmbientState | null>(null);
 export const useAmbientAI = () => {
   const value = useContext(Context);
+  if (!value) throw new Error('AmbientAIProvider is required');
+  return value;
+};
+type AmbientView = Pick<AmbientState, 'highlight' | 'openAssistant' | 'clearHighlight'>;
+/**
+ * What the dashboard needs from the assistant: the card it points at, and stable functions to open it or clear
+ * the highlight. Unlike useAmbientAI(), this does not change when the assistant opens, closes or streams a reply,
+ * so pages behind the AI page (Overview and its charts) do not re-render during its open / close animation.
+ */
+const ViewContext = createContext<AmbientView | null>(null);
+export const useAmbientAIView = () => {
+  const value = useContext(ViewContext);
   if (!value) throw new Error('AmbientAIProvider is required');
   return value;
 };
@@ -259,7 +271,12 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
     return () => { window.removeEventListener('keydown', key); };
   }, []);
   useEffect(() => () => { clearTimeout(fadeTimer.current); }, []);
-  return <Context.Provider value={{
+  // openAssistant is re-created on every render (it closes over send); the view context hands out a stable wrapper.
+  const openLatest = useRef(openAssistant);
+  openLatest.current = openAssistant;
+  const stableOpen = useCallback((question?: string) => openLatest.current(question), []);
+  const view = useMemo<AmbientView>(() => ({ highlight, openAssistant: stableOpen, clearHighlight }), [highlight, stableOpen, clearHighlight]);
+  return <ViewContext.Provider value={view}><Context.Provider value={{
     open, busy, financial, highlight, messages, conversations, conversationId, historyBusy, usage, storageError,
     // Suggestions in the current language; the chip sends the same (translated) text it shows.
     prompts: getPrompts(financial.route.startsWith('/admin') ? 'Admin' : financial.page).map(prompt => t(prompt)), setContext, openAssistant, closeAssistant,
@@ -270,5 +287,5 @@ export function AmbientAIProvider({ children }: { children: ReactNode }) {
         setMessages([]); setConversationId(null); clearHighlight(); lastTarget.current = null;
       }
     },
-  }}>{children}</Context.Provider>;
+  }}>{children}</Context.Provider></ViewContext.Provider>;
 }

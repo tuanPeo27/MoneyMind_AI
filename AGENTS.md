@@ -123,6 +123,12 @@ Hiện có 5 loại: thêm giao dịch, thêm danh mục, tạo ngân sách, t�
   - Mọi trang là `React.lazy` trong `App.tsx`; trang mới cũng phải lazy. `App.tsx` không import từ `pages/Overview`
     (dùng `lib/totals`), nếu không chunk Overview và biểu đồ sẽ vào bundle đầu.
   - framer-motion chạy qua `<LazyMotion>`: viết `<m.div>`, **không** `<motion.div>` (kéo cả engine vào bundle đầu).
+  - GSAP chỉ import động trong `components/ambient-ai/aiIntro.ts` (hiệu ứng mở trang AI + biểu tượng bay từ nút, tải trước
+    khi rê chuột vào nút AI; bỏ qua khi mở thẳng link `/assistant`). Không import tĩnh `gsap` ở nơi khác. Dùng `fromTo` với cả hai đầu,
+    đọc DOM một lượt trước khi ghi, chỉ animate `transform`/`opacity` (không layout, không `filter`).
+  - Trang nằm sau trang AI dùng `useAmbientAIView()` (chỉ `highlight` + hàm ổn định), không dùng `useAmbientAI()`: context đầy đủ
+    đổi mỗi lần mở/đóng AI và làm Overview + biểu đồ render lại giữa hiệu ứng. `Overview` là `memo`; callback từ App truyền xuống
+    phải ổn định (`useStableCallback`).
   - `recharts` chỉ import trong component lazy (`components/charts.tsx`, `admin/AdminCharts.tsx`); dữ liệu biểu đồ thuần
     nằm ở `lib/chartData.ts`.
   - Font Inter tự host (`@fontsource-variable/inter`), chỉ khai báo subset latin + vietnamese trong `index.css`, preload

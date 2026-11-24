@@ -69,6 +69,12 @@ function usePrefetchPages(enabled: boolean) {
   }, [enabled]);
 }
 
+/** A function whose identity never changes but always calls the latest version (for memoized children). */
+function useStableCallback<A extends unknown[], R>(fn: (...args: A) => R) {
+  const latest = useRef(fn);
+  latest.current = fn;
+  return useCallback((...args: A) => latest.current(...args), []);
+}
 /** Placeholder while a page chunk downloads: a skeleton page that reserves height so the footer does not jump. */
 function PageLoading() {
   const { t } = useLanguage();
@@ -238,6 +244,10 @@ function Workspace() {
     setSelection({ transaction, category: transaction.category });
     setDialog({ kind: 'transaction', value: transaction });
   }
+  // Same functions with a fixed identity, so the memoized Overview does not re-render when App does
+  // (for example while the AI page opens or closes).
+  const navigateStable = useStableCallback(navigate);
+  const editTransactionStable = useStableCallback(editTransaction);
   function exportRows(list: Transaction[]) {
     const escape = (s: unknown) => `"${String(s).replace(/"/g, '""')}"`;
     const csv = '\uFEFF' + [
@@ -309,7 +319,7 @@ function Workspace() {
         {data.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(data.error)}</span><Button secondary onClick={() => void data.reload()}>{t('Try again')}</Button></p>}
         {page === 'Savings Funds' && savings.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(savings.error)}</span><Button secondary onClick={() => void savings.reload()}>{t('Try again')}</Button></p>}
         <Suspense fallback={<PageLoading />}>
-        {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} accounts={data.activeAccounts} onNavigate={navigate} onEdit={editTransaction} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} loading={workspaceLoading} />}
+        {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} accounts={data.activeAccounts} onNavigate={navigateStable} onEdit={editTransactionStable} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} loading={workspaceLoading} />}
         {page === 'Accounts' && <AccountsPage loading={workspaceLoading} accounts={data.activeAccounts} archived={data.archivedAccounts} hidden={hidden} setHidden={setHidden}
           onCreate={input => attempt(() => data.createAccount(input), 'Account added.')}
           onUpdate={(id, input) => attempt(() => data.updateAccount(id, input), 'Account saved.')}

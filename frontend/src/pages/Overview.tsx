@@ -1,5 +1,5 @@
 import { useLanguage } from '../i18n';
-import { useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ArrowUpRight, ArrowRight, Wallet, TrendingUp, TrendingDown, Landmark, Sparkles, ChevronRight, Maximize2, Eye, EyeOff } from 'lucide-react';
 import { m, useReducedMotion } from 'framer-motion';
 import { type Transaction, type Budget, type Category, money, dateLabel } from '../data';
@@ -14,14 +14,14 @@ import type { Highlight } from '../components/ambient-ai/mockAssistant';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { HighlightCard, MORPH_SPRING } from '../components/ambient-ai/AmbientAI';
 import { LoadingStatus, Skeleton, SkeletonText, useFadeIn } from '../components/Skeleton';
-import { useAmbientAI } from '../components/ambient-ai/AmbientAIProvider';
+import { useAmbientAIView } from '../components/ambient-ai/AmbientAIProvider';
 
 // Moved to lib/totals (used by App without loading this chunk); re-exported for existing imports.
 export { BalanceContext, getTotals, percentChange, type Totals } from '../lib/totals';
 export function SummaryCards({ totals, previous, hidden = false, onToggleHidden, layout = 'row', loading = false }: { totals: Totals; previous: Totals; hidden?: boolean; onToggleHidden?: (next: boolean) => void; layout?: 'row' | 'grid'; loading?: boolean }) {
   const { t } = useLanguage();
   const fade = useFadeIn(loading);
-  const { highlight, openAssistant } = useAmbientAI();
+  const { highlight, openAssistant } = useAmbientAIView();
   const balance = useContext(BalanceContext);
   const symbol = currencySymbol();
   const cards = [
@@ -90,7 +90,8 @@ function SlideSkeleton({ id, compact }: { id: string; compact: boolean }) {
   </div>)}</div><div className="mt-4 h-11" /></div>;
 }
 const ringMask = { mask: 'radial-gradient(circle closest-side, transparent 76%, #000 76.5%)', WebkitMask: 'radial-gradient(circle closest-side, transparent 76%, #000 76.5%)' };
-export default function Overview({ rows, allRows, previous, budgets, categories, accounts = [], onNavigate, onEdit, hidden = false, setHidden, rangeEnd, showInsight = true, loading = false }: {
+/** memo: the Overview stays still while the AI page opens and closes over it (all props from App are stable). */
+export default memo(function Overview({ rows, allRows, previous, budgets, categories, accounts = [], onNavigate, onEdit, hidden = false, setHidden, rangeEnd, showInsight = true, loading = false }: {
   rows: Transaction[]; allRows: Transaction[]; previous: Transaction[]; budgets: Budget[]; categories: Category[];
   /** True during the first load of the user's data: skeletons instead of empty states. */
   loading?: boolean;
@@ -100,7 +101,7 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
   onEdit: (t: Transaction) => void; hidden?: boolean; setHidden?: (value: boolean) => void; rangeEnd?: string; showInsight?: boolean;
 }) {
   const { t, locale } = useLanguage();
-  const { openAssistant, highlight, clearHighlight } = useAmbientAI();
+  const { openAssistant, highlight, clearHighlight } = useAmbientAIView();
   const fade = useFadeIn(loading);
   const [chartPeriod, setChartPeriod] = useState('Monthly');
   const [index, setIndex] = useState(0), [cardW, setCardW] = useState(760);
@@ -321,7 +322,7 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
     </div>}
     {highlight && <div className="flex justify-end"><button onClick={clearHighlight} className="min-h-11 text-sm text-muted hover:text-ink">{t("Clear AI highlight & return to normal view")}</button></div>}
   </div>;
-}
+});
 const STRIP_LIMIT = 8;
 /**
  * One tile per account (name, type, balance), largest balance first. Follows the Total balance eye: hiding it
