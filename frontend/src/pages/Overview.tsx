@@ -1,9 +1,10 @@
 import { useLanguage } from '../i18n';
-import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ArrowUpRight, ArrowRight, Wallet, TrendingUp, TrendingDown, Landmark, Sparkles, ChevronRight, Maximize2, Eye, EyeOff } from 'lucide-react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { m, useReducedMotion } from 'framer-motion';
 import { type Transaction, type Budget, type Category, money, dateLabel } from '../data';
 import { currencySymbol, formatAmount, percent } from '../lib/currency';
+import { BalanceContext, getTotals, percentChange, type Totals } from '../lib/totals';
 import type { WalletAccount } from '../hooks/useWorkspaceData';
 import { AccountIcon, accountTypes } from './Accounts';
 import { Card, Change, Progress, SectionHead, Badge, Empty, IconButton } from '../components/ui';
@@ -14,19 +15,8 @@ import { CategoryIcon } from '../components/CategoryIcon';
 import { HighlightCard, MORPH_SPRING } from '../components/ambient-ai/AmbientAI';
 import { useAmbientAI } from '../components/ambient-ai/AmbientAIProvider';
 
-export type Totals = { income: number; expense: number; savings: number; balance: number; rate: number };
-export function getTotals(rows: Transaction[]): Totals {
-  const income = rows.filter(t => t.type === 'Income').reduce((s, t) => s + t.amount, 0);
-  const expense = rows.filter(t => t.type === 'Expense').reduce((s, t) => s + t.amount, 0);
-  // `balance` here is only the period's net. The real account balance comes from BalanceContext (see SummaryCards).
-  return { income, expense, savings: income - expense, balance: income - expense, rate: income ? (income - expense) / income * 100 : 0 };
-}
-/**
- * Real account balance (opening balances of the user's accounts + every transaction up to the date):
- * current at the end of the selected period, previous at the end of the period before it. Provided by App.
- */
-export const BalanceContext = createContext<{ current: number; previous: number } | null>(null);
-export const percentChange = (current: number, previous: number) => previous ? (current - previous) / previous * 100 : 0;
+// Moved to lib/totals (used by App without loading this chunk); re-exported for existing imports.
+export { BalanceContext, getTotals, percentChange, type Totals } from '../lib/totals';
 export function SummaryCards({ totals, previous, hidden = false, onToggleHidden, layout = 'row' }: { totals: Totals; previous: Totals; hidden?: boolean; onToggleHidden?: (next: boolean) => void; layout?: 'row' | 'grid' }) {
   const { t } = useLanguage();
   const { highlight, openAssistant } = useAmbientAI();
@@ -267,14 +257,14 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
         {slides.map((s, i) => <div key={s.id} ref={el => { cards.current[i] = el; }} role="tabpanel" id={`${uid}-panel-${s.id}`} aria-labelledby={`${uid}-tab-${s.id}`} aria-hidden={i !== index}
           onClick={() => { if (i !== index) go(i); }}
           className={`relative flex w-[var(--card-w)] flex-none will-change-transform ${i === index ? '' : 'cursor-pointer'}`}>
-          <motion.div layoutId={`card-${s.id}`} style={{ borderRadius: 24 }} transition={reduceMotion ? { duration: 0 } : MORPH_SPRING} className="glass relative w-full p-4 sm:p-6">
+          <m.div layoutId={`card-${s.id}`} style={{ borderRadius: 24 }} transition={reduceMotion ? { duration: 0 } : MORPH_SPRING} className="glass relative w-full p-4 sm:p-6">
             <span aria-hidden="true" className={`pointer-events-none absolute -inset-px rounded-3xl shadow-[0_0_48px_-10px_rgba(139,92,246,0.7)] ring-1 ring-[#8B5CF6]/50 transition-opacity duration-500 ${i === index ? 'opacity-100' : 'opacity-0'}`} />
-            <motion.div className="relative" animate={{ opacity: expanded === s.id ? 0 : 1 }} transition={{ duration: 0.1 }} {...(i === index ? {} : ({ inert: '' } as object))}>
+            <m.div className="relative" animate={{ opacity: expanded === s.id ? 0 : 1 }} transition={{ duration: 0.1 }} {...(i === index ? {} : ({ inert: '' } as object))}>
               <div className="mb-4 flex items-center justify-between gap-2"><h3 className="text-[1rem] font-semibold tracking-tight">{t(s.label)}</h3>
                 {i === index && <IconButton icon={Maximize2} label={t('Expand')} onClick={() => setExpanded(s.id)} />}</div>
               <HighlightCard target={s.target} onInspect={s.onInspect}>{s.node}</HighlightCard>
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         </div>)}
       </div>
       <ExpandedCard id={expanded} title={open ? t(open.label) : ''} closeLabel={t('Close')} onClose={() => setExpanded(null)}>{expanded ? details[expanded] : null}</ExpandedCard>

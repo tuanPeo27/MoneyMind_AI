@@ -1,5 +1,5 @@
 import { useRef, type ButtonHTMLAttributes, type MouseEvent, type ReactNode } from 'react';
-import { motion, useMotionValue, useSpring, type Variants } from 'framer-motion';
+import { m, useMotionValue, useSpring, type Variants } from 'framer-motion';
 
 const EASE = [0.76, 0, 0.24, 1] as const;
 
@@ -50,7 +50,7 @@ export function LiquidButton({ label, children, variant = 'dark', className = ''
   };
 
   const row = 'flex h-6 items-center justify-center gap-2 whitespace-nowrap leading-6';
-  return <motion.button
+  return <m.button
     {...props}
     ref={buttonRef}
     initial="rest" animate="rest" whileHover={disabled ? undefined : 'hover'} whileTap={disabled ? undefined : { scale: 0.96 }}
@@ -58,17 +58,17 @@ export function LiquidButton({ label, children, variant = 'dark', className = ''
     onMouseMove={event => { if (!disabled) fillX.set(offset(event)); onMouseMove?.(event); }}
     className={`${base} ${variants[variant]} ${className}`}
   >
-    <motion.span
+    <m.span
       aria-hidden="true" variants={fillVariants} style={{ left: fillX }}
       className="pointer-events-none absolute top-1/2 aspect-square w-[150%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#EC4899]"
     />
     <span className="relative z-10 block">
       <span className="block h-6 overflow-hidden">
-        <motion.span variants={rollVariants} className="flex flex-col">
+        <m.span variants={rollVariants} className="flex flex-col">
           <span className={row}>{content}</span>
           <span aria-hidden="true" className={`${row} !text-white`}>{content}</span>
-        </motion.span>
+        </m.span>
       </span>
     </span>
-  </motion.button>;
+  </m.button>;
 }

@@ -1,12 +1,19 @@
 import { useLanguage } from '../i18n';
-import { useState, type FormEvent } from 'react';
+import { lazy, Suspense, useState, type FormEvent } from 'react';
 import { Search, Plus, ArrowDownUp, Download, Pencil, Trash2, ArrowUpRight, SlidersHorizontal, Check, FolderOpen, Shapes } from 'lucide-react';
 import { type Transaction, type Category, type Budget, money } from '../data';
 import { Button, Card, Badge, Empty, Field, Modal, Progress, IconButton, fieldClass, SectionHead } from '../components/ui';
 import { TransactionTable } from '../components/transactions';
 import { CategoryIcon, CategoryIconPicker, getCategoryIcon, type CategoryIconId } from '../components/CategoryIcon';
-import { ExpenseDonut, TrendChart, monthlyData } from '../components/charts';
-import { getTotals, percentChange, SummaryCards } from './Overview';
+import { monthlyData } from '../lib/chartData';
+// recharts (~110 KB gzip) only loads when Reports is opened, not with Transactions / Budgets / Categories.
+const loadCharts = () => import('../components/charts');
+const TrendChart = lazy(() => loadCharts().then(m => ({ default: m.TrendChart })));
+const ExpenseDonut = lazy(() => loadCharts().then(m => ({ default: m.ExpenseDonut })));
+/** Same height as the chart, so the card does not jump when it arrives. */
+const ChartSlot = ({ height }: { height: number }) => <div aria-hidden="true" className="animate-pulse rounded-xl bg-line/30 motion-reduce:animate-none" style={{ height }} />;
+import { getTotals, percentChange } from '../lib/totals';
+import { SummaryCards } from './Overview';
 import { FormSelect, Select } from '../components/Select';
 import { AmountInput } from '../components/AmountInput';
 import { Pagination, usePagination } from '../components/Pagination';
@@ -114,10 +121,10 @@ export function Reports({ rows, allRows, previous, categories, onExport, hidden 
           <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-sm bg-positive" />{t("Income")}</span>
           <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-sm bg-negative" />{t("Expenses")}</span>
         </div>
-        <TrendChart data={trends} />
+        <Suspense fallback={<ChartSlot height={225} />}><TrendChart data={trends} /></Suspense>
       </Card>
-      <Card className="p-5"><SectionHead title={t("Monthly cash flow")} subtitle={t("Track how much you keep each month.")} /><TrendChart data={trends} line /></Card>
-      <Card className="p-5"><SectionHead title={t("Spending by category")} subtitle={t("Selected period breakdown")} /><ExpenseDonut transactions={rows} categories={categories} /></Card>
+      <Card className="p-5"><SectionHead title={t("Monthly cash flow")} subtitle={t("Track how much you keep each month.")} /><Suspense fallback={<ChartSlot height={225} />}><TrendChart data={trends} line /></Suspense></Card>
+      <Card className="p-5"><SectionHead title={t("Spending by category")} subtitle={t("Selected period breakdown")} /><Suspense fallback={<ChartSlot height={210} />}><ExpenseDonut transactions={rows} categories={categories} /></Suspense></Card>
       <Card className="p-5">
         <SectionHead title={t("Period comparison")} subtitle={t("Selected period vs. the preceding equivalent period")} />
         <div className="space-y-5">{[

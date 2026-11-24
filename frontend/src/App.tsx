@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LazyMotion } from 'framer-motion';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, CalendarDays, ChevronDown, Check, X, ArrowUpRight } from 'lucide-react';
 import {
   type Page, type Transaction, type Budget, type Category, today, localDate, usePeriodRange, dateLabel,
@@ -6,16 +7,9 @@ import {
 import { Button, Field, Modal, fieldClass } from './components/ui';
 import { Select } from './components/Select';
 import { TransactionForm } from './components/transactions';
-import Overview, { BalanceContext, getTotals } from './pages/Overview';
-import { Transactions, Budgets, Categories, Reports, BudgetForm, CategoryForm } from './pages/Management';
-import { Insights } from './pages/Intelligence';
-import SettingsPage from './pages/Settings';
-import WorkspacePage from './pages/Workspace';
-import NotificationsPage from './pages/Notifications';
-import AccountsPage from './pages/Accounts';
+import { BalanceContext, getTotals } from './lib/totals';
 import { setAmountsHidden } from './lib/currency';
 import { formatPhone } from './lib/phone';
-import SavingsPage from './pages/Savings';
 import { useNotifications } from './hooks/useNotifications';
 import { useSavingsGoals } from './hooks/useSavingsGoals';
 import { UserLayout, type Profile } from './components/layout/UserLayout';
@@ -26,13 +20,61 @@ import { LanguageProvider, useLanguage } from './i18n';
 import { AmbientAIProvider, useAmbientAI } from './components/ambient-ai/AmbientAIProvider';
 import { AmbientShell, AmbientAIOverlay, AmbientAIFab, AssistantHome } from './components/ambient-ai/AmbientAI';
 import { type FinancialContext, type Highlight } from './components/ambient-ai/mockAssistant';
-import { AdminApp } from './admin/AdminApp';
 import { AuthPages, authPaths, useErrorText } from './pages/Auth';
 import { useSession } from './lib/auth';
 import { usersApi } from './services';
 import { useWorkspaceData } from './hooks/useWorkspaceData';
 import { adminNav, aiUsage } from './admin/data';
 import type { AdminUserStats } from './admin/AdminPages';
+
+// Pages are loaded on demand: the first screen (login, or one workspace page) only downloads what it shows.
+const loadMotionFeatures = () => import('./lib/motionFeatures').then(module => module.default);
+const loadOverview = () => import('./pages/Overview');
+const loadManagement = () => import('./pages/Management');
+const Overview = lazy(loadOverview);
+const Transactions = lazy(() => loadManagement().then(m => ({ default: m.Transactions })));
+const Budgets = lazy(() => loadManagement().then(m => ({ default: m.Budgets })));
+const Categories = lazy(() => loadManagement().then(m => ({ default: m.Categories })));
+const Reports = lazy(() => loadManagement().then(m => ({ default: m.Reports })));
+const BudgetForm = lazy(() => loadManagement().then(m => ({ default: m.BudgetForm })));
+const CategoryForm = lazy(() => loadManagement().then(m => ({ default: m.CategoryForm })));
+const Insights = lazy(() => import('./pages/Intelligence').then(m => ({ default: m.Insights })));
+const SettingsPage = lazy(() => import('./pages/Settings'));
+const WorkspacePage = lazy(() => import('./pages/Workspace'));
+const NotificationsPage = lazy(() => import('./pages/Notifications'));
+const AccountsPage = lazy(() => import('./pages/Accounts'));
+const SavingsPage = lazy(() => import('./pages/Savings'));
+const AdminApp = lazy(() => import('./admin/AdminApp').then(m => ({ default: m.AdminApp })));
+
+/** Once the first screen is idle, fetch the most used pages so switching to them is instant. */
+function usePrefetchPages(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return;
+    const prefetch = () => { void loadOverview(); void loadManagement(); void import('./pages/Accounts'); };
+    // Wait for the page's own resources (load event), then for an idle moment, so this never competes with the
+    // first screen. requestIdleCallback is missing in older Safari: fall back to a short timeout.
+    let idleId: number | undefined, timerId: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (typeof window.requestIdleCallback === 'function') idleId = window.requestIdleCallback(prefetch, { timeout: 5000 });
+      else timerId = setTimeout(prefetch, 1500);
+    };
+    if (document.readyState === 'complete') schedule(); else window.addEventListener('load', schedule, { once: true });
+    return () => {
+      window.removeEventListener('load', schedule);
+      if (idleId !== undefined) window.cancelIdleCallback(idleId);
+      if (timerId !== undefined) clearTimeout(timerId);
+    };
+  }, [enabled]);
+}
+
+/** Placeholder while a page chunk downloads; reserves height so the footer does not jump. */
+function PageLoading() {
+  const { t } = useLanguage();
+  return <div role="status" className="flex min-h-[60vh] items-center justify-center">
+    <span aria-hidden="true" className="size-6 animate-spin rounded-full border-2 border-line border-t-brand motion-reduce:animate-none" />
+    <span className="sr-only">{t('Loading your data...')}</span>
+  </div>;
+}
 
 type Dialog =
   | { kind: 'transaction'; value?: Transaction }
@@ -42,12 +84,15 @@ type Dialog =
   | { kind: 'date' } | null;
 
 export default function App() {
-  return <LanguageProvider><AmbientAIProvider><Workspace /></AmbientAIProvider></LanguageProvider>;
+  // `m` components render immediately; their animation features arrive in a separate chunk after the first paint.
+  return <LazyMotion features={loadMotionFeatures}><LanguageProvider><AmbientAIProvider><Workspace /></AmbientAIProvider></LanguageProvider></LazyMotion>;
 }
 function Workspace() {
   const { t, locale } = useLanguage();
   const { theme, setTheme } = useTheme();
   const { session, signOut } = useSession();
+  // Admins only use the administration area, so they never need the personal pages.
+  usePrefetchPages(!session?.user.roles.includes('Admin'));
   const errorText = useErrorText();
   // The role comes from the signed-in account. The backend enforces it on every admin endpoint.
   const role: DemoRole = session?.user.roles.includes('Admin') ? 'ADMIN' : 'USER';
@@ -222,10 +267,10 @@ function Workspace() {
   const firstName = profile.name.trim().split(' ').pop() || 'Chương';
   return <div className="min-h-screen overflow-x-clip font-sans text-sm text-ink antialiased">
     <AmbientShell>
-      {admin && role === 'ADMIN' ? <AdminApp
+      {admin && role === 'ADMIN' ? <Suspense fallback={<PageLoading />}><AdminApp
         path={path} navigate={goTo} onSignOut={() => { void signOut().then(() => goTo('/login')); }}
         onStats={setUserStats} onVolume={setPlatformVolume}
-      /> : <BalanceContext.Provider value={balances}><UserLayout
+      /></Suspense> : <BalanceContext.Provider value={balances}><UserLayout
         page={page} profile={profile} onNavigate={navigate} search={search} setSearch={setSearch} transactions={rows} categories={categories}
         onExport={() => exportRows(filtered)} role={role} onAdmin={() => { if (role === 'ADMIN') goTo('/admin'); }}
         onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} theme={theme} setTheme={setTheme}
@@ -257,6 +302,7 @@ function Workspace() {
         {data.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(data.error)}</span><Button secondary onClick={() => void data.reload()}>{t('Try again')}</Button></p>}
         {page === 'Savings Funds' && savings.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(savings.error)}</span><Button secondary onClick={() => void savings.reload()}>{t('Try again')}</Button></p>}
         {data.loading && !rows.length && <p role="status" className="mb-4 text-sm text-muted">{t('Loading your data...')}</p>}
+        <Suspense fallback={<PageLoading />}>
         {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} accounts={data.activeAccounts} onNavigate={navigate} onEdit={editTransaction} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} />}
         {page === 'Accounts' && <AccountsPage accounts={data.activeAccounts} archived={data.archivedAccounts} hidden={hidden} setHidden={setHidden}
           onCreate={input => attempt(() => data.createAccount(input), 'Account added.')}
@@ -311,6 +357,7 @@ function Workspace() {
         }} totals={getTotals(filtered)} previous={getTotals(previous)} hidden={hidden} setHidden={setHidden} signedIn role={role} />}
         {page === 'Notifications' && <NotificationsPage items={notifications.items} onMarkAllRead={notifications.markAllRead} onMarkRead={notifications.markRead} onRemove={notifications.remove} onClear={notifications.clear} />}
         {page === 'Settings' && <SettingsPage profile={profile} onSave={p => { setProfile({ ...storedProfile, notifications: p.notifications, insights: p.insights }); notify('Preferences saved on this browser.'); }} onExport={() => exportRows(rows)} role={role} theme={theme} setTheme={setTheme} />}
+        </Suspense>
       </UserLayout></BalanceContext.Provider>}
     </AmbientShell>
     {dialog?.kind === 'transaction' && <TransactionForm transaction={dialog.value} categories={categories} accounts={data.accountNames} onClose={close}
@@ -323,11 +370,13 @@ function Workspace() {
         close();
       }}
     />}
+    <Suspense fallback={null}>
     {dialog?.kind === 'budget' && <BudgetForm budget={dialog.value} categories={categories} budgets={budgets} onClose={close} onSave={async b => {
       const editing = !!dialog.value;
       if (await attempt(() => data.saveBudget({ ...dialog.value, ...b }, editing), 'Budget saved.')) close();
     }} />}
     {dialog?.kind === 'category' && <CategoryForm category={dialog.value} categories={categories} onClose={close} onSave={saveCategory} />}
+    </Suspense>
     {dialog?.kind === 'delete' && <Modal title={dialog.title} onClose={close}>
       <p className="text-sm leading-6 text-muted">{dialog.text}</p>
       <div className="mt-6 flex justify-end gap-3"><Button secondary onClick={close}>{t("Cancel")}</Button><Button className="!bg-negative !text-on-negative" onClick={() => { dialog.action(); close(); }}>{t("Delete")}</Button></div>

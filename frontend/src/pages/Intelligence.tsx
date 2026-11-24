@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Sparkles, Check, TrendingUp, TriangleAlert, Target, ArrowRight } from 'lucide-react';
 import { type Transaction, type Budget, money } from '../data';
 import { Badge, Card, Empty } from '../components/ui';
-import { getTotals, percentChange } from './Overview';
+import { getTotals, percentChange } from '../lib/totals';
 import { useLocal } from '../hooks/useLocal';
 
 // Conversations now live in the global AmbientAIProvider; insights reuse the

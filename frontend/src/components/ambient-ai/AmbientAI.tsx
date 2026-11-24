@@ -1,6 +1,6 @@
 import { useLanguage } from '../../i18n';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, m, useReducedMotion } from 'framer-motion';
 import { Sparkles, ArrowUp, ArrowUpRight, ArrowLeft, Plus, ShieldCheck, ChevronRight, History, Trash2 } from 'lucide-react';
 import { useAmbientAI, type AIMessageData } from './AmbientAIProvider';
 import { useSession, type AIUsageResponse } from '../../services';
@@ -59,12 +59,12 @@ export function AmbientAIFab() {
   }, [open]);
   return <div aria-hidden={hidden || undefined} className={`group/fab fixed bottom-24 right-4 z-30 hover:-translate-y-1 md:bottom-6 md:right-6 ${hidden ? 'pointer-events-none invisible' : 'transition-[translate] duration-300 ease-out'}`}>
     <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-full transition-opacity duration-300 group-hover/fab:opacity-0 group-focus-within/fab:opacity-0 motion-safe:animate-[fab-ring_2.8s_ease-out_infinite]" />
-    <motion.button style={{ borderRadius: 28 }} transition={reduce ? { duration: 0 } : MORPH_SPRING}
+    <m.button style={{ borderRadius: 28 }} transition={reduce ? { duration: 0 } : MORPH_SPRING}
       data-ai-trigger tabIndex={hidden ? -1 : 0} onClick={() => openAssistant()} aria-label={t('Ask AI Assistant')} title={`${t('Ask AI Assistant')} (${/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'} K)`}
       className="relative grid h-14 grid-cols-[auto_0fr] items-center bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] px-4 text-white shadow-[0_0_30px_-4px_rgba(139,92,246,0.7)] transition-[grid-template-columns,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/fab:grid-cols-[auto_1fr] group-hover/fab:shadow-[0_0_38px_-2px_rgba(236,72,153,0.7)] focus-visible:grid-cols-[auto_1fr] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai focus-visible:ring-offset-2 focus-visible:ring-offset-transparent active:scale-95">
       <Sparkles className="h-6 w-6 shrink-0 transition-transform duration-500 group-hover/fab:rotate-12 group-hover/fab:scale-110" aria-hidden="true" />
       <span className="min-w-0 overflow-hidden"><span className="block whitespace-nowrap pl-3 pr-1 text-sm font-semibold opacity-0 transition-opacity duration-300 group-hover/fab:opacity-100 group-focus-within/fab:opacity-100">{t('Ask AI Assistant')}</span></span>
-    </motion.button>
+    </m.button>
   </div>;
 }export function AIMessage({ message }: { message: AIMessageData }) {
   const { t } = useLanguage();
@@ -183,18 +183,18 @@ function FocusedAssistant({ children, onClose }: { children: ReactNode; onClose:
     document.addEventListener('keydown', key);
     return () => { document.body.style.overflow = oldOverflow; document.removeEventListener('keydown', key); };
   }, [onClose]);
-  return <motion.div ref={ref} role="dialog" aria-modal="true" aria-labelledby="ambient-title" className="fixed inset-0 z-[80]">
+  return <m.div ref={ref} role="dialog" aria-modal="true" aria-labelledby="ambient-title" className="fixed inset-0 z-[80]">
     {/* dims and blurs the dashboard that is shrinking behind */}
-    <motion.div aria-hidden="true" className="absolute inset-0 backdrop-blur-md" style={{ background: 'light-dark(rgba(40, 25, 60, 0.45), rgba(11, 15, 25, 0.8))' }}
+    <m.div aria-hidden="true" className="absolute inset-0 backdrop-blur-md" style={{ background: 'light-dark(rgba(40, 25, 60, 0.45), rgba(11, 15, 25, 0.8))' }}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} />
     {/* the surface: circle/pill at the button -> full-screen rectangle, and back into the circle on close */}
-    <motion.div aria-hidden="true" className="ai-backdrop absolute inset-0" style={{ willChange: 'clip-path' }}
+    <m.div aria-hidden="true" className="ai-backdrop absolute inset-0" style={{ willChange: 'clip-path' }}
       initial={{ clipPath: openFrom.clip }} animate={{ clipPath: full, transition: reduce ? { duration: 0 } : { duration: 0.55, ease } }}
       variants={{ closed: (to?: ButtonShape) => ({ clipPath: (to ?? aiButtonShape(true)).clip, transition: reduce ? { duration: 0 } : { delay: 0.1, duration: 0.45, ease } }) }}
       exit="closed">
       {/* A copy of the button (gradient + icon) sitting exactly on it. It is gone within the first ~5% of opening
           (0.03s of 0.55s) and fades back in during the last part of closing, so the page turns into the button. */}
-      <motion.div className="absolute flex items-center justify-center bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] text-white"
+      <m.div className="absolute flex items-center justify-center bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] text-white"
         style={{ left: openFrom.left, top: openFrom.top, width: openFrom.width, height: openFrom.height, borderRadius: 9999 }}
         initial={{ opacity: 1 }} animate={{ opacity: 0, transition: { duration: reduce ? 0 : 0.03 } }}
         variants={{ closed: (to?: ButtonShape) => {
@@ -205,13 +205,13 @@ function FocusedAssistant({ children, onClose }: { children: ReactNode; onClose:
         } }}
         exit="closed">
         <Sparkles className="h-6 w-6" aria-hidden="true" />
-      </motion.div>
-    </motion.div>
+      </m.div>
+    </m.div>
     {/* Opening is the close played backwards: the surface first grows out of the button to full screen, and only
         then the page fades in (closing fades the page out first, then shrinks the surface). The staggered
         ai-rise entrance is switched off here so the content does not scale up on its own while the surface grows. */}
-    <motion.div className="absolute inset-0 overflow-y-auto ai-scroll [&_.ai-rise]:![animation:none] [&_.ai-rise]:!opacity-100" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: reduce ? 0 : 0.4, duration: 0.1 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>{children}</motion.div>
-  </motion.div>;
+    <m.div className="absolute inset-0 overflow-y-auto ai-scroll [&_.ai-rise]:![animation:none] [&_.ai-rise]:!opacity-100" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: reduce ? 0 : 0.4, duration: 0.1 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>{children}</m.div>
+  </m.div>;
 }function Conversation() {
   const { t } = useLanguage();
   const { messages, busy } = useAmbientAI();
