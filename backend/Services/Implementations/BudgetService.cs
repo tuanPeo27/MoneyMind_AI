@@ -11,7 +11,8 @@ namespace backend.Services.Implementations;
 public sealed class BudgetService(
     AppDbContext db,
     INotificationService notifications,
-    ILogger<BudgetService> logger) : IBudgetService
+    ILogger<BudgetService> logger,
+    FinancialContextCache contextCache) : IBudgetService
 {
     public async Task<IReadOnlyList<BudgetResponse>> GetAllAsync(Guid userId, DateOnly? activeOn = null,
         CancellationToken cancellationToken = default)
@@ -85,6 +86,7 @@ public sealed class BudgetService(
         var deleted = await db.Budgets
             .Where(b => b.Id == id && b.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
+        contextCache.Invalidate(userId); // ExecuteDelete bypasses the change interceptor
         if (deleted == 0) throw new NotFoundException("Không tìm thấy ngân sách.");
     }
 

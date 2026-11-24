@@ -19,6 +19,7 @@ import { useRoute, pagePaths, type DemoRole } from './routing';
 import { LanguageProvider, useLanguage } from './i18n';
 import { AmbientAIProvider, useAmbientAI } from './components/ambient-ai/AmbientAIProvider';
 import { AmbientShell, AmbientAIOverlay, AmbientAIFab, AssistantHome } from './components/ambient-ai/AmbientAI';
+import { FINANCE_CHANGED_EVENT } from './components/ambient-ai/AIActionCard';
 import { type FinancialContext, type Highlight } from './components/ambient-ai/mockAssistant';
 import { AuthPages, authPaths, useErrorText } from './pages/Auth';
 import { useSession } from './lib/auth';
@@ -119,6 +120,12 @@ function Workspace() {
   // Budget and savings-goal alerts created by the server pop up as a toast as soon as the next refresh sees them.
   const notifications = useNotifications(personalId, item => notify(item.message));
   const savings = useSavingsGoals(personalId);
+  // A change the AI assistant saved (transaction, budget, fund...) is shown right away on every page.
+  useEffect(() => {
+    const reload = () => { void data.reload(); void savings.reload(); void notifications.refresh(); };
+    window.addEventListener(FINANCE_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(FINANCE_CHANGED_EVENT, reload);
+  }, [data.reload, savings.reload, notifications.refresh]); // eslint-disable-line react-hooks/exhaustive-deps
   const { path: rawPath, navigate: goTo } = useRoute();
   const { setContext, registerNavigator, openAssistant, closeAssistant, open: assistantOpen } = useAmbientAI();
   // The AI assistant is its own page at /assistant. The workspace stays mounted behind it, on the page the user came from.

@@ -18,6 +18,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<AIConversation> AIConversations => Set<AIConversation>();
     public DbSet<AIChatMessage> AIChatMessages => Set<AIChatMessage>();
     public DbSet<AIFeedback> AIFeedbacks => Set<AIFeedback>();
+    public DbSet<AIAction> AIActions => Set<AIAction>();
     public DbSet<UserEncryptionKey> UserEncryptionKeys => Set<UserEncryptionKey>();
     public DbSet<AIInsight> AIInsights => Set<AIInsight>();
     public DbSet<AIRecommendation> AIRecommendations => Set<AIRecommendation>();
@@ -171,6 +172,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             entity.Property(message => message.Status).HasConversion<byte>();
             entity.HasIndex(message => new { message.ConversationId, message.Sequence }).IsUnique();
             entity.HasOne<AIConversation>().WithMany().HasForeignKey(message => message.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<AIAction>(entity =>
+        {
+            entity.Property(action => action.ActionType).HasMaxLength(50).IsRequired();
+            entity.Property(action => action.PayloadCipher).HasColumnType("varbinary(max)").IsRequired();
+            entity.Property(action => action.PayloadNonce).HasColumnType("binary(12)").IsRequired();
+            entity.Property(action => action.Status).HasConversion<byte>();
+            entity.HasIndex(action => action.MessageId);
+            entity.HasIndex(action => new { action.UserId, action.Status });
+            // Only the message is a foreign key: users already cascade to conversations and messages, and a second
+            // cascade path from Users would be rejected by SQL Server. Ownership is always checked through UserId.
+            entity.HasOne<AIChatMessage>().WithMany().HasForeignKey(action => action.MessageId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

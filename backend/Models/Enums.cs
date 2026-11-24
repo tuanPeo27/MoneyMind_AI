@@ -80,3 +80,11 @@ public enum AIProcessingStatus : byte
     Completed,
     Failed
 }
+
+/// <summary>A change proposed by the AI assistant. Nothing is saved until the user confirms it.</summary>
+public enum AIActionStatus : byte
+{
+    Pending,
+    Confirmed,
+    Cancelled
+}

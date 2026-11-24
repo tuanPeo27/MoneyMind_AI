@@ -90,9 +90,28 @@ export type UpsertGoalRequest = { name: string; targetAmount: number; deadline?:
 export type AIConversationResponse = {
   id: string; title: string; createdAt: string; updatedAt: string; isArchived: boolean;
 };
+export type AIActionType = 'create_transaction' | 'create_category' | 'create_budget' | 'create_savings_goal' | 'contribute_to_goal';
+export type AIActionStatus = 'Pending' | 'Confirmed' | 'Cancelled';
+/**
+ * Details of a change the AI proposed. Each type uses only its own fields. Names are what the AI said; ids are the
+ * matching records, or null when nothing matched (the user then picks one before confirming). Amounts are in VND.
+ */
+export type AIActionPayload = {
+  type?: 'Expense' | 'Income' | null; amount?: number | null;
+  categoryId?: string | null; categoryName?: string | null; accountId?: string | null; accountName?: string | null;
+  date?: string | null; description?: string | null; name?: string | null;
+  startDate?: string | null; endDate?: string | null; alertThreshold?: number | null;
+  targetAmount?: number | null; deadline?: string | null; goalId?: string | null; goalName?: string | null;
+};
+export type AIActionResponse = {
+  id: string; type: AIActionType; status: AIActionStatus; payload: AIActionPayload;
+  resultId?: string | null; createdAt: string; resolvedAt?: string | null;
+};
 export type AIChatMessageResponse = {
   id: string; conversationId: string; sequence: number; role: 'User' | 'Assistant' | 'System';
   content: string; intent?: string | null; status: 'Pending' | 'Completed' | 'Failed'; createdAt: string;
+  /** Changes this reply proposed; empty for most messages. */
+  actions?: AIActionResponse[];
 };
 /** `dailyLimit` and `remaining` are null when the user has no limit. `resetsAt` is the user's next local midnight (UTC). */
 export type AIUsageResponse = { isUnlimited: boolean; dailyLimit: number | null; used: number; remaining: number | null; resetsAt: string };

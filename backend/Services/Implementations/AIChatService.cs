@@ -14,7 +14,8 @@ public sealed class AIChatService(
     IEncryptionService encryption,
     IAIOrchestrationService orchestration,
     IAIQuotaService quota,
-    UserRequestGate gate) : IAIChatService
+    UserRequestGate gate,
+    IAIActionService actions) : IAIChatService
 {
     private const int ContextMessageLimit = 20;
 
@@ -45,14 +46,16 @@ public sealed class AIChatService(
             .ToListAsync(cancellationToken);
 
         rows.Reverse();
+        var proposed = await actions.GetForMessagesAsync(userId,
+            rows.Where(r => r.Role == ChatMessageRole.Assistant).Select(r => r.Id).ToList(), cancellationToken);
         var items = new List<ChatMessageResponse>(rows.Count);
         foreach (var row in rows)
-            items.Add(await MapMessageAsync(userId, row, cancellationToken));
+            items.Add(MapMessage(row, await DecryptAsync(userId, row, cancellationToken), proposed.GetValueOrDefault(row.Id)));
         return new PagedResult<ChatMessageResponse>(items, paging.Page, paging.PageSize, total);
     }
 
     public async Task<SendChatMessageResponse> SendMessageAsync(Guid userId, SendChatMessageRequest request,
-        CancellationToken cancellationToken = default)
+        ChatStreamCallbacks? callbacks = null, CancellationToken cancellationToken = default)
     {
         // One request per user at a time, and a limit check before anything is stored or sent to the AI.
         using var slot = gate.TryEnter(userId)
@@ -84,12 +87,16 @@ public sealed class AIChatService(
             .Where(m => m.ConversationId == conversation.Id && m.Status == AIProcessingStatus.Completed)
             .OrderByDescending(m => m.Sequence).Take(ContextMessageLimit).ToListAsync(cancellationToken);
         historyRows.Reverse();
+        // Earlier proposals and whether the user confirmed them, so the model does not propose the same thing twice.
+        var earlierActions = await actions.GetForMessagesAsync(userId,
+            historyRows.Where(r => r.Role == ChatMessageRole.Assistant).Select(r => r.Id).ToList(), cancellationToken);
         var history = new List<AIChatTurn>(historyRows.Count);
         foreach (var row in historyRows)
         {
-            var content = await encryption.DecryptAsync(userId, row.ContentCipher, row.Nonce, row.KeyVersion,
-                cancellationToken);
-            history.Add(new AIChatTurn(row.Role == ChatMessageRole.Assistant ? "assistant" : "user", content));
+            var turn = await DecryptAsync(userId, row, cancellationToken);
+            if (earlierActions.TryGetValue(row.Id, out var outcomes))
+                turn = string.Join('\n', [turn, .. outcomes.Select(AIActionService.DescribeForHistory)]);
+            history.Add(new AIChatTurn(row.Role == ChatMessageRole.Assistant ? "assistant" : "user", turn));
         }
 
         var nextSequence = await db.AIChatMessages
@@ -109,11 +116,19 @@ public sealed class AIChatService(
         db.AIChatMessages.Add(userMessage);
         conversation.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
+        if (callbacks?.OnStarted is { } started) await started(conversation.Id, MapMessage(userMessage, text));
 
         AIChatResult result;
+        string content;
+        IReadOnlyList<AIProposedAction> proposals;
         try
         {
-            result = await orchestration.ChatAsync(userId, text, history, request.Language, cancellationToken);
+            result = await orchestration.ChatAsync(userId, text, history, request.Language, callbacks?.OnDelta, cancellationToken);
+            proposals = (result.Actions ?? []).Where(a => AIActionTypes.All.Contains(a.Name)).Take(AIActionTypes.MaxPerMessage).ToList();
+            // A model that only calls functions writes no text, so the reply explains what is waiting for the user.
+            content = result.Content.Length > 0 ? result.Content
+                : proposals.Count > 0 ? ActionsReady(proposals.Count, request.Language)
+                : throw new ServiceUnavailableException("Dịch vụ AI không trả lời được câu hỏi này. Vui lòng thử lại.");
         }
         catch
         {
@@ -124,7 +139,7 @@ public sealed class AIChatService(
             throw;
         }
 
-        var encryptedAssistant = await encryption.EncryptAsync(userId, result.Content, cancellationToken);
+        var encryptedAssistant = await encryption.EncryptAsync(userId, content, cancellationToken);
         var assistantMessage = new AIChatMessage
         {
             ConversationId = conversation.Id,
@@ -133,17 +148,18 @@ public sealed class AIChatService(
             ContentCipher = encryptedAssistant.Cipher,
             Nonce = encryptedAssistant.Nonce,
             KeyVersion = encryptedAssistant.KeyVersion,
-            Intent = result.Intent,
+            Intent = result.Intent ?? IntentFor(proposals),
             Status = AIProcessingStatus.Completed,
             TokenUsage = result.TokenUsage
         };
         db.AIChatMessages.Add(assistantMessage);
+        var proposed = await actions.ProposeAsync(userId, assistantMessage.Id, proposals, cancellationToken);
         conversation.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
         var usage = (await quota.GetStatusAsync(userId, cancellationToken)).ToUsage();
         return new SendChatMessageResponse(conversation.Id,
-            MapMessage(userMessage, text), MapMessage(assistantMessage, result.Content), usage);
+            MapMessage(userMessage, text), MapMessage(assistantMessage, content, proposed), usage);
     }
 
     public async Task<ConversationResponse> RenameConversationAsync(Guid userId, Guid conversationId,
@@ -216,13 +232,27 @@ public sealed class AIChatService(
         return new ConversationResponse(c.Id, title, AsUtc(c.CreatedAt), AsUtc(c.UpdatedAt), c.IsArchived);
     }
 
-    private async Task<ChatMessageResponse> MapMessageAsync(Guid userId, AIChatMessage m,
-        CancellationToken cancellationToken) =>
-        MapMessage(m, await encryption.DecryptAsync(userId, m.ContentCipher, m.Nonce, m.KeyVersion,
-            cancellationToken));
+    private Task<string> DecryptAsync(Guid userId, AIChatMessage m, CancellationToken cancellationToken) =>
+        encryption.DecryptAsync(userId, m.ContentCipher, m.Nonce, m.KeyVersion, cancellationToken);
 
-    private static ChatMessageResponse MapMessage(AIChatMessage m, string content) =>
-        new(m.Id, m.ConversationId, m.Sequence, m.Role, content, m.Intent, m.Status, AsUtc(m.CreatedAt));
+    private static ChatMessageResponse MapMessage(AIChatMessage m, string content,
+        IReadOnlyList<AIActionResponse>? proposed = null) =>
+        new(m.Id, m.ConversationId, m.Sequence, m.Role, content, m.Intent, m.Status, AsUtc(m.CreatedAt), proposed ?? []);
+
+    private static string ActionsReady(int count, string? language) => language == "en"
+        ? (count == 1 ? "I've prepared 1 action below. Check it, then press Confirm to save it."
+            : $"I've prepared {count} actions below. Check each one, then press Confirm to save it.")
+        : (count == 1 ? "Mình đã chuẩn bị 1 thao tác bên dưới. Kiểm tra lại rồi bấm Xác nhận để lưu."
+            : $"Mình đã chuẩn bị {count} thao tác bên dưới. Kiểm tra từng mục rồi bấm Xác nhận để lưu.");
+
+    /// <summary>Highlight for a reply that only proposes actions (the model writes no intent tag then).</summary>
+    private static string? IntentFor(IReadOnlyList<AIProposedAction> proposals) => proposals.FirstOrDefault()?.Name switch
+    {
+        AIActionTypes.CreateTransaction or AIActionTypes.CreateCategory => "transaction_help",
+        AIActionTypes.CreateBudget => "budget_advice",
+        AIActionTypes.CreateSavingsGoal or AIActionTypes.ContributeToGoal => "saving_goal",
+        _ => null
+    };
 
     private static DateTime AsUtc(DateTime value) =>
         value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);

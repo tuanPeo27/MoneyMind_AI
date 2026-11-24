@@ -26,8 +26,12 @@ builder.Services.AddHttpContextAccessor();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' was not found.");
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(connectionString));
+builder.Services.AddMemoryCache(options => options.SizeLimit = 10_000);
+builder.Services.AddSingleton<FinancialContextCache>();
+builder.Services.AddSingleton<backend.Data.FinancialDataChangeInterceptor>();
+builder.Services.AddDbContext<AppDbContext>((provider, options) =>
+    options.UseSqlServer(connectionString)
+        .AddInterceptors(provider.GetRequiredService<backend.Data.FinancialDataChangeInterceptor>()));
 
 // Options
 builder.Services.AddOptions<JwtOptions>()
@@ -170,6 +174,7 @@ builder.Services.AddScoped<IEncryptionService, EncryptionService>();
 builder.Services.AddScoped<IFinancialAnalysisService, FinancialAnalysisService>();
 builder.Services.AddScoped<IAIOrchestrationService, AIOrchestrationService>();
 builder.Services.AddScoped<IAIChatService, AIChatService>();
+builder.Services.AddScoped<IAIActionService, AIActionService>();
 builder.Services.AddScoped<IAIQuotaService, AIQuotaService>();
 builder.Services.AddSingleton<UserRequestGate>();
 builder.Services.AddHttpClient<IAIServiceClient, AIServiceClient>((provider, client) =>

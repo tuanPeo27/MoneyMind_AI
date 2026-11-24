@@ -1,87 +1,115 @@
-# MoneyMind AI – Development Setup
+# 🛠️ MoneyMind AI - Development Setup
 
-Tài liệu hướng dẫn thành viên mới cài đặt môi trường phát triển và chạy dự án MoneyMind AI trên Windows.
+Tài liệu này hướng dẫn thiết lập môi trường phát triển và chạy hệ thống
+**MoneyMind AI** trên Windows.
+
+Hệ thống gồm ba process cần chạy đồng thời:
+
+```text
+React/Vite  ──>  ASP.NET Core API  ──>  Python/FastAPI
+                                      └──>  Google Gemini
+                         │
+                         └──> SQL Server
+```
+
+## 📋 Mục lục
+
+1. [Yêu cầu môi trường](#1-yêu-cầu-môi-trường)
+2. [Cấu hình local](#2-cấu-hình-local)
+3. [Thiết lập database](#3-thiết-lập-database)
+4. [Chạy AI service](#4-chạy-ai-service)
+5. [Chạy backend](#5-chạy-backend)
+6. [Chạy frontend](#6-chạy-frontend)
+7. [Google sign-in](#7-google-sign-in)
+8. [Chạy test](#8-chạy-test)
+9. [Bảng lệnh nhanh](#9-bảng-lệnh-nhanh)
+10. [Xử lý lỗi thường gặp](#10-xử-lý-lỗi-thường-gặp)
+
+---
 
 ## 1. Yêu cầu môi trường
 
-| Công cụ | Phiên bản / yêu cầu |
-|---|---|
-| .NET SDK | .NET 10 |
-| SQL Server | SQL Server hoặc SQL Server Express |
-| SQL Server Management Studio (SSMS) | Khuyến nghị để quản lý database |
-| Git | Để clone và quản lý source code |
-| Visual Studio Code / Visual Studio | IDE tùy chọn |
+| Công cụ | Phiên bản khuyến nghị | Kiểm tra |
+|---|---|---|
+| Windows | 10/11 | - |
+| .NET SDK | 10.0 trở lên | `dotnet --version` |
+| SQL Server | 2019+ hoặc Express | SQL Server Configuration Manager |
+| Node.js | 20 trở lên | `node --version` |
+| pnpm | 9 trở lên | `pnpm --version` |
+| Python | 3.11 trở lên | `python --version` |
+| Git | Phiên bản hiện tại | `git --version` |
+| EF Core CLI | 10.0.0 | `dotnet ef --version` |
 
-**Lưu ý:**
-- Backend hiện tại sử dụng ASP.NET Core và Entity Framework Core.
-- Python AI service và frontend cần được cập nhật hướng dẫn riêng khi xác nhận nhánh source code và phiên bản tương ứng.
-- Các phiên bản ghi trong bảng là yêu cầu hoặc môi trường đã kiểm tra, không phải tất cả đều đã được xác minh trên mọi máy.
+> SQL Server Management Studio là tùy chọn, nhưng hữu ích để kiểm tra database,
+> dữ liệu seeding và migration.
 
-## 2. Clone source code
+### Clone source
 
-Mở Terminal và chạy:
-
-```bash
+```powershell
 git clone https://github.com/tuanPeo27/MoneyMind_AI.git
 cd MoneyMind_AI
 ```
 
-## 3. Cài đặt Backend
+---
 
-### 3.1. Kiểm tra .NET SDK
+## 2. Cấu hình local
 
-Kiểm tra phiên bản .NET:
+Tạo ba file cấu hình từ file mẫu:
 
-```bash
-dotnet --version
+```powershell
+Copy-Item backend/.env.example backend/.env
+Copy-Item ai-service/.env.example ai-service/.env
+Copy-Item frontend/.env.example frontend/.env.local
 ```
 
-Dự án hiện sử dụng target framework `net10.0`, vì vậy cần cài .NET 10 SDK.
+Các file này bị git ignore và không được commit.
 
-### 3.2. Khôi phục các package
+### 2.1 Cấu hình backend
 
-Di chuyển vào thư mục backend:
+Mở `backend/.env` và cấu hình các giá trị bắt buộc:
 
-```bash
-cd backend
-```
-
-Chạy:
-
-```bash
-dotnet restore
-```
-
-Lệnh này tải và khôi phục các package cần thiết được khai báo trong `backend.csproj`.
-
-### 3.3. Cấu hình biến môi trường
-
-Sao chép file mẫu:
-
-```bash
-copy .env.example .env
-```
-
-Mở file `.env` và điền các thông tin cần thiết.
-
-Các biến quan trọng:
-
-```env
-# Database
+```dotenv
 ConnectionStrings__DefaultConnection="Server=localhost;Database=MoneyMindAI;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True"
 
-# JWT - cần khóa ngẫu nhiên tối thiểu 32 ký tự
-Jwt__Key="YOUR_RANDOM_SECRET_KEY_AT_LEAST_32_CHARACTERS"
+Jwt__Key="<at least 32 random characters>"
+Encryption__MasterKey="<base64-encoded 32-byte key>"
+AIService__ServiceKey="<at least 32 random characters>"
+```
 
-# Admin account (optional)
+#### Kết nối SQL Server Express
+
+```dotenv
+ConnectionStrings__DefaultConnection="Server=localhost\SQLEXPRESS;Database=MoneyMindAI;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True"
+```
+
+#### Tạo khóa Base64 cho mã hóa dữ liệu
+
+```powershell
+[Convert]::ToBase64String(
+    [Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+)
+```
+
+#### Tạo khóa ngẫu nhiên cho JWT và AI service
+
+```powershell
+[Convert]::ToHexString(
+    [Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+)
+```
+
+### 2.2 Cấu hình tùy chọn của backend
+
+```dotenv
+# Tài khoản Admin do seeder tạo
 Seed__AdminEmail="admin@example.com"
-Seed__AdminPassword="YOUR_ADMIN_PASSWORD"
+Seed__AdminPassword="<strong password>"
 Seed__AdminFullName="System Admin"
 
-# Google Sign-In (optional)
+# Google OAuth Web application
 Google__ClientId=""
 
-# SMTP (optional)
+# SMTP
 Smtp__Host=""
 Smtp__Port=587
 Smtp__EnableSsl=true
@@ -89,58 +117,149 @@ Smtp__Username=""
 Smtp__Password=""
 Smtp__FromAddress=""
 Smtp__FromName="MoneyMind AI"
+
+# CORS
+Cors__AllowedOrigins__0=http://localhost:5173
+Cors__AllowedOrigins__1=http://localhost:3000
 ```
 
-**Lưu ý:**
-- Nếu sử dụng SQL Server Express, hãy điều chỉnh `Server` thành `localhost\\SQLEXPRESS` nếu đó là tên instance trên máy của bạn.
-- `Jwt__Key` phải có tối thiểu 32 ký tự.
-- Google OAuth và SMTP có thể để trống nếu chưa sử dụng các chức năng tương ứng.
-- Không chia sẻ mật khẩu, JWT key hoặc thông tin đăng nhập thật.
-- Không commit file `.env` lên Git. Chỉ commit `.env.example`.
+<table>
+<tr><td>🔑</td><td><strong>Seeder admin</strong></td><td>Chỉ tạo tài khoản khi đủ email và password</td></tr>
+<tr><td>📧</td><td><strong>SMTP</strong></td><td>Để trống Host để ghi reset link vào log thay vì gửi mail</td></tr>
+<tr><td>🌐</td><td><strong>Google</strong></td><td>Chỉ cần khi sử dụng đăng nhập Google</td></tr>
+<tr><td>🔒</td><td><strong>CORS</strong></td><td>Không bắt buộc khi dùng proxy Vite mặc định</td></tr>
+</table>
 
-### 3.4. Cài đặt Entity Framework CLI
+### 2.3 Cấu hình AI service
 
-Cài công cụ EF Core CLI nếu máy chưa có:
+Mở `ai-service/.env`:
 
-```bash
+```dotenv
+GEMINI_API_KEY="<Google Gemini API key>"
+GEMINI_MODEL_RESPOND="gemini-2.5-flash"
+GEMINI_FALLBACK_MODELS="gemini-3.5-flash-lite,gemini-3.1-flash-lite"
+SERVICE_KEY="<exactly the same as AIService__ServiceKey>"
+HOST="127.0.0.1"
+PORT=8001
+REQUEST_TIMEOUT_SECONDS=45
+ATTEMPT_TIMEOUT_SECONDS=25
+MAX_OUTPUT_TOKENS=2048
+```
+
+> [!IMPORTANT]
+> `AIService__ServiceKey` trong `backend/.env` phải hoàn toàn giống
+> `SERVICE_KEY` trong `ai-service/.env`.
+
+Model trong danh sách có thể thay đổi trạng thái theo API key.
+Kiểm tra model trước khi đưa vào fallback.
+
+### 2.4 Cấu hình frontend
+
+File `frontend/.env.local`:
+
+```dotenv
+# Để trống để dùng proxy Vite
+VITE_API_URL=
+
+# Google OAuth Web client ID
+VITE_GOOGLE_CLIENT_ID=
+```
+
+Khi để `VITE_API_URL` trống, Vite chuyển mọi request `/api`
+tới `http://localhost:5146`.
+
+---
+
+## 3. Thiết lập database
+
+### 3.1 Cài EF Core CLI
+
+```powershell
 dotnet tool install --global dotnet-ef --version 10.0.0
-```
-
-Kiểm tra:
-
-```bash
 dotnet ef --version
 ```
 
-### 3.5. Tạo hoặc cập nhật Database
+### 3.2 Khôi phục package và cập nhật database
 
-Đảm bảo SQL Server đang chạy, sau đó thực hiện:
-
-```bash
+```powershell
+cd backend
+dotnet restore
 dotnet ef database update
 ```
 
-Lệnh này áp dụng các migration có sẵn và tạo/cập nhật database.
+Migration sẽ tạo/cập nhật database theo connection string trong `backend/.env`.
 
-### 3.6. Chạy Backend
+### 3.3 Dữ liệu seeding
 
-```bash
-dotnet run
+Lần khởi động đầu tiên, seeder tạo:
+
+- Role `Admin`
+- Role `User`
+- Danh mục thu/chi mặc định
+- Hạn mức tin nhắn AI mặc định
+- Tài khoản admin nếu đã cấu hình seed credentials
+
+Seeder có thể chạy lặp lại và không ghi đè dữ liệu đã tồn tại.
+
+---
+
+## 4. Chạy AI service
+
+Mở terminal thứ nhất:
+
+```powershell
+cd ai-service
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python run.py
 ```
 
-Backend mặc định chạy tại:
+Khi khởi động thành công:
 
-- API: http://localhost:5146
-- Swagger: http://localhost:5146/swagger
+```text
+http://127.0.0.1:8001
+```
 
-Mở Swagger để xem danh sách API và thử gửi request.
+### Kiểm tra AI service
 
-### 3.7. Kiểm tra Backend
+```powershell
+$headers = @{ "X-Service-Key" = "<SERVICE_KEY>" }
+Invoke-RestMethod `
+    -Uri "http://127.0.0.1:8001/health" `
+    -Headers $headers
+```
 
-Gửi request:
+AI service là thành phần nội bộ. Không cho trình duyệt hoặc mạng bên ngoài gọi trực tiếp.
 
-```http
-GET http://localhost:5146/api/health
+---
+
+## 5. Chạy backend
+
+Mở terminal thứ hai:
+
+```powershell
+cd backend
+dotnet restore
+dotnet build
+dotnet run --launch-profile http
+```
+
+### Các endpoint phát triển
+
+| Thành phần | Địa chỉ |
+|---|---|
+| Backend API | <http://localhost:5146> |
+| Swagger UI | <http://localhost:5146/swagger> |
+| OpenAPI document | <http://localhost:5146/openapi/v1.json> |
+| Health check | <http://localhost:5146/api/health> |
+| Notification hub | `ws://localhost:5146/hubs/notifications` |
+
+### Kiểm tra backend
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:5146/api/health"
 ```
 
 Kết quả mong đợi:
@@ -152,74 +271,234 @@ Kết quả mong đợi:
 }
 ```
 
-HTTP status code mong đợi: `200 OK`.
+Database không kết nối được sẽ trả HTTP `503`.
 
-## 4. Cấu hình Database
+---
 
-Backend sử dụng SQL Server thông qua Entity Framework Core.
+## 6. Chạy frontend
 
-Ví dụ connection string cho SQL Server Express:
+Mở terminal thứ ba:
 
-```env
-ConnectionStrings__DefaultConnection="Server=localhost\\SQLEXPRESS;Database=MoneyMindAI;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True"
+```powershell
+cd frontend
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-Nếu sử dụng SQL Server instance khác, cần thay đổi giá trị `Server` tương ứng.
+Mở trình duyệt:
 
-## 5. Một số lỗi thường gặp
+```text
+http://localhost:5173
+```
 
-### Không kết nối được Database
+### Build production bundle
 
-- Kiểm tra dịch vụ SQL Server đã chạy chưa.
-- Kiểm tra tên instance trong connection string.
-- Kiểm tra quyền truy cập database.
+```powershell
+pnpm build
+pnpm preview
+```
 
-### Thiếu JWT Key
+Vite proxy mặc định chuyển request `/api` tới backend
+`http://localhost:5146`.
 
-Kiểm tra biến `Jwt__Key` trong file `.env`.
+---
 
-Khóa cần có ít nhất 32 ký tự.
+## 7. Google sign-in
 
-### Không tìm thấy lệnh dotnet ef
+<table>
+<tr><th>Bước</th><th>Thao tác</th></tr>
+<tr><td>1</td><td>Tạo OAuth 2.0 client loại <strong>Web application</strong></td></tr>
+<tr><td>2</td><td>Thêm <code>http://localhost:5173</code> vào authorized JavaScript origins</td></tr>
+<tr><td>3</td><td>Đặt <code>Google__ClientId</code> trong <code>backend/.env</code></td></tr>
+<tr><td>4</td><td>Đặt <code>VITE_GOOGLE_CLIENT_ID</code> trong <code>frontend/.env.local</code></td></tr>
+<tr><td>5</td><td>Khởi động lại frontend và backend</td></tr>
+</table>
 
-Kiểm tra công cụ:
+Hai giá trị client ID phải cùng một OAuth client. Client ID có thể công khai trên frontend,
+nhưng credential và secret không được đưa ra browser.
 
-```bash
+---
+
+## 8. Chạy test
+
+### AI service
+
+```powershell
+cd ai-service
+.\.venv\Scripts\Activate.ps1
+python -m unittest discover -s tests -v
+```
+
+Test hiện bao phủ:
+
+- Fallback model
+- Quota 429 và cooldown
+- Timeout và lỗi provider
+- Response AI không hợp lệ
+- Tất cả model cùng lỗi
+
+### Backend
+
+Repository chưa có test project. Khi bổ sung test, ưu tiên integration test cho:
+
+- Đăng ký, đăng nhập và refresh token
+- Session và logout
+- Quyền truy cập dữ liệu theo người dùng
+- Giao dịch, ngân sách và mục tiêu
+- Dashboard và báo cáo
+- AI quota
+- Role `Admin`
+
+### Frontend
+
+Repository chưa có Vitest hoặc Playwright. Khi cấu hình test runner, bắt đầu với:
+
+- Authentication redirect
+- CRUD giao dịch
+- CRUD ngân sách
+- Mở/tạo hội thoại AI
+- Điều hướng role Admin
+
+---
+
+## 9. Bảng lệnh nhanh
+
+<details>
+<summary><strong>Backend commands</strong></summary>
+
+```powershell
+cd backend
+dotnet restore
+dotnet build
+dotnet run --launch-profile http
+dotnet ef migrations add <MigrationName>
+dotnet ef database update
+dotnet ef migrations remove
+```
+
+</details>
+
+<details>
+<summary><strong>Frontend commands</strong></summary>
+
+```powershell
+cd frontend
+pnpm install --frozen-lockfile
+pnpm dev
+pnpm build
+pnpm preview
+```
+
+</details>
+
+<details>
+<summary><strong>AI service commands</strong></summary>
+
+```powershell
+cd ai-service
+.\.venv\Scripts\Activate.ps1
+python run.py
+python -m unittest discover -s tests -v
+```
+
+</details>
+
+---
+
+## 10. Xử lý lỗi thường gặp
+
+### ❌ Thiếu hoặc sai SDK .NET
+
+```powershell
+dotnet --list-sdks
+dotnet --version
+```
+
+Cài .NET 10 SDK và mở lại terminal hoặc VS Code.
+
+### ❌ Backend không tìm thấy database connection
+
+Kiểm tra `backend/.env` có:
+
+```dotenv
+ConnectionStrings__DefaultConnection="..."
+```
+
+Biến môi trường host có ưu tiên cao hơn file `.env`.
+
+### ❌ Thiếu JWT hoặc encryption key
+
+Đảm bảo:
+
+- `Jwt__Key`: tối thiểu 32 ký tự
+- `Encryption__MasterKey`: Base64 của 32 byte
+- `AIService__ServiceKey`: tối thiểu 32 ký tự
+
+> [!CAUTION]
+> Không đổi `Encryption__MasterKey` sau khi dữ liệu đã được mã hóa.
+
+### ❌ Không kết nối SQL Server
+
+Kiểm tra lần lượt:
+
+- SQL Server service đang chạy
+- Tên instance chính xác
+- Quyền truy cập của Windows hoặc SQL login
+- Firewall cho phép kết nối local
+- Connection string có `TrustServerCertificate=True`
+
+SQL Server Express thường dùng:
+
+```text
+localhost\SQLEXPRESS
+```
+
+### ❌ Không tìm thấy `dotnet ef`
+
+```powershell
+dotnet tool install --global dotnet-ef --version 10.0.0
 dotnet ef --version
 ```
 
-Nếu chưa cài, thực hiện lại bước cài đặt Entity Framework CLI.
+Nếu đã cài nhưng không tìm thấy lệnh, kiểm tra thư mục tools:
 
-### Backend không chạy được
-
-Thử khôi phục package:
-
-```bash
-dotnet restore
+```powershell
+& "$env:USERPROFILE\.dotnet\tools\dotnet-ef.exe" --version
 ```
 
-Sau đó chạy lại:
+### ❌ Frontend không gọi được API
 
-```bash
-dotnet run
-```
+Kiểm tra:
 
-## 6. Bảo mật và Git
+1. Backend đang chạy trên port `5146`
+2. Frontend đang chạy trên port `5173`
+3. `VITE_API_URL` để trống cho setup proxy mặc định
+4. Restart Vite sau khi sửa `.env.local`
 
-- Không commit file `.env`.
-- Không đưa mật khẩu hoặc secret thật vào source code.
-- Sử dụng `.env.example` để chia sẻ tên biến môi trường và giá trị mẫu.
-- Không commit các thư mục build như `bin/`, `obj/`, `.venv/`, `node_modules/`.
+### ❌ AI request thất bại
 
-## 7. Trạng thái hướng dẫn
+Kiểm tra:
 
-| Thành phần | Trạng thái |
-|---|---|
-| ASP.NET Core Backend | Đã kiểm tra chạy thành công |
-| SQL Server Database | Đã kiểm tra tạo database và chạy migration |
-| Swagger | Đã mở thành công |
-| Health API | Đã nhận HTTP 200 |
-| Frontend | Chưa xác minh cấu trúc và phiên bản trên nhánh main |
-| Python AI Service | Chưa xác minh cấu trúc và phiên bản trên nhánh main |
+1. `GEMINI_API_KEY` hợp lệ
+2. `SERVICE_KEY` bằng `AIService__ServiceKey`
+3. AI service đang chạy tại `127.0.0.1:8001`
+4. Model Gemini được API key cấu hình hỗ trợ
+5. Backend không timeout hoặc sai `AIService:BaseUrl`
 
-Tài liệu sẽ được cập nhật khi các thành phần frontend và AI service được tích hợp hoặc xác nhận phiên bản chính thức.
+### ❌ Không gửi được email reset password
+
+Trong môi trường local, để `Smtp__Host` trống để reset link được ghi log.
+Muốn gửi mail thật, cấu hình đầy đủ SMTP host, port, SSL, username,
+password và from address.
+
+---
+
+## 🔐 Quy tắc bảo mật
+
+- Không commit `.env`, `.env.local`, private key hoặc credential
+- Dùng secret riêng cho development và production
+- Không đưa Gemini key hoặc SMTP password vào frontend
+- Không thay đổi master encryption key sau khi dữ liệu tồn tại
+- Mọi thay đổi authentication, authorization hoặc tính toán tài chính cần được review
+- Production bắt buộc dùng HTTPS và CORS giới hạn

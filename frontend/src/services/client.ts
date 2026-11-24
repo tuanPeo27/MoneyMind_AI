@@ -66,3 +66,53 @@ http.interceptors.response.use(
 );
 
 export const getData = <T>(p: Promise<{ data: T }>) => p.then(r => r.data);
+
+/** Same error shape as the axios interceptor: first validation message, then ProblemDetails detail/title. */
+async function toApiError(response: Response): Promise<ApiError> {
+  const data = await response.json().catch(() => undefined) as any;
+  const fieldErrors = data?.errors as Record<string, string[]> | undefined;
+  const firstValidation = fieldErrors ? Object.values(fieldErrors).flat()[0] : undefined;
+  return new ApiError(firstValidation || data?.detail || data?.title || 'REQUEST_FAILED', response.status, undefined, fieldErrors);
+}
+
+/**
+ * POST that reads a newline-delimited JSON response as it arrives and calls `onEvent` for each line.
+ * Axios cannot stream in the browser, so this uses fetch with the same token, one silent refresh on 401, and the
+ * same ApiError for failures before the stream starts.
+ */
+export async function postStream(path: string, body: unknown, onEvent: (event: any) => void, signal?: AbortSignal) {
+  const send = (token?: string) => fetch(`${BASE_URL}${path}`, {
+    method: 'POST', signal,
+    headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  let response: Response;
+  try {
+    response = await send(getSession()?.accessToken);
+    if (response.status === 401) {
+      const session = await refreshSession();
+      if (session) response = await send(session.accessToken);
+    }
+  } catch (e) {
+    if ((e as Error)?.name === 'AbortError') throw e;
+    throw new ApiError('NETWORK', 0);
+  }
+  if (!response.ok) throw await toApiError(response);
+  if (!response.body) throw new ApiError('NETWORK', 0);
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    let newline: number;
+    while ((newline = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (line) onEvent(JSON.parse(line));
+    }
+    if (done) break;
+  }
+  if (buffer.trim()) onEvent(JSON.parse(buffer));
+}

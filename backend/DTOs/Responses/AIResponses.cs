@@ -1,3 +1,4 @@
+using backend.DTOs;
 using backend.Models;
 
 namespace backend.DTOs.Responses;
@@ -17,7 +18,8 @@ public sealed record ChatMessageResponse(
     string Content,
     string? Intent,
     AIProcessingStatus Status,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    IReadOnlyList<AIActionResponse>? Actions = null);
 
 /// <param name="DailyLimit">null when the user has no limit.</param>
 /// <param name="Remaining">null when the user has no limit.</param>

@@ -2,113 +2,305 @@
 
 # ✦ MoneyMind AI
 
-### Hiểu tiền của bạn. Làm chủ tương lai của bạn.
+**Hiểu tiền của bạn. Làm chủ tương lai của bạn.**
 
-Ứng dụng quản lý tài chính cá nhân kết hợp **Conversational AI** và **Proactive AI** —
-biến những con số thu chi thành thông tin dễ hiểu, hữu ích và đúng lúc.
+Ứng dụng quản lý tài chính cá nhân kết hợp dữ liệu thu chi, ngân sách,
+mục tiêu tiết kiệm và trợ lý AI thông minh bằng tiếng Việt.
 
-<br />
+[![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=111827)](https://react.dev/)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![SQL Server](https://img.shields.io/badge/SQL%20Server-Database-CC2927?logo=microsoftsqlserver&logoColor=white)](https://www.microsoft.com/sql-server)
+[![License](https://img.shields.io/badge/License-Academic-blueviolet)](#)
 
-![Project status](https://img.shields.io/badge/Project-MVP%20proposal-8b5cf6?style=for-the-badge)
-![Domain](https://img.shields.io/badge/FinTech-Personal%20Finance-14b8a6?style=for-the-badge)
-![AI](https://img.shields.io/badge/AI-Hybrid%20Assistant-f59e0b?style=for-the-badge)
+[Bắt đầu nhanh](#-bắt-đầu-nhanh) · [Kiến trúc](#-kiến-trúc) · [Cài đặt](./DEVELOPMENT_SETUP.md) · [AI Service](./ai-service/README.md)
 
 </div>
 
 ---
 
-## ✨ MoneyMind AI là gì?
+## 🌟 MoneyMind AI là gì?
 
-MoneyMind AI là đề tài ứng dụng quản lý tài chính cá nhân dành cho những ai muốn theo dõi thu nhập, chi tiêu, ngân sách và mục tiêu tiết kiệm ở một nơi. Thay vì chỉ hiển thị biểu đồ hay đưa ra câu trả lời chung chung, ứng dụng hướng đến việc giúp bạn **hỏi về dữ liệu tài chính của chính mình** và nhận được những phân tích chủ động, có căn cứ.
+MoneyMind AI biến dữ liệu thu chi thành bức tranh tài chính trực quan và hữu ích.
+Người dùng có thể theo dõi tài khoản, đặt ngân sách, quản lý mục tiêu tiết kiệm
+và trao đổi với trợ lý AI dựa trên dữ liệu tài chính của chính mình.
 
-> **Một nguyên tắc cốt lõi:** nghiệp vụ và dữ liệu đã xác minh tạo ra con số; AI giúp bạn hiểu con số đó.
-
-## 🌱 Hai cách AI đồng hành
-
-| | Conversational AI | Proactive AI |
+| 💰 Quản lý tài chính | 🤖 Trợ lý AI | 🛡️ Quản trị & bảo mật |
 |---|---|---|
-| **Cách hoạt động** | Bạn hỏi bằng ngôn ngữ tự nhiên; trợ lý truy vấn dữ liệu phù hợp rồi giải thích kết quả. | Hệ thống phân tích theo sự kiện hoặc lịch và chủ động gửi insight, báo cáo, cảnh báo. |
-| **Ví dụ** | “Tháng này mình chi nhiều nhất vào khoản nào?” | “Bạn đã sử dụng 80% ngân sách ăn uống.” |
-| **Giá trị** | Hiểu tình hình tài chính mà không cần tự lọc nhiều báo cáo. | Nhận ra xu hướng đáng chú ý mà không phải liên tục đặt câu hỏi. |
+| Giao dịch, tài khoản, danh mục | Hỏi đáp bằng ngôn ngữ tự nhiên | JWT, refresh token, vai trò |
+| Ngân sách và mục tiêu | Lịch sử hội thoại và phản hồi | Phân quyền người dùng/Admin |
+| Dashboard và biểu đồ | Gemini fallback và quota | Dữ liệu được tách theo tài khoản |
 
-## 💎 Những trải nghiệm hướng tới
+---
 
-- **Ghi chép thu chi:** thêm, sửa, xóa, tìm kiếm và lọc giao dịch theo thời gian, danh mục hoặc tài khoản.
-- **Tổng quan tài chính:** theo dõi thu nhập, chi tiêu, chênh lệch thu chi và biểu đồ theo kỳ.
-- **Ngân sách & mục tiêu:** theo dõi mức sử dụng ngân sách và tiến độ tiết kiệm.
-- **Trợ lý tiếng Việt:** hỏi về tổng chi, danh mục chi nhiều nhất, ngân sách còn lại hoặc so sánh giữa các tháng.
-- **Gợi ý phân loại:** đề xuất danh mục kèm độ tin cậy; bạn vẫn là người quyết định.
-- **Phân tích thông minh:** nhận diện xu hướng, khoản chi khác thường và dự báo khi dữ liệu đủ cơ sở.
-- **Insight chủ động:** cảnh báo ngân sách, báo cáo định kỳ và nhắc xem lại mục tiêu.
+## ✨ Tính năng
 
-## 🧠 Hybrid AI — thông minh nhưng có kiểm soát
+### 👤 Không gian cá nhân
 
-MoneyMind AI phân chia trách nhiệm để câu trả lời hữu ích mà không đánh đổi độ tin cậy:
+- Đăng ký, đăng nhập và đăng nhập bằng Google
+- Quản lý tài khoản thanh toán
+- Thêm, sửa, xóa và lọc giao dịch
+- Quản lý danh mục thu/chi
+- Lập và theo dõi ngân sách
+- Tạo mục tiêu tiết kiệm và ghi nhận đóng góp
+- Xem tổng quan, xu hướng và báo cáo theo kỳ
+- Quản lý thông báo, hồ sơ, múi giờ và bảo mật
 
-1. **Backend và cơ sở dữ liệu** xử lý quyền truy cập, dữ liệu giao dịch và các phép tính tài chính.
-2. **Dịch vụ phân tích** hỗ trợ phân loại, nhận diện bất thường và dự báo khi phù hợp.
-3. **LLM** hiểu câu hỏi, diễn đạt và giải thích kết quả đã được hệ thống cung cấp.
-4. **Người dùng** kiểm tra, xác nhận và luôn kiểm soát thay đổi trên dữ liệu của mình.
+### 🧠 Trợ lý tài chính
 
-AI không tự tạo số liệu tài chính, không tự thực hiện giao dịch và không thay đổi dữ liệu nghiệp vụ nếu chưa được xác nhận. Cảnh báo bất thường là tín hiệu thống kê — **không phải kết luận gian lận**; dự báo là ước tính — **không phải cam kết chắc chắn**.
+- Hỏi đáp tài chính bằng tiếng Việt
+- Theo ngữ cảnh dữ liệu người dùng
+- Lưu lịch sử hội thoại
+- Đổi tên, lưu trữ và xóa cuộc trò chuyện
+- Gửi phản hồi cho câu trả lời AI
+- Giới hạn số lượt hỏi theo ngày
+- Tự động chuyển sang model Gemini dự phòng khi model chính gặp sự cố
 
-## 🏗️ Kiến trúc dự kiến
+### 🛠️ Khu vực quản trị
+
+- Quản lý người dùng, khóa/mở khóa tài khoản
+- Cấu hình hạn mức AI cho từng người dùng
+- Quản lý thông báo hệ thống
+- Quản lý danh mục và giao dịch
+- Xem log AI, health check và nhật ký hoạt động
+- Cấu hình tham số hệ thống
+
+---
+
+## 🏗️ Kiến trúc
 
 ```mermaid
 flowchart LR
     U[Người dùng] --> FE[React + TypeScript]
-    FE -->|HTTPS / JWT| API[ASP.NET Core Web API]
+    FE -->|REST / JWT| API[ASP.NET Core 10]
+    FE -->|WebSocket / JWT| HUB[SignalR Hub]
     API --> DB[(SQL Server)]
-    API --> AI[Python FastAPI]
-    API --> LLM[LLM Provider]
-    AI --> API
-    LLM --> API
-    API --> FE
+    API --> AI[FastAPI AI Service]
+    AI --> GEMINI[Google Gemini]
+    API --> SMTP[SMTP]
 ```
 
-| Thành phần | Công nghệ dự kiến | Trách nhiệm |
+> **Nguyên tắc bảo mật:** trình duyệt không gọi trực tiếp Gemini hoặc AI service.
+> ASP.NET Core chịu trách nhiệm xác thực, phân quyền, kiểm tra quota và điều phối AI.
+
+| Thành phần | Công nghệ | Trách nhiệm chính |
 |---|---|---|
-| Giao diện | React, TypeScript, Bootstrap hoặc Tailwind CSS | Dashboard, biểu đồ và giao diện hội thoại |
-| Backend | ASP.NET Core 10 Web API | Xác thực, nghiệp vụ tài chính, phân quyền và điều phối AI |
-| Cơ sở dữ liệu | SQL Server | Lưu người dùng, tài khoản, giao dịch và dữ liệu ứng dụng |
-| Dịch vụ AI | Python, FastAPI | Phân tích dữ liệu và cung cấp các chức năng AI |
-| Phân tích dữ liệu | scikit-learn, pandas, NumPy | Phân loại, phát hiện bất thường và dự báo |
-| Ngôn ngữ tự nhiên | LLM API hoặc mô hình triển khai riêng | Hiểu câu hỏi, tóm tắt và giải thích kết quả |
+| Frontend | React 18, TypeScript 5, Vite 6, Tailwind CSS 4 | Giao diện, định tuyến và trải nghiệm người dùng |
+| Backend | ASP.NET Core 10, Entity Framework Core 10 | Xác thực, phân quyền và nghiệp vụ tài chính |
+| Database | SQL Server | Lưu tài khoản, giao dịch, ngân sách và AI log |
+| AI Service | Python, FastAPI, Google Gen AI SDK | Gọi Gemini và fallback model |
+| Realtime | ASP.NET Core SignalR | Nhận thông báo theo thời gian thực |
 
-> Đây là **kiến trúc và công nghệ đề xuất trong thuyết minh đề tài**, không phải xác nhận rằng toàn bộ thành phần đã được triển khai.
+---
 
-## 🛣️ Lộ trình MVP
+## 📁 Cấu trúc dự án
 
-1. **Nền tảng:** xác thực, tài khoản, danh mục và quản lý giao dịch.
-2. **Thống kê:** dashboard thu chi, ngân sách và mục tiêu tiết kiệm.
-3. **Conversational AI:** hỏi đáp theo dữ liệu người dùng.
-4. **Proactive AI:** insight, cảnh báo ngân sách và phân tích xu hướng.
-5. **Hoàn thiện:** kiểm thử phân quyền, độ chính xác, hiệu năng và trải nghiệm.
+```text
+MoneyMind_AI/
+├── frontend/                 # React + TypeScript
+├── backend/                  # ASP.NET Core Web API
+├── ai-service/               # FastAPI + Google Gemini
+├── README.md                 # Tổng quan dự án
+└── DEVELOPMENT_SETUP.md      # Hướng dẫn môi trường phát triển
+```
 
-### Phạm vi MVP
+---
 
-Giao dịch được **người dùng nhập thủ công** để ưu tiên kiểm soát dữ liệu và tập trung vào nghiệp vụ tài chính cùng chất lượng phân tích.
+## 🔧 Yêu cầu môi trường
 
-**Chưa thuộc phạm vi MVP:** đồng bộ tự động với ngân hàng, thanh toán/chuyển tiền thay người dùng, khuyến nghị đầu tư hoặc tự ý sửa/xóa dữ liệu.
+| Công cụ | Phiên bản khuyến nghị |
+|---|---|
+| Windows | Windows 10/11 |
+| .NET SDK | 10.0 trở lên |
+| SQL Server | SQL Server 2019+ hoặc SQL Server Express |
+| Node.js | 20 trở lên |
+| pnpm | 9 trở lên |
+| Python | 3.11 trở lên |
+| Git | Phiên bản mới |
 
-## 🔐 Quyền riêng tư & độ tin cậy
+---
 
-- Chỉ truy vấn dữ liệu thuộc về người dùng đã xác thực.
-- Ưu tiên gửi cho AI lượng dữ liệu tối thiểu cần thiết; số liệu được tính từ dữ liệu nghiệp vụ.
-- Không để trình duyệt gọi trực tiếp dịch vụ AI hoặc nhà cung cấp LLM.
-- Phân biệt rõ số liệu thực tế, ước tính và gợi ý; nêu giới hạn khi dữ liệu chưa đủ.
-- Mọi thay đổi ảnh hưởng đến dữ liệu cần có sự kiểm soát của người dùng.
+## 🚀 Bắt đầu nhanh
 
-## 🚧 Trạng thái dự án
+Hướng dẫn chi tiết xem tại [DEVELOPMENT_SETUP.md](./DEVELOPMENT_SETUP.md).
 
-README này được biên soạn từ **thuyết minh đề tài MoneyMind AI**. Tài liệu mô tả ý tưởng, tính năng mục tiêu, kiến trúc và kế hoạch MVP; repository hiện chưa cung cấp đủ mã nguồn hoặc hướng dẫn chạy ứng dụng để công bố lệnh cài đặt chính xác.
+### 1. Tạo file cấu hình local
 
-## 🎯 Tầm nhìn
+```powershell
+Copy-Item backend/.env.example backend/.env
+Copy-Item ai-service/.env.example ai-service/.env
+Copy-Item frontend/.env.example frontend/.env.local
+```
 
-MoneyMind AI hướng đến một người bạn đồng hành tài chính giúp bạn không chỉ biết **đã chi bao nhiêu**, mà còn hiểu **tiền đang đi đâu** — và có thêm cơ sở để quyết định bước tiếp theo.
+### 2. Khởi động AI service
+
+```powershell
+cd ai-service
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python run.py
+```
+
+### 3. Khởi động backend
+
+Mở terminal thứ hai:
+
+```powershell
+cd backend
+dotnet restore
+dotnet ef database update
+dotnet run --launch-profile http
+```
+
+### 4. Khởi động frontend
+
+Mở terminal thứ ba:
+
+```powershell
+cd frontend
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+Mở trình duyệt tại **<http://localhost:5173>**.
+
+---
+
+## 🌐 Địa chỉ local
+
+| Thành phần | Địa chỉ |
+|---|---|
+| Giao diện | <http://localhost:5173> |
+| Backend API | <http://localhost:5146> |
+| Swagger UI | <http://localhost:5146/swagger> |
+| Health check | <http://localhost:5146/api/health> |
+| Notification Hub | `ws://localhost:5146/hubs/notifications` |
+| Internal AI | <http://127.0.0.1:8001> |
+
+---
+
+## ⚙️ Cấu hình quan trọng
+
+| Tên biến | Thành phần | Mục đích |
+|---|---|---|
+| `ConnectionStrings__DefaultConnection` | Backend | Kết nối SQL Server |
+| `Jwt__Key` | Backend | Ký access token |
+| `Encryption__MasterKey` | Backend | Mã hóa khóa dữ liệu |
+| `AIService__ServiceKey` | Backend | Xác thực backend với AI service |
+| `SERVICE_KEY` | AI Service | Khóa bắt buộc phải giống bên backend |
+| `GEMINI_API_KEY` | AI Service | Truy cập Google Gemini |
+| `Google__ClientId` | Backend | Xác thực Google ID token |
+| `VITE_GOOGLE_CLIENT_ID` | Frontend | Hiển thị nút đăng nhập Google |
 
 <div align="center">
 
-**Your money, understood.**
+> [!WARNING]
+> Không commit `.env`, `.env.local`, API key, JWT key hoặc mật khẩu.
+> Không thay đổi `Encryption__MasterKey` sau khi dữ liệu đã được mã hóa.
+
+</div>
+
+Tạo khóa local bằng PowerShell:
+
+```powershell
+# 32-byte Base64 key cho Encryption__MasterKey
+[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+
+# 32-byte hex key cho JWT hoặc AI service
+[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+---
+
+## 🧪 Kiểm thử
+
+AI service hiện có unit test cho:
+
+- Model fallback
+- API quota và cooldown
+- Timeout và lỗi provider
+- Response không hợp lệ
+- Quy tắc chuyển model
+
+```powershell
+cd ai-service
+python -m unittest discover -s tests -v
+```
+
+> Repository chưa cấu hình test project cho backend và frontend.
+> Hãy ưu tiên bổ sung integration test trước khi release.
+
+---
+
+## 🔐 Quy tắc bảo mật
+
+- Frontend không chứa Gemini API key
+- AI service chỉ dành cho backend truy cập nội bộ
+- Mọi dữ liệu tài chính phải được kiểm tra chủ sở hữu
+- Admin endpoint phải yêu cầu role `Admin`
+- Refresh token và session phải được revoke trên server
+- Production sử dụng HTTPS, secret riêng và CORS giới hạn
+- Không trả provider response hoặc credential ra ngoài
+
+---
+
+## 🛠️ Lệnh phát triển
+
+<details>
+<summary><strong>Backend</strong></summary>
+
+```powershell
+cd backend
+dotnet restore
+dotnet build
+dotnet run --launch-profile http
+dotnet ef migrations add <MigrationName>
+dotnet ef database update
+dotnet ef migrations remove
+```
+
+</details>
+
+<details>
+<summary><strong>Frontend</strong></summary>
+
+```powershell
+cd frontend
+pnpm install --frozen-lockfile
+pnpm dev
+pnpm build
+pnpm preview
+```
+
+</details>
+
+<details>
+<summary><strong>AI Service</strong></summary>
+
+```powershell
+cd ai-service
+.\.venv\Scripts\Activate.ps1
+python run.py
+python -m unittest discover -s tests -v
+```
+
+</details>
+
+---
+
+## 📚 Tài liệu
+
+- [Hướng dẫn cài đặt và phát triển](./DEVELOPMENT_SETUP.md)
+- [Tài liệu AI Service](./ai-service/README.md)
+
+---
+
+<div align="center">
+
+**Hiểu tiền của bạn. Làm chủ tương lai của bạn.**
+
+Made for personal finance management
 
 </div>

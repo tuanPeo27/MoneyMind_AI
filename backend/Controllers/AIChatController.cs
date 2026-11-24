@@ -1,14 +1,18 @@
+using System.Text.Json;
 using backend.DTOs.Requests;
 using backend.DTOs.Responses;
+using backend.Helpers;
 using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 
 namespace backend.Controllers;
 
 [Route("api/ai/chat")]
 [EnableRateLimiting("ai")]
-public sealed class AIChatController(IAIChatService service, ICurrentUserService currentUser)
+public sealed class AIChatController(IAIChatService service, ICurrentUserService currentUser,
+    IOptions<JsonOptions> jsonOptions, ILogger<AIChatController> logger)
     : UserControllerBase(currentUser)
 {
     [HttpGet("conversations")]
@@ -25,7 +29,52 @@ public sealed class AIChatController(IAIChatService service, ICurrentUserService
     [HttpPost("messages")]
     public async Task<ActionResult<SendChatMessageResponse>> SendMessage(SendChatMessageRequest request,
         CancellationToken ct) =>
-        Ok(await service.SendMessageAsync(UserId, request, ct));
+        Ok(await service.SendMessageAsync(UserId, request, cancellationToken: ct));
+
+    /// <summary>
+    /// Same as POST messages, streamed as newline-delimited JSON so the answer appears while it is written:
+    /// <c>start</c> (conversationId, userMessage), then <c>delta</c> (text) pieces, then <c>done</c> (the same body as
+    /// POST messages) or <c>error</c> (status, message). Errors found before the answer starts (limit reached, another
+    /// request running, invalid input) are normal HTTP errors instead.
+    /// </summary>
+    [HttpPost("messages/stream")]
+    [Produces("application/x-ndjson")]
+    public async Task StreamMessage(SendChatMessageRequest request, CancellationToken ct)
+    {
+        var json = jsonOptions.Value.JsonSerializerOptions;
+        var started = false;
+
+        async Task Write(object evt)
+        {
+            if (!started)
+            {
+                started = true;
+                Response.ContentType = "application/x-ndjson; charset=utf-8";
+                Response.Headers.CacheControl = "no-cache";
+                Response.Headers["X-Accel-Buffering"] = "no"; // stop reverse proxies from holding the stream back
+            }
+            await JsonSerializer.SerializeAsync(Response.Body, evt, evt.GetType(), json, ct);
+            await Response.Body.WriteAsync("\n"u8.ToArray(), ct);
+            await Response.Body.FlushAsync(ct);
+        }
+
+        try
+        {
+            var result = await service.SendMessageAsync(UserId, request, new ChatStreamCallbacks(
+                OnStarted: (conversationId, userMessage) => Write(new { type = "start", conversationId, userMessage }),
+                OnDelta: text => Write(new { type = "delta", text })), ct);
+            await Write(new { type = "done", result });
+        }
+        catch (AppException ex) when (started)
+        {
+            await Write(new { type = "error", status = ex.StatusCode, message = ex.Message });
+        }
+        catch (Exception ex) when (started && ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "AI chat stream failed for user {UserId}", UserId);
+            await Write(new { type = "error", status = StatusCodes.Status500InternalServerError, message = "Đã có lỗi xảy ra. Vui lòng thử lại." });
+        }
+    }
 
     [HttpPut("conversations/{conversationId:guid}/title")]
     public async Task<ActionResult<ConversationResponse>> Rename(Guid conversationId,

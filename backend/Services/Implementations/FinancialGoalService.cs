@@ -8,7 +8,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace backend.Services.Implementations;
 
-public sealed class FinancialGoalService(AppDbContext db, INotificationService notifications) : IFinancialGoalService
+public sealed class FinancialGoalService(AppDbContext db, INotificationService notifications,
+    FinancialContextCache contextCache) : IFinancialGoalService
 {
     public async Task<IReadOnlyList<FinancialGoalResponse>> GetAllAsync(Guid userId,
         FinancialGoalStatus? status = null, CancellationToken cancellationToken = default)
@@ -110,6 +111,7 @@ public sealed class FinancialGoalService(AppDbContext db, INotificationService n
         var deleted = await db.FinancialGoals
             .Where(g => g.Id == id && g.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
+        contextCache.Invalidate(userId); // ExecuteDelete bypasses the change interceptor
         if (deleted == 0) throw new NotFoundException("Không tìm thấy mục tiêu.");
     }
 
