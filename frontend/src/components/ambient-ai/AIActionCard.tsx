@@ -3,6 +3,7 @@ import { ArrowLeftRight, Check, CircleCheck, CircleX, Pencil, PiggyBank, Shapes,
 import { useLanguage } from '../../i18n';
 import { money, dateLabel } from '../../data';
 import { AmountInput } from '../AmountInput';
+import { FormSelect, Select } from '../Select';
 import { Button, fieldClass } from '../ui';
 import {
   accountsApi, categoriesApi, goalsApi, useSession,
@@ -150,17 +151,14 @@ function Fields({ type, payload: p, options }: { type: AIActionType; payload: AI
   const { t, language } = useLanguage();
   const [kind, setKind] = useState<'Expense' | 'Income'>(p.type === 'Income' ? 'Income' : 'Expense');
   const field = (label: string, input: ReactNode) => <label className="block space-y-1.5 text-sm font-medium"><span>{t(label)}</span>{input}</label>;
-  const typeSelect = <select name="type" value={kind} onChange={e => setKind(e.target.value as 'Expense' | 'Income')} className={fieldClass}>
-    <option value="Expense">{t('Expense')}</option><option value="Income">{t('Income')}</option>
-  </select>;
-  const categorySelect = (only: 'Expense' | 'Income') => <select name="categoryId" defaultValue={p.categoryId ?? ''} key={only} className={fieldClass}>
-    <option value="" disabled>{p.categoryName ? t('“{name}” not found, choose one', { name: p.categoryName }) : t('Choose a category')}</option>
-    {(options?.categories ?? []).filter(c => c.type === only).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-  </select>;
-  const accountSelect = (allowNone: boolean) => <select name="accountId" defaultValue={p.accountId ?? ''} className={fieldClass}>
-    <option value="" disabled={!allowNone}>{allowNone ? t('Not taken from an account') : t('Choose an account')}</option>
-    {(options?.accounts ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-  </select>;
+  const typeSelect = <Select name="type" label={t('Type')} value={kind} onChange={value => setKind(value as 'Expense' | 'Income')}
+    options={[{ value: 'Expense', label: t('Expense') }, { value: 'Income', label: t('Income') }]} />;
+  const categorySelect = (only: 'Expense' | 'Income') => <FormSelect key={only} name="categoryId" label={t('Category')} defaultValue={p.categoryId ?? ''}
+    placeholder={p.categoryName ? t('“{name}” not found, choose one', { name: p.categoryName }) : t('Choose a category')}
+    options={(options?.categories ?? []).filter(c => c.type === only).map(c => ({ value: c.id, label: c.name }))} />;
+  const accountSelect = (allowNone: boolean) => <FormSelect name="accountId" label={t('Account')} defaultValue={p.accountId ?? ''}
+    placeholder={allowNone ? t('Not taken from an account') : t('Choose an account')}
+    options={[...(allowNone ? [{ value: '', label: t('Not taken from an account') }] : []), ...(options?.accounts ?? []).map(a => ({ value: a.id, label: a.name }))]} />;
   const date = (name: string, value?: string | null, required = false) =>
     <input type="date" name={name} lang={language} defaultValue={value ?? ''} required={required} className={fieldClass} />;
   const grid = (children: ReactNode) => <div className="grid gap-3 sm:grid-cols-2">{children}</div>;
@@ -191,10 +189,9 @@ function Fields({ type, payload: p, options }: { type: AIActionType; payload: AI
       {field('Deadline (optional)', date('deadline', p.deadline))}
     </>);
     case 'contribute_to_goal': return grid(<>
-      {field('Fund', <select name="goalId" defaultValue={p.goalId ?? ''} className={fieldClass}>
-        <option value="" disabled>{p.goalName ? t('“{name}” not found, choose one', { name: p.goalName }) : t('Choose a fund')}</option>
-        {(options?.goals ?? []).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-      </select>)}
+      {field('Fund', <FormSelect name="goalId" label={t('Fund')} defaultValue={p.goalId ?? ''}
+        placeholder={p.goalName ? t('“{name}” not found, choose one', { name: p.goalName }) : t('Choose a fund')}
+        options={(options?.goals ?? []).map(g => ({ value: g.id, label: g.name }))} />)}
       {field('Amount', <AmountInput name="amount" required defaultValue={p.amount ?? undefined} />)}
       {field('From account', accountSelect(true))}
     </>);

@@ -52,7 +52,7 @@ export function Pagination<T>({ pager, sizes = [10, 20, 50], className = '' }: {
         {pageList(pager.page, pager.pageCount).map(item => typeof item === 'string'
           ? <span key={item} aria-hidden="true" className="inline-flex size-9 items-center justify-center">…</span>
           : <button key={item} type="button" aria-label={t('Page {n}', { n: item })} aria-current={item === pager.page ? 'page' : undefined} onClick={() => pager.setPage(item)}
-            className={`${control} ${item === pager.page ? 'bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] font-semibold text-white shadow-md shadow-[#8B5CF6]/30' : 'text-ink hover:bg-brand/10'}`}>{item}</button>)}
+            className={`${control} ${item === pager.page ? 'bg-gradient-to-br from-accent to-accent-2 font-semibold text-on-accent shadow-md shadow-accent/30' : 'text-ink hover:bg-brand/10'}`}>{item}</button>)}
         <button type="button" aria-label={t('Next page')} disabled={pager.page === pager.pageCount} onClick={() => pager.setPage(pager.page + 1)} className={`${control} text-ink hover:bg-brand/10`}><ChevronRight className="size-4" aria-hidden="true" /></button>
       </nav>
     </div>

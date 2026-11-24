@@ -1,5 +1,5 @@
 import { useRef, type ButtonHTMLAttributes, type MouseEvent, type ReactNode } from 'react';
-import { motion, useMotionValue, useSpring, type Variants } from 'framer-motion';
+import { m, useMotionValue, useSpring, type Variants } from 'framer-motion';
 
 const EASE = [0.76, 0, 0.24, 1] as const;
 
@@ -17,9 +17,9 @@ const rollVariants: Variants = {
 const base = 'relative inline-flex cursor-pointer items-center justify-center overflow-hidden rounded-full text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-transparent disabled:cursor-not-allowed disabled:opacity-60';
 const variants = {
   /** Dark pill with fixed colours. */
-  dark: 'border border-[#1F2937] bg-[#111827] px-7 py-3.5 text-[#F9FAFB]',
+  dark: 'border border-[#27272a] bg-[#18181b] px-7 py-3.5 text-[#fafafa]',
   /** App primary button. */
-  primary: 'min-h-11 bg-gradient-to-br from-brand to-ai px-5 font-semibold text-on-brand shadow-lg shadow-brand/25',
+  primary: 'min-h-11 bg-gradient-to-br from-accent to-accent-2 px-5 font-semibold text-on-accent shadow-lg shadow-accent/25',
   /** App secondary button (glass). */
   secondary: 'glass min-h-11 px-5 font-semibold text-ink',
   /** Square icon button. */
@@ -50,7 +50,7 @@ export function LiquidButton({ label, children, variant = 'dark', className = ''
   };
 
   const row = 'flex h-6 items-center justify-center gap-2 whitespace-nowrap leading-6';
-  return <motion.button
+  return <m.button
     {...props}
     ref={buttonRef}
     initial="rest" animate="rest" whileHover={disabled ? undefined : 'hover'} whileTap={disabled ? undefined : { scale: 0.96 }}
@@ -58,17 +58,17 @@ export function LiquidButton({ label, children, variant = 'dark', className = ''
     onMouseMove={event => { if (!disabled) fillX.set(offset(event)); onMouseMove?.(event); }}
     className={`${base} ${variants[variant]} ${className}`}
   >
-    <motion.span
+    <m.span
       aria-hidden="true" variants={fillVariants} style={{ left: fillX }}
-      className="pointer-events-none absolute top-1/2 aspect-square w-[150%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#EC4899]"
+      className="pointer-events-none absolute top-1/2 aspect-square w-[150%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-accent to-accent-2"
     />
     <span className="relative z-10 block">
       <span className="block h-6 overflow-hidden">
-        <motion.span variants={rollVariants} className="flex flex-col">
+        <m.span variants={rollVariants} className="flex flex-col">
           <span className={row}>{content}</span>
-          <span aria-hidden="true" className={`${row} !text-white`}>{content}</span>
-        </motion.span>
+          <span aria-hidden="true" className={`${row} !text-on-accent`}>{content}</span>
+        </m.span>
       </span>
     </span>
-  </motion.button>;
+  </m.button>;
 }

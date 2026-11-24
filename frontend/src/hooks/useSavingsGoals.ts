@@ -5,6 +5,8 @@ import { goalsApi, type FinancialGoalResponse, type FinancialGoalStatus, type Up
 export function useSavingsGoals(userId: string | undefined) {
   const [goals, setGoals] = useState<FinancialGoalResponse[]>([]);
   const [loading, setLoading] = useState(false);
+  // False until the first list for this user arrives (or fails): the page shows skeleton cards meanwhile.
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
   const reload = useCallback(async () => {
@@ -16,14 +18,14 @@ export function useSavingsGoals(userId: string | undefined) {
   }, [userId]);
 
   useEffect(() => {
-    setGoals([]); setError(null);
+    setGoals([]); setError(null); setReady(false);
     if (!userId) return;
     let cancelled = false;
     setLoading(true);
     goalsApi.listGoals()
       .then(items => { if (!cancelled) setGoals(items); })
       .catch(e => { if (!cancelled) setError(e); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => { if (!cancelled) { setLoading(false); setReady(true); } });
     return () => { cancelled = true; };
   }, [userId]);
 
@@ -38,5 +40,5 @@ export function useSavingsGoals(userId: string | undefined) {
     return goal;
   }, [reload]);
 
-  return { goals, loading, error, reload, create, update, setStatus, remove, contribute };
+  return { goals, loading, ready, error, reload, create, update, setStatus, remove, contribute };
 }

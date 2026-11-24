@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, m, useReducedMotion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { IconButton } from './ui';
 import { MORPH_SPRING } from './ambient-ai/AmbientAI';
@@ -36,11 +36,11 @@ function Surface({ id, title, closeLabel, onClose, children }: { id: string; tit
     document.addEventListener('keydown', key, true);
     return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', key, true); previous?.focus?.(); };
   }, [onClose]);
-  return <motion.div ref={ref} role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-[75]">
-    <motion.div aria-hidden="true" className="absolute inset-0 backdrop-blur-md" style={{ background: 'light-dark(rgba(40, 25, 60, 0.45), rgba(11, 15, 25, 0.8))' }}
+  return <m.div ref={ref} role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-[75]">
+    <m.div aria-hidden="true" className="absolute inset-0 backdrop-blur-md" style={{ background: 'light-dark(rgba(24, 24, 27, 0.4), rgba(20, 20, 23, 0.78))' }}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} onClick={onClose} />
-    <motion.div aria-hidden="true" layoutId={`card-${id}`} style={{ borderRadius: 0 }} transition={spring} exit={{ opacity: 0.99 }} className="glass-strong absolute inset-0 !border-0" />
-    <motion.div className="absolute inset-0 overflow-y-auto ai-scroll" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: 0.14, duration: 0.26 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>
+    <m.div aria-hidden="true" layoutId={`card-${id}`} style={{ borderRadius: 0 }} transition={spring} exit={{ opacity: 0.99 }} className="glass-strong absolute inset-0 !border-0" />
+    <m.div className="absolute inset-0 overflow-y-auto ai-scroll" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: 0.14, duration: 0.26 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>
       <div className="mx-auto max-w-6xl px-4 pb-10 pt-4 sm:px-8 sm:pt-6">
         <div className="mb-6 flex items-center justify-between gap-3">
           <h2 className="text-[1.35rem] font-semibold tracking-tight">{title}</h2>
@@ -48,6 +48,6 @@ function Surface({ id, title, closeLabel, onClose, children }: { id: string; tit
         </div>
         {children}
       </div>
-    </motion.div>
-  </motion.div>;
+    </m.div>
+  </m.div>;
 }

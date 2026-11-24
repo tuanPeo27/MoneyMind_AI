@@ -1,9 +1,10 @@
 import { useLanguage } from '../i18n';
-import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ArrowUpRight, ArrowRight, Wallet, TrendingUp, TrendingDown, Landmark, Sparkles, ChevronRight, Maximize2, Eye, EyeOff } from 'lucide-react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { m, useReducedMotion } from 'framer-motion';
 import { type Transaction, type Budget, type Category, money, dateLabel } from '../data';
 import { currencySymbol, formatAmount, percent } from '../lib/currency';
+import { BalanceContext, getTotals, percentChange, type Totals } from '../lib/totals';
 import type { WalletAccount } from '../hooks/useWorkspaceData';
 import { AccountIcon, accountTypes } from './Accounts';
 import { Card, Change, Progress, SectionHead, Badge, Empty, IconButton } from '../components/ui';
@@ -12,24 +13,15 @@ import { TrendChart, ExpenseDonut, monthlyData } from '../components/charts';
 import type { Highlight } from '../components/ambient-ai/mockAssistant';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { HighlightCard, MORPH_SPRING } from '../components/ambient-ai/AmbientAI';
-import { useAmbientAI } from '../components/ambient-ai/AmbientAIProvider';
+import { LoadingStatus, Skeleton, SkeletonText, useFadeIn } from '../components/Skeleton';
+import { useAmbientAIView } from '../components/ambient-ai/AmbientAIProvider';
 
-export type Totals = { income: number; expense: number; savings: number; balance: number; rate: number };
-export function getTotals(rows: Transaction[]): Totals {
-  const income = rows.filter(t => t.type === 'Income').reduce((s, t) => s + t.amount, 0);
-  const expense = rows.filter(t => t.type === 'Expense').reduce((s, t) => s + t.amount, 0);
-  // `balance` here is only the period's net. The real account balance comes from BalanceContext (see SummaryCards).
-  return { income, expense, savings: income - expense, balance: income - expense, rate: income ? (income - expense) / income * 100 : 0 };
-}
-/**
- * Real account balance (opening balances of the user's accounts + every transaction up to the date):
- * current at the end of the selected period, previous at the end of the period before it. Provided by App.
- */
-export const BalanceContext = createContext<{ current: number; previous: number } | null>(null);
-export const percentChange = (current: number, previous: number) => previous ? (current - previous) / previous * 100 : 0;
-export function SummaryCards({ totals, previous, hidden = false, onToggleHidden, layout = 'row' }: { totals: Totals; previous: Totals; hidden?: boolean; onToggleHidden?: (next: boolean) => void; layout?: 'row' | 'grid' }) {
+// Moved to lib/totals (used by App without loading this chunk); re-exported for existing imports.
+export { BalanceContext, getTotals, percentChange, type Totals } from '../lib/totals';
+export function SummaryCards({ totals, previous, hidden = false, onToggleHidden, layout = 'row', loading = false }: { totals: Totals; previous: Totals; hidden?: boolean; onToggleHidden?: (next: boolean) => void; layout?: 'row' | 'grid'; loading?: boolean }) {
   const { t } = useLanguage();
-  const { highlight, openAssistant } = useAmbientAI();
+  const fade = useFadeIn(loading);
+  const { highlight, openAssistant } = useAmbientAIView();
   const balance = useContext(BalanceContext);
   const symbol = currencySymbol();
   const cards = [
@@ -39,11 +31,17 @@ export function SummaryCards({ totals, previous, hidden = false, onToggleHidden,
     { label: 'Savings', value: totals.savings, previous: previous.savings, icon: Landmark },
   ];
   return <div id="ai-summary" className={`grid grid-cols-2 gap-3 sm:gap-4 ${layout === 'row' ? 'xl:grid-cols-[1.15fr_1fr_1fr_1fr]' : ''}`}>{cards.map(({ label, value, previous: old, icon: Icon, inverse }, index) =>
-    <Card key={label} className={`relative px-3.5 py-3.5 sm:px-5 sm:py-5 transition-all duration-300 motion-safe:hover:-translate-y-0.5 ${index === 0 ? '!border-brand/25 !bg-balance' : ''} ${highlight === 'summary' && index === 3 ? 'ring-1 ring-[#8B5CF6]/75 brightness-110 shadow-[0_0_24px_-14px_#8B5CF6]' : ''}`}>
-      {highlight === 'summary' && index === 3 && <button onClick={() => openAssistant('How can I improve my savings?')} className="absolute -top-6 right-3 flex min-h-11 items-center gap-1.5 rounded-lg border border-[#8B5CF6]/50 bg-surface px-3 text-xs text-ai"><Sparkles className="h-3 w-3" />{t("AI Insight")}</button>}
+    <Card key={label} className={`relative px-3.5 py-3.5 sm:px-5 sm:py-5 transition-all duration-300 motion-safe:hover:-translate-y-0.5 ${index === 0 ? 'hero-card' : ''} ${highlight === 'summary' && index === 3 ? 'ring-1 ring-ai-from/75 brightness-110 shadow-[0_0_24px_-14px_var(--color-ai-from)]' : ''}`}>
+      {highlight === 'summary' && index === 3 && <button onClick={() => openAssistant('How can I improve my savings?')} className="absolute -top-6 right-3 flex min-h-11 items-center gap-1.5 rounded-lg bg-gradient-to-br from-ai-from via-ai-to to-ai-warm text-on-ai px-3 text-xs font-semibold shadow-md shadow-ai-from/30"><Sparkles className="h-3 w-3" />{t("AI Insight")}</button>}
       <div className="flex items-center justify-between gap-2"><span className="truncate text-xs text-muted sm:text-sm">{t(label)}</span>{index === 0 && onToggleHidden ? <button type="button" onClick={() => onToggleHidden(!hidden)} aria-pressed={hidden} aria-label={hidden ? t("Show account balance") : t("Hide account balance")} className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-brand/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">{hidden ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}</button> : <Icon className={`h-4 w-4 shrink-0 ${index === 1 ? 'text-positive' : index === 2 ? 'text-negative' : 'text-muted'}`} aria-hidden="true" />}</div>
+      {loading ? <>
+        {/* Same heights as the amount (its font size, leading-none) and the change line (16px). */}
+        <div className="mt-3 sm:mt-4"><Skeleton className={index === 0 ? 'h-[20px] w-28 sm:h-[29px] sm:w-36 2xl:h-[34px]' : 'h-[19px] w-24 sm:h-[26px] sm:w-32 2xl:h-[30px]'} /></div>
+        <SkeletonText className="mt-3 h-4 sm:mt-4" bar="h-2.5" width="w-20 sm:w-32" />
+      </> : <div className={fade}>
       <div className="mt-3 flex items-baseline gap-1 sm:mt-4 sm:gap-1.5"><span className={`font-semibold leading-none tracking-[-0.045em] tabular-nums ${index === 0 ? 'text-[20px] sm:text-[29px] 2xl:text-[34px]' : 'text-[19px] sm:text-[26px] 2xl:text-[30px]'}`}>{formatAmount(value)}</span>{!hidden && <span className={`text-sm text-muted ${symbol.before ? '-order-1' : ''}`}>{symbol.symbol}</span>}</div>
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-0.5 sm:mt-4">{index === 0 && hidden ? <span className="text-xs text-muted">{t("Balance hidden")}</span> : <><Change value={percentChange(value, old)} inverse={inverse} /><span className="hidden text-xs text-muted sm:inline">{index === 3 ? t('{rate}% savings rate', { rate: totals.rate.toFixed(1) }) : t("vs. previous period")}</span></>}</div>
+      </div>}
     </Card>,
   )}</div>;
 }
@@ -62,15 +60,49 @@ export function BudgetList({ budgets, rows, categories, onView }: { budgets: Bud
   </Card>;
 }
 const slideOfHighlight: Partial<Record<NonNullable<Highlight>, number>> = { cashflow: 0, expenses: 1, budgets: 2, transactions: 3 };
-export default function Overview({ rows, allRows, previous, budgets, categories, accounts = [], onNavigate, onEdit, hidden = false, setHidden, rangeEnd, showInsight = true }: {
+/** Placeholder for one carousel card's body, with the same height as the real one (chart sizes follow `compact`). */
+function SlideSkeleton({ id, compact }: { id: string; compact: boolean }) {
+  if (id === 'cashflow') return <>
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><Skeleton className="h-11 w-40 !rounded-xl" /><SkeletonText className="h-4" bar="h-2.5" width="w-48" /></div>
+    <Skeleton className="w-full !rounded-xl" style={{ height: compact ? 230 : 340 }} />
+  </>;
+  if (id === 'expenses') {
+    const size = compact ? 210 : 300;
+    return <div className="flex min-h-[220px] w-full flex-col items-center justify-center gap-4 py-4 sm:flex-row md:min-h-[360px]">
+      {/* The donut ring (outer radius 46% of the size, inner 35%): a circle masked to a ring, so the glass card shows through the hole. */}
+      <span className="relative shrink-0" style={{ width: size, height: size }}>
+        <Skeleton className="absolute !rounded-full" style={{ inset: size * 0.04, ...ringMask }} />
+      </span>
+      <div className="w-full min-w-0 flex-1 space-y-1">{[0, 1, 2, 3].map(i => <div key={i} className="flex items-center justify-between gap-2 px-3 py-2">
+        <SkeletonText className="h-5" width={i ? 'w-16' : 'w-24'} /><span><SkeletonText className="h-4" width="w-14" /><SkeletonText className="mt-0.5 h-4" bar="h-2.5" width="w-10" /></span>
+      </div>)}</div>
+    </div>;
+  }
+  if (id === 'budgets') return <div className="min-h-[220px] py-2 md:min-h-[360px]"><div className="grid gap-x-12 gap-y-7 md:grid-cols-2">{[0, 1, 2, 3].map(i => <div key={i}>
+    <div className="mb-2.5 flex items-center justify-between gap-2"><span className="flex items-center gap-2"><Skeleton className="size-7 !rounded-lg" /><SkeletonText className="h-5" width="w-20" /></span><SkeletonText className="h-5" width="w-8" /></div>
+    <Skeleton className="h-1.5 w-full !rounded-full" />
+    <div className="mt-2 flex justify-between gap-2"><SkeletonText className="h-4" bar="h-2.5" width="w-16" /><SkeletonText className="h-4" bar="h-2.5" width="w-20" /></div>
+  </div>)}</div></div>;
+  return <div className="min-h-[220px] py-2 md:min-h-[360px]"><div className="divide-y divide-line/80">{[0, 1, 2, 3, 4].map(i => <div key={i} className="flex min-h-[68px] items-center gap-4 py-3">
+    <Skeleton className="size-9 shrink-0 !rounded-lg" />
+    <span className="min-w-0 flex-1"><SkeletonText className="h-5" width={i % 2 ? 'w-28' : 'w-40'} /><SkeletonText className="mt-1 h-4" bar="h-2.5" width="w-32" /></span>
+    <SkeletonText className="h-5" width="w-20" />
+  </div>)}</div><div className="mt-4 h-11" /></div>;
+}
+const ringMask = { mask: 'radial-gradient(circle closest-side, transparent 76%, #000 76.5%)', WebkitMask: 'radial-gradient(circle closest-side, transparent 76%, #000 76.5%)' };
+/** memo: the Overview stays still while the AI page opens and closes over it (all props from App are stable). */
+export default memo(function Overview({ rows, allRows, previous, budgets, categories, accounts = [], onNavigate, onEdit, hidden = false, setHidden, rangeEnd, showInsight = true, loading = false }: {
   rows: Transaction[]; allRows: Transaction[]; previous: Transaction[]; budgets: Budget[]; categories: Category[];
+  /** True during the first load of the user's data: skeletons instead of empty states. */
+  loading?: boolean;
   /** Active accounts with their current balance, for the short list under the summary cards. */
   accounts?: WalletAccount[];
   onNavigate: (page: 'Transactions' | 'Budgets' | 'Smart Insights' | 'AI Financial Assistant' | 'Accounts') => void;
   onEdit: (t: Transaction) => void; hidden?: boolean; setHidden?: (value: boolean) => void; rangeEnd?: string; showInsight?: boolean;
 }) {
   const { t, locale } = useLanguage();
-  const { openAssistant, highlight, clearHighlight } = useAmbientAI();
+  const { openAssistant, highlight, clearHighlight } = useAmbientAIView();
+  const fade = useFadeIn(loading);
   const [chartPeriod, setChartPeriod] = useState('Monthly');
   const [index, setIndex] = useState(0), [cardW, setCardW] = useState(760);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -252,51 +284,53 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
     go(next); tabs.current[next]?.focus();
   }
   return <div className="space-y-5">
-    <SummaryCards totals={totals} previous={past} hidden={hidden} onToggleHidden={setHidden} />
-    <AccountsStrip accounts={accounts} hidden={hidden} onManage={() => onNavigate('Accounts')} />
+    {loading && <LoadingStatus label={t('Loading your data...')} />}
+    <SummaryCards totals={totals} previous={past} hidden={hidden} onToggleHidden={setHidden} loading={loading} />
+    <AccountsStrip accounts={accounts} hidden={hidden} onManage={() => onNavigate('Accounts')} loading={loading} />
     <section aria-label={t("Overview sections")}>
       <div ref={tabList} role="tablist" aria-label={t("Overview sections")} onKeyDown={onTabKey} className="relative isolate mx-auto mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl bg-surface p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {/* Position and width are written by applyFocus on every scroll frame. */}
-        <span ref={tabPill} aria-hidden="true" style={{ opacity: 0 }} className="pointer-events-none absolute inset-y-1 left-0 -z-10 rounded-xl bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] shadow-md shadow-[#8B5CF6]/30 will-change-transform" />
+        <span ref={tabPill} aria-hidden="true" style={{ opacity: 0 }} className="pointer-events-none absolute inset-y-1 left-0 -z-10 rounded-xl bg-gradient-to-br from-accent to-accent-2 shadow-md shadow-accent/30 will-change-transform" />
         {slides.map((s, i) =>
         <button key={s.id} ref={el => { tabs.current[i] = el; }} role="tab" id={`${uid}-tab-${s.id}`} aria-selected={i === index} aria-controls={`${uid}-panel-${s.id}`} tabIndex={i === index ? 0 : -1} onClick={() => go(i)}
-          className={`min-h-9 shrink-0 rounded-xl px-3.5 text-sm font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${i === index ? 'text-white' : 'text-muted hover:text-ink'}`}>{t(s.label)}</button>)}</div>
+          className={`min-h-9 shrink-0 rounded-xl px-3.5 text-sm font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${i === index ? 'text-on-accent' : 'text-muted hover:text-ink'}`}>{t(s.label)}</button>)}</div>
       <div ref={scroller} onScroll={() => { cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(applyFocus); }}
         style={{ ['--card-w' as string]: `${cardW}px`, perspective: '1400px', paddingInline: 'calc(50% - var(--card-w) / 2)' }}
         className="relative flex items-stretch gap-6 overflow-hidden py-3 sm:py-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {slides.map((s, i) => <div key={s.id} ref={el => { cards.current[i] = el; }} role="tabpanel" id={`${uid}-panel-${s.id}`} aria-labelledby={`${uid}-tab-${s.id}`} aria-hidden={i !== index}
           onClick={() => { if (i !== index) go(i); }}
           className={`relative flex w-[var(--card-w)] flex-none will-change-transform ${i === index ? '' : 'cursor-pointer'}`}>
-          <motion.div layoutId={`card-${s.id}`} style={{ borderRadius: 24 }} transition={reduceMotion ? { duration: 0 } : MORPH_SPRING} className="glass relative w-full p-4 sm:p-6">
-            <span aria-hidden="true" className={`pointer-events-none absolute -inset-px rounded-3xl shadow-[0_0_48px_-10px_rgba(139,92,246,0.7)] ring-1 ring-[#8B5CF6]/50 transition-opacity duration-500 ${i === index ? 'opacity-100' : 'opacity-0'}`} />
-            <motion.div className="relative" animate={{ opacity: expanded === s.id ? 0 : 1 }} transition={{ duration: 0.1 }} {...(i === index ? {} : ({ inert: '' } as object))}>
+          <m.div layoutId={`card-${s.id}`} style={{ borderRadius: 24 }} transition={reduceMotion ? { duration: 0 } : MORPH_SPRING} className="glass relative w-full p-4 sm:p-6">
+            <span aria-hidden="true" className={`pointer-events-none absolute -inset-px rounded-3xl shadow-[0_0_48px_-10px_color-mix(in_oklab,var(--color-accent)_70%,transparent)] ring-1 ring-accent/50 transition-opacity duration-500 ${i === index ? 'opacity-100' : 'opacity-0'}`} />
+            <m.div className="relative" animate={{ opacity: expanded === s.id ? 0 : 1 }} transition={{ duration: 0.1 }} {...(i === index ? {} : ({ inert: '' } as object))}>
               <div className="mb-4 flex items-center justify-between gap-2"><h3 className="text-[1rem] font-semibold tracking-tight">{t(s.label)}</h3>
                 {i === index && <IconButton icon={Maximize2} label={t('Expand')} onClick={() => setExpanded(s.id)} />}</div>
-              <HighlightCard target={s.target} onInspect={s.onInspect}>{s.node}</HighlightCard>
-            </motion.div>
-          </motion.div>
+              <HighlightCard target={s.target} onInspect={s.onInspect}>{loading ? <SlideSkeleton id={s.id} compact={compact} /> : <div className={fade}>{s.node}</div>}</HighlightCard>
+            </m.div>
+          </m.div>
         </div>)}
       </div>
       <ExpandedCard id={expanded} title={open ? t(open.label) : ''} closeLabel={t('Close')} onClose={() => setExpanded(null)}>{expanded ? details[expanded] : null}</ExpandedCard>
       <div className="mt-2 flex justify-center" aria-hidden="true"><div className="relative flex items-center gap-2">
         {slides.map((s, i) => <button key={s.id} ref={el => { dots.current[i] = el; }} type="button" tabIndex={-1} onClick={() => go(i)} className="h-2 w-2 shrink-0 rounded-full bg-ink/25 transition-colors hover:bg-ink/45" />)}
-        <span ref={dotPill} className="pointer-events-none absolute left-0 top-0 h-2 w-6 rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#EC4899] shadow-[0_0_14px_2px_rgba(139,92,246,0.55)] will-change-transform" />
+        <span ref={dotPill} className="pointer-events-none absolute left-0 top-0 h-2 w-6 rounded-full bg-gradient-to-r from-accent to-accent-2 shadow-[0_0_14px_2px_color-mix(in_oklab,var(--color-accent)_55%,transparent)] will-change-transform" />
       </div></div>
     </section>    {showInsight && <div className="glass flex flex-wrap items-center gap-4 rounded-2xl px-5 py-4">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#8B5CF6]/20 bg-[#8B5CF6]/10"><Sparkles className="h-4 w-4 text-ai" aria-hidden="true" /></span>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-ai-from via-ai-to to-ai-warm text-on-ai shadow-md shadow-ai-from/30"><Sparkles className="h-4 w-4" aria-hidden="true" /></span>
       <div className="min-w-0 flex-1"><p className="mb-1 text-xs font-medium text-ai">{t("A SMALL INSIGHT")}</p><p className="text-sm">{oldDining ? t(diningChange >= 0 ? 'Dining expenses increased {change}% this period.' : 'Dining expenses decreased {change}% this period.', { change: Math.abs(diningChange).toFixed(0) }) : t("A clearer picture starts with your spending.")} <span className="ml-1 text-muted">{money(dining)}</span></p></div>
-      <button onClick={() => openAssistant('Why did my dining expenses change this month?')} className="flex min-h-11 items-center gap-2 text-sm font-medium text-ai hover:text-ink focus-visible:ring-2 focus-visible:ring-ai">{t("Analyze with AI")}<ArrowUpRight className="h-4 w-4" /></button>
+      <button onClick={() => openAssistant('Why did my dining expenses change this month?')} className="flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-br from-ai-from via-ai-to to-ai-warm text-on-ai px-4 text-sm font-medium shadow-md shadow-ai-from/30 transition-[filter] hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ai-from focus-visible:ring-offset-2">{t("Analyze with AI")}<ArrowUpRight className="h-4 w-4" /></button>
     </div>}
     {highlight && <div className="flex justify-end"><button onClick={clearHighlight} className="min-h-11 text-sm text-muted hover:text-ink">{t("Clear AI highlight & return to normal view")}</button></div>}
   </div>;
-}
+});
 const STRIP_LIMIT = 8;
 /**
  * One tile per account (name, type, balance), largest balance first. Follows the Total balance eye: hiding it
  * hides every amount here too.
  */
-function AccountsStrip({ accounts, hidden, onManage }: { accounts: WalletAccount[]; hidden: boolean; onManage: () => void }) {
+function AccountsStrip({ accounts, hidden, onManage, loading = false }: { accounts: WalletAccount[]; hidden: boolean; onManage: () => void; loading?: boolean }) {
   const { t } = useLanguage();
+  const fade = useFadeIn(loading);
   const shown = [...accounts].sort((a, b) => b.balance - a.balance).slice(0, STRIP_LIMIT);
   return <section aria-labelledby="overview-accounts">
     <div className="mb-2.5 flex items-center justify-between gap-3 px-1">
@@ -305,7 +339,12 @@ function AccountsStrip({ accounts, hidden, onManage }: { accounts: WalletAccount
         {accounts.length > STRIP_LIMIT ? t('View all {count}', { count: accounts.length }) : t('Manage accounts')}<ChevronRight className="size-3.5" aria-hidden="true" />
       </button>
     </div>
-    {shown.length ? <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{shown.map(a =>
+    {/* Two tiles while loading: every user has at least the default wallet; heights match a real tile. */}
+    {loading ? <ul aria-hidden="true" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{[0, 1].map(i => <li key={i} className={`glass rounded-2xl px-4 py-3.5 ${i ? 'hidden sm:block' : ''}`}>
+      <span className="flex items-center gap-3"><Skeleton className="size-8 shrink-0 !rounded-xl" /><span className="min-w-0 flex-1"><SkeletonText className="h-5" width="w-24" /><SkeletonText className="h-4" bar="h-2.5" width="w-16" /></span></span>
+      <Skeleton className="mt-3 h-[18px] w-28" />
+    </li>)}</ul>
+    : shown.length ? <ul className={`grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 ${fade}`}>{shown.map(a =>
       <li key={a.id}><button type="button" onClick={onManage} title={a.name}
         className="glass block w-full rounded-2xl px-4 py-3.5 text-left transition-[transform,box-shadow] duration-300 motion-safe:hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
         <span className="flex items-center gap-3">

@@ -61,7 +61,7 @@ export function Modal({ title, children, onClose, footer, wide = false }: { titl
   }, []);
   // Rendered into <body>: an ancestor with a transform (e.g. a .glass card) would otherwise become the containing
   // block of `position: fixed`, so the dialog would be centred and blurred inside that card instead of the screen.
-  return createPortal(<div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#1b0f2a]/35 p-3 backdrop-blur-md sm:p-6" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+  return createPortal(<div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0f172a]/40 p-3 backdrop-blur-md sm:p-6" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
     <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId} className={`flex max-h-[calc(100dvh-24px)] w-full flex-col overflow-hidden glass-strong rounded-3xl text-ink sm:max-h-[min(90dvh,800px)] ${wide ? 'max-w-xl' : 'max-w-lg'}`}>
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-line px-5 py-3 sm:px-6">
         <h2 id={titleId} className="text-lg font-semibold tracking-tight text-ink">{t(title)}</h2>
