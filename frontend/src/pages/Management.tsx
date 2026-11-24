@@ -17,10 +17,12 @@ import { SummaryCards } from './Overview';
 import { FormSelect, Select } from '../components/Select';
 import { AmountInput } from '../components/AmountInput';
 import { Pagination, usePagination } from '../components/Pagination';
+import { LoadingStatus, SkeletonText, useFadeIn } from '../components/Skeleton';
 import { accountLabel, categoryLabel } from '../i18n/labels';
 
-export function Transactions({ rows, categories, search, setSearch, onAdd, onEdit, onDelete, onExport, onManageCategories }: { rows: Transaction[]; categories: Category[]; search: string; setSearch: (s: string) => void; onAdd: () => void; onEdit: (t: Transaction) => void; onDelete: (t: Transaction) => void; onExport: (rows: Transaction[]) => void; onManageCategories: () => void }) {
+export function Transactions({ rows, categories, search, setSearch, onAdd, onEdit, onDelete, onExport, onManageCategories, loading = false }: { rows: Transaction[]; categories: Category[]; search: string; setSearch: (s: string) => void; onAdd: () => void; onEdit: (t: Transaction) => void; onDelete: (t: Transaction) => void; onExport: (rows: Transaction[]) => void; onManageCategories: () => void; loading?: boolean }) {
   const { t, language } = useLanguage();
+  const fade = useFadeIn(loading);
   const [type, setType] = useState('All types'), [category, setCategory] = useState('All categories');
   const [sort, setSort] = useState({ key: 'date', ascending: false });
   const filtered = rows.filter(row => {
@@ -39,7 +41,10 @@ export function Transactions({ rows, categories, search, setSearch, onAdd, onEdi
       { label: 'Money in', value: totals.income, color: 'text-positive' },
       { label: 'Money out', value: totals.expense, color: 'text-negative' },
       { label: 'Net cash flow', value: totals.savings, color: 'text-ink' },
-    ].map(item => <Card key={item.label} className="p-5"><p className="text-sm text-muted">{t(item.label)}</p><p className={`mt-3 text-2xl font-semibold tracking-tight tabular-nums ${item.color}`}>{money(item.value)}</p></Card>)}</div>
+    ].map(item => <Card key={item.label} className="p-5"><p className="text-sm text-muted">{t(item.label)}</p>{loading
+      ? <SkeletonText className="mt-3 h-8" bar="h-6" width="w-36" />
+      : <p className={`mt-3 text-2xl font-semibold tracking-tight tabular-nums ${item.color} ${fade}`}>{money(item.value)}</p>}</Card>)}</div>
+    {loading && <LoadingStatus label={t('Loading your data...')} />}
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 p-4">
         <div className="relative min-w-[190px] flex-1">
@@ -56,7 +61,7 @@ export function Transactions({ rows, categories, search, setSearch, onAdd, onEdi
         <Button secondary onClick={() => onExport(filtered)}><Download aria-hidden="true" className="size-4" />{t('Export')}</Button>
         <Button onClick={onAdd}><Plus aria-hidden="true" className="size-4" />{t('Add transaction')}</Button>
       </div>
-      <TransactionTable rows={pager.items} categories={categories} onEdit={onEdit} onDelete={onDelete} onSort={key => setSort({ key, ascending: sort.key === key ? !sort.ascending : false })} />
+      <TransactionTable loading={loading} rows={pager.items} categories={categories} onEdit={onEdit} onDelete={onDelete} onSort={key => setSort({ key, ascending: sort.key === key ? !sort.ascending : false })} />
       <Pagination pager={pager} sizes={[10, 20, 50]} className="border-t border-line" />
       <p className="border-t border-line px-5 py-3 text-xs text-muted">{t('Showing {count} of {total} transactions', { count: filtered.length, total: rows.length })} · {t('All amounts in VND · Stored on this browser')}</p>
     </Card>

@@ -4,6 +4,7 @@ import { useLanguage } from '../i18n';
 import { Badge, Button, Card, Empty, Field, IconButton, Modal, SectionHead, fieldClass } from '../components/ui';
 import { AmountInput } from '../components/AmountInput';
 import { FormSelect } from '../components/Select';
+import { LoadingStatus, Skeleton, SkeletonText, useFadeIn } from '../components/Skeleton';
 import { money } from '../data';
 import type { AccountType } from '../services';
 import type { AccountInput, WalletAccount } from '../hooks/useWorkspaceData';
@@ -27,8 +28,21 @@ type Dialog = { kind: 'create' } | { kind: 'edit'; account: WalletAccount } | { 
  * The backend computes balance = starting balance + income - expense, lets you rename or change the type
  * (not the starting balance), and archives instead of deleting an account that still has transactions.
  */
-export default function AccountsPage({ accounts, archived, hidden, setHidden, onCreate, onUpdate, onDelete, onRestore }: {
+/** An account card while loading: same padding, icon size and row heights as the real card. */
+function AccountSkeleton() {
+  return <div aria-hidden="true" className="rounded-2xl border border-line bg-base/40 p-4">
+    <div className="flex items-center gap-3">
+      <Skeleton className="size-10 shrink-0 !rounded-xl" />
+      <span className="min-w-0 flex-1"><SkeletonText className="h-6" bar="h-3.5" width="w-28" /></span>
+      <SkeletonText className="h-6" bar="h-3.5" width="w-20" />
+    </div>
+    <div className="mt-2 flex min-h-11 items-center pl-[52px]"><SkeletonText className="h-4" bar="h-2.5" width="w-32" /></div>
+  </div>;
+}
+export default function AccountsPage({ accounts, archived, hidden, setHidden, onCreate, onUpdate, onDelete, onRestore, loading = false }: {
   accounts: WalletAccount[]; archived: WalletAccount[];
+  /** First load of the user's data: skeleton cards instead of the empty state. */
+  loading?: boolean;
   hidden: boolean; setHidden: (value: boolean) => void;
   /** Each returns true on success; errors are shown by the caller. */
   onCreate: (input: AccountInput) => Promise<boolean>;
@@ -39,6 +53,7 @@ export default function AccountsPage({ accounts, archived, hidden, setHidden, on
   const { t } = useLanguage();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
+  const fade = useFadeIn(loading);
   const total = accounts.reduce((s, a) => s + a.balance, 0);
   const show = (vnd: number) => hidden ? HIDDEN_AMOUNT : money(vnd);
   const run = async (action: () => Promise<boolean>) => {
@@ -56,8 +71,13 @@ export default function AccountsPage({ accounts, archived, hidden, setHidden, on
               {hidden ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
             </button>
           </p>
-          <p className="mt-3 text-[30px] font-semibold leading-none tracking-[-0.045em] tabular-nums sm:text-[36px]">{show(total)}</p>
-          <p className="mt-3 text-xs text-muted">{t('{count} active accounts', { count: accounts.length })}</p>
+          {loading ? <>
+            <Skeleton className="mt-3 h-[30px] w-44 sm:h-[36px] sm:w-56" />
+            <SkeletonText className="mt-3 h-4" bar="h-2.5" width="w-28" />
+          </> : <div className={fade}>
+            <p className="mt-3 text-[30px] font-semibold leading-none tracking-[-0.045em] tabular-nums sm:text-[36px]">{show(total)}</p>
+            <p className="mt-3 text-xs text-muted">{t('{count} active accounts', { count: accounts.length })}</p>
+          </div>}
         </div>
         <Button onClick={() => setDialog({ kind: 'create' })}><Plus className="size-4" />{t('Add account')}</Button>
       </div>
@@ -65,7 +85,8 @@ export default function AccountsPage({ accounts, archived, hidden, setHidden, on
 
     <Card className="p-5">
       <SectionHead title={t('Your accounts')} subtitle={t('Cash, bank accounts and e-wallets you track. Balances include every transaction.')} />
-      {accounts.length ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{accounts.map(a =>
+      {loading ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"><LoadingStatus label={t('Loading your data...')} />{[0, 1].map(i => <AccountSkeleton key={i} />)}</div>
+        : accounts.length ? <div className={`grid gap-3 md:grid-cols-2 xl:grid-cols-3 ${fade}`}>{accounts.map(a =>
         <div key={a.id} className="group rounded-2xl border border-line bg-base/40 p-4 transition-colors hover:border-brand/30">
           <div className="flex items-center gap-3">
             <AccountIcon type={a.type} />

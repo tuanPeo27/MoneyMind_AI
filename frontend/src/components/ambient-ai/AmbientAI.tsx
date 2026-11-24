@@ -233,8 +233,10 @@ export function HighlightCard({ target, children, onInspect }: { target: Highlig
   const { t } = useLanguage();
   const { highlight, open } = useAmbientAI();
   const active = highlight === target;
-  return <div id={`ai-${target}`} className={`relative h-full min-w-0 rounded-xl transition-all duration-500 motion-reduce:transition-none ${active ? 'z-10 ring-1 ring-[#8B5CF6]/75 shadow-[0_0_24px_-14px_#8B5CF6] brightness-110' : ''}`}>
-    {active && <button onClick={onInspect} className="absolute -top-3 right-4 z-20 flex min-h-11 items-center gap-1.5 glass-strong rounded-lg px-3 text-xs text-ai focus-visible:ring-2 focus-visible:ring-ai"><Sparkles className="h-3.5 w-3.5" />{t("AI Insight")}<ArrowUpRight className="h-3.5 w-3.5" /></button>}
+  // The outline sits 10px outside the content (outline-offset does not change layout), so rows and amounts keep
+  // their spacing; the badge is centred on the outline's top edge instead of covering the first row.
+  return <div id={`ai-${target}`} className={`relative h-full min-w-0 rounded-xl outline-offset-[10px] transition-[outline-color,filter] duration-500 motion-reduce:transition-none ${active ? 'z-10 outline outline-1 outline-[#8B5CF6]/75 brightness-110' : 'outline-transparent'}`}>
+    {active && <button onClick={onInspect} className="absolute right-4 top-0 z-20 flex h-8 -translate-y-[calc(50%+10px)] items-center gap-1.5 glass-strong rounded-lg px-3 text-xs text-ai focus-visible:ring-2 focus-visible:ring-ai"><Sparkles className="h-3.5 w-3.5" />{t("AI Insight")}<ArrowUpRight className="h-3.5 w-3.5" /></button>}
     {children}
   </div>;
 }

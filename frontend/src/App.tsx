@@ -6,6 +6,7 @@ import {
 } from './data';
 import { Button, Field, Modal, fieldClass } from './components/ui';
 import { Select } from './components/Select';
+import { PageSkeleton } from './components/Skeleton';
 import { TransactionForm } from './components/transactions';
 import { BalanceContext, getTotals } from './lib/totals';
 import { setAmountsHidden } from './lib/currency';
@@ -68,13 +69,10 @@ function usePrefetchPages(enabled: boolean) {
   }, [enabled]);
 }
 
-/** Placeholder while a page chunk downloads; reserves height so the footer does not jump. */
+/** Placeholder while a page chunk downloads: a skeleton page that reserves height so the footer does not jump. */
 function PageLoading() {
   const { t } = useLanguage();
-  return <div role="status" className="flex min-h-[60vh] items-center justify-center">
-    <span aria-hidden="true" className="size-6 animate-spin rounded-full border-2 border-line border-t-brand motion-reduce:animate-none" />
-    <span className="sr-only">{t('Loading your data...')}</span>
-  </div>;
+  return <PageSkeleton label={t('Loading your data...')} />;
 }
 
 type Dialog =
@@ -270,6 +268,8 @@ function Workspace() {
   if (!session) return null; // redirecting to /login
   if (role === 'ADMIN' && !admin) return null; // redirecting to /admin
   const close = () => setDialog(null);
+  // First load of the user's data: pages draw skeletons instead of empty states. An error ends it (the alert shows).
+  const workspaceLoading = !data.ready && data.error == null;
   const nowMonth = new Date().toLocaleDateString(locale, { month: 'long', year: 'numeric' });
   const firstName = profile.name.trim().split(' ').pop() || 'Chương';
   return <div className="min-h-screen overflow-x-clip font-sans text-sm text-ink antialiased">
@@ -308,10 +308,9 @@ function Workspace() {
         </div>
         {data.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(data.error)}</span><Button secondary onClick={() => void data.reload()}>{t('Try again')}</Button></p>}
         {page === 'Savings Funds' && savings.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(savings.error)}</span><Button secondary onClick={() => void savings.reload()}>{t('Try again')}</Button></p>}
-        {data.loading && !rows.length && <p role="status" className="mb-4 text-sm text-muted">{t('Loading your data...')}</p>}
         <Suspense fallback={<PageLoading />}>
-        {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} accounts={data.activeAccounts} onNavigate={navigate} onEdit={editTransaction} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} />}
-        {page === 'Accounts' && <AccountsPage accounts={data.activeAccounts} archived={data.archivedAccounts} hidden={hidden} setHidden={setHidden}
+        {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} accounts={data.activeAccounts} onNavigate={navigate} onEdit={editTransaction} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} loading={workspaceLoading} />}
+        {page === 'Accounts' && <AccountsPage loading={workspaceLoading} accounts={data.activeAccounts} archived={data.archivedAccounts} hidden={hidden} setHidden={setHidden}
           onCreate={input => attempt(() => data.createAccount(input), 'Account added.')}
           onUpdate={(id, input) => attempt(() => data.updateAccount(id, input), 'Account saved.')}
           onDelete={async a => {
@@ -320,7 +319,7 @@ function Workspace() {
             return attempt(() => data.removeAccount(a.id), archives ? 'Account archived. Its transactions are kept.' : 'Account deleted.');
           }}
           onRestore={a => attempt(() => data.updateAccount(a.id, { name: a.name, type: a.type }, false), 'Account restored.')} />}
-        {page === 'Savings Funds' && <SavingsPage goals={savings.goals} loading={savings.loading} hidden={hidden} accounts={data.activeAccounts}
+        {page === 'Savings Funds' && <SavingsPage goals={savings.goals} loading={!savings.ready} hidden={hidden} accounts={data.activeAccounts}
           onSave={(id, input) => attempt(() => id ? savings.update(id, input) : savings.create(input), id ? 'Savings fund saved.' : 'Savings fund created.')}
           onContribute={async (goal, amount, accountId) => {
             // A goal that reaches its target is completed by the server, which also sends the "goal reached" notification.
@@ -335,7 +334,7 @@ function Workspace() {
           }}
           onStatus={(goal, status) => attempt(() => savings.setStatus(goal.id, status), status === 'Active' ? 'Savings fund reopened.' : 'Savings fund cancelled.')}
           onDelete={goal => attempt(async () => { await savings.remove(goal.id); await data.refreshAccounts(); }, 'Savings fund deleted.')} />}
-        {page === 'Transactions' && <Transactions onManageCategories={() => navigate('Categories')} rows={filtered} categories={categories} search={search} setSearch={setSearch} onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} onEdit={editTransaction} onDelete={deleteTransaction} onExport={exportRows} />}
+        {page === 'Transactions' && <Transactions loading={workspaceLoading} onManageCategories={() => navigate('Categories')} rows={filtered} categories={categories} search={search} setSearch={setSearch} onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} onEdit={editTransaction} onDelete={deleteTransaction} onExport={exportRows} />}
         {page === 'Budgets' && <Budgets budgets={budgets} rows={filtered} categories={categories}
           onAdd={() => setDialog({ kind: 'budget' })}
           onEdit={b => { setSelection({ category: b.category }); setDialog({ kind: 'budget', value: b }); }}

@@ -45,6 +45,19 @@ hoặc script, và **xóa dữ liệu thử** sau đó (người dùng thử đ�
 - **Bí mật:** đọc từ `backend/.env` (DotNetEnv, đã git-ignore). Thêm cấu hình mới thì cập nhật `.env.example`.
   **Không bao giờ đổi `Encryption__MasterKey`** khi đã có dữ liệu chat: dữ liệu cũ sẽ không giải mã được.
 
+- **Số dư tài khoản** = `InitialBalance` + thu − chi − tiền đã góp quỹ từ tài khoản đó (`GoalContributions`).
+  Góp quỹ **không** tạo giao dịch (để báo cáo chi tiêu không sai). Mọi chỗ tính số dư phải trừ phần góp quỹ:
+  `AccountService`, `FinancialAnalysisService`, `FinancialGoalService.AvailableBalanceAsync`, frontend
+  `useWorkspaceData`. Tài khoản còn giao dịch hoặc khoản góp quỹ thì chỉ được **lưu trữ**, không xóa.
+- **Admin không được xem giao dịch từng người.** `/api/admin/transactions/stats` chỉ trả số liệu tổng hợp; danh mục do
+  user tự tạo và danh mục có dưới 3 người dùng được gộp chung (`AdminTransactionService.MinGroupSize`). Đừng thêm
+  endpoint admin đọc giao dịch chi tiết.
+- **Tài khoản Admin chỉ dùng khu `/admin`**: frontend chuyển admin khỏi mọi trang cá nhân và không tải dữ liệu cá nhân.
+- **Nhắc góp quỹ:** `GoalReminderService` (`BackgroundService`, chạy khi khởi động rồi mỗi 30 phút) tạo thông báo vào
+  `ReminderDay` theo múi giờ của user; `LastReminderOn` chặn gửi trùng trong ngày. Ngày 29–31 dời về cuối tháng ngắn.
+- **Số điện thoại:** `Helpers/PhoneNumberRules.cs` (`[ValidPhoneNumber]`, lưu dạng chuẩn `0901234567` / `+1650…`) và
+  `frontend/src/lib/phone.ts` là **cùng một quy tắc**: sửa một bên thì sửa cả bên kia.
+
 ### Migration
 
 ```powershell
@@ -91,12 +104,35 @@ Hiện có 5 loại: thêm giao dịch, thêm danh mục, tạo ngân sách, t�
 - Sau khi một thao tác ngoài trang hiện tại đổi dữ liệu, phát `window` event `mm-finance-changed`
   (`FINANCE_CHANGED_EVENT`) để App tải lại giao dịch, ngân sách, quỹ, thông báo.
 - README dùng `pnpm`; repo có cả `package-lock.json`. Đừng tự đổi lock file khi không được yêu cầu.
+- **Tiền:** dữ liệu luôn là **VND**. Hiển thị chỉ qua `money` / `formatAmount` / `compact` / `percent` trong
+  `src/lib/currency.ts` (tiếng Việt → VND, tiếng Anh → USD theo tỉ giá thật, cache 12 giờ, dự phòng 26.000).
+  Các hàm này tự trả `••••••` khi user bật ẩn số dư (`setAmountsHidden` gọi trong `App.tsx`), nên **không** tự
+  format tiền bằng `Intl`. Ô nhập tiền dùng `AmountInput` (chặn chữ, nhóm 3 số, gửi VND qua input ẩn).
+- **Thành phần dùng chung:** ô chọn dùng `Select` / `FormSelect` (`components/Select.tsx`), menu dùng `DropdownMenu`,
+  hộp thoại dùng `Modal` (portal ra `body`, `z-[90]`, nằm trên trang AI). Không dùng `<select>` gốc hay
+  `window.confirm`.
+- **Đang tải:** dùng skeleton (`components/Skeleton.tsx`: `Skeleton`, `SkeletonText`, `useFadeIn`, `PageSkeleton`), không
+  dùng spinner. Skeleton phải cùng kích thước với nội dung thật (đo bằng CLS). Cờ tải lần đầu là `data.ready` /
+  `savings.ready`; khi chưa sẵn sàng thì không hiện trạng thái rỗng ("Chưa có…").
+- **Hiệu năng (đã tối ưu, đừng làm hỏng):**
+  - Mọi trang là `React.lazy` trong `App.tsx`; trang mới cũng phải lazy. `App.tsx` không import từ `pages/Overview`
+    (dùng `lib/totals`), nếu không chunk Overview và biểu đồ sẽ vào bundle đầu.
+  - framer-motion chạy qua `<LazyMotion>`: viết `<m.div>`, **không** `<motion.div>` (kéo cả engine vào bundle đầu).
+  - `recharts` chỉ import trong component lazy (`components/charts.tsx`, `admin/AdminCharts.tsx`); dữ liệu biểu đồ thuần
+    nằm ở `lib/chartData.ts`.
+  - Font Inter tự host (`@fontsource-variable/inter`), chỉ khai báo subset latin + vietnamese trong `index.css`, preload
+    trong `index.html`. Logo giao diện là `public/logo-96.png` (`logo.png` 500 px chỉ là bản gốc).
+  - Đo Lighthouse trên `pnpm build` + `npx vite preview` (cổng 4173), **không** trên dev server (dev cho kết quả sai rất xa).
 
 ## Bẫy trên Windows / PowerShell
 
 - In tiếng Việt từ Python ra console: đặt `$env:PYTHONIOENCODING='utf-8'`, nếu không sẽ gặp `UnicodeEncodeError`.
 - Hashtable PowerShell **không phân biệt hoa thường** (`'Amount'` và `'amount'` là trùng khóa).
 - Ghi file bằng `[IO.File]::WriteAllText(..., UTF8 không BOM)`; giữ nguyên kiểu xuống dòng (repo có cả CRLF và LF).
+- Không dùng `-replace` / regex PowerShell để sửa file TSX: chuỗi như `{t('` từng bị biến thành `name` làm hỏng cả
+  file. Dùng script Node thay chuỗi chính xác và **kiểm tra mỗi chuỗi khớp đúng 1 lần** trước khi ghi.
+- Tạo file script rồi chạy nó trong cùng một lượt gọi song song: lệnh chạy có thể chạy trước khi file được ghi.
+- Chat báo 503 thường là **ai-service đang tắt** (cổng 8001), không phải lỗi code. Cần chạy cả 3 phần.
 - Lỗi `Errno 10048` / exe bị khóa: một tiến trình cũ đang giữ cổng. Kiểm tra `Get-NetTCPConnection -LocalPort <cổng>`
   và chỉ dừng tiến trình khi chắc nó là bản cũ của dự án.
 
@@ -113,3 +149,19 @@ Còn lại: <bước tiếp theo>
 File liên quan: <đường dẫn>
 Quyết định đã chốt: <ví dụ: AI phải chờ user xác nhận>
 ```
+
+## Trạng thái gần nhất (cập nhật 24/11/2026)
+
+Đã xong và đã kiểm tra (build + thử trên trình duyệt): trang Tài khoản; góp quỹ lấy tiền từ tài khoản và nhắc góp quỹ
+hằng tháng (migration `AddGoalContributionsAndReminders`); thống kê giao dịch tổng hợp và quản lý danh mục mặc định cho
+admin; ẩn toàn bộ số tiền; quy đổi VND/USD; validate số điện thoại; đăng nhập Google; tối ưu hiệu năng (Tổng quan
+Lighthouse 70 → 94, đăng nhập 88 → 98).
+
+Còn mở:
+- **Xác minh khi đổi email / số điện thoại:** chưa làm, đang chờ chốt: gửi SMS bằng gì (đề xuất in mã ra log khi dev),
+  có hỏi mật khẩu trước khi đổi email không, và cho thêm migration bảng `ContactVerifications`.
+- Bảng `Accounts` chưa có unique index (UserId, Name) cho tài khoản chưa lưu trữ: hai request song song có thể tạo trùng.
+  Frontend đã chặn việc tạo ví mặc định hai lần, backend thì chưa.
+- Google Sign-In chưa nhận origin `http://localhost:4173` (bản preview); cần thêm trong Google Cloud nếu muốn dùng.
+- Dữ liệu thử cũ còn trong DB local: các user `*@example.com` như `goaltest…`, `hide…`, `phone…`, `accounts…`,
+  `taskbar…`, `statsuser…` (tạo trước khi có quy ước `zz-`). Xóa nếu cần DB sạch.

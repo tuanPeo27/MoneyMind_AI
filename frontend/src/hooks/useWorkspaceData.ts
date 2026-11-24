@@ -61,6 +61,8 @@ export function useWorkspaceData(userId: string | undefined) {
   const [rows, setRows] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [loading, setLoading] = useState(false);
+  // False until the first load for this user finishes (with data or an error): pages show skeletons meanwhile.
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const requestId = useRef(0);
 
@@ -89,13 +91,13 @@ export function useWorkspaceData(userId: string | undefined) {
     } catch (e) {
       if (current === requestId.current) setError(e);
     } finally {
-      if (current === requestId.current) setLoading(false);
+      if (current === requestId.current) { setLoading(false); setReady(true); }
     }
   }, [userId]);
 
   useEffect(() => {
     requestId.current++;
-    setAccounts([]); setCategoryList([]); setRows([]); setBudgets([]); setError(null);
+    setAccounts([]); setCategoryList([]); setRows([]); setBudgets([]); setError(null); setReady(false);
     if (userId) void load(); else setLoading(false);
   }, [userId, load]);
 
@@ -200,7 +202,7 @@ export function useWorkspaceData(userId: string | undefined) {
   }, []);
 
   return {
-    rows, budgets, categories, accountNames, openingBalance, activeAccounts, archivedAccounts, activeAccountIds, loading, error, reload: load,
+    rows, budgets, categories, accountNames, openingBalance, activeAccounts, archivedAccounts, activeAccountIds, loading, ready, error, reload: load,
     createAccount, updateAccount, removeAccount, refreshAccounts, saveTransaction, removeTransaction, saveCategory, removeCategory, saveBudget, removeBudget,
   };
 }

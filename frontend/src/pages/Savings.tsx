@@ -3,6 +3,7 @@ import { BellRing, CalendarClock, CircleCheck, Pencil, PiggyBank, Plus, RotateCc
 import { useLanguage } from '../i18n';
 import { Badge, Button, Card, Empty, Field, IconButton, Modal, SectionHead, fieldClass } from '../components/ui';
 import { AmountInput } from '../components/AmountInput';
+import { LoadingStatus, Skeleton, SkeletonText, useFadeIn } from '../components/Skeleton';
 import { money } from '../data';
 import type { FinancialGoalResponse, FinancialGoalStatus, UpsertGoalRequest } from '../services';
 import { AccountIcon, HIDDEN_AMOUNT } from './Accounts';
@@ -23,6 +24,19 @@ const todayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return 
 /** Whole days from today to a `YYYY-MM-DD` deadline (negative when it has passed). */
 const daysUntil = (deadline: string) => Math.round((new Date(`${deadline}T00:00:00`).getTime() - todayStart().getTime()) / 86_400_000);
 
+/** A fund card while loading: same paddings and line heights as the real card (without the optional reminder line). */
+function GoalSkeleton() {
+  return <div aria-hidden="true" className="rounded-2xl border border-line bg-base/40 p-4">
+    <div className="flex items-start gap-3">
+      <Skeleton className="size-10 shrink-0 !rounded-xl" />
+      <div className="min-w-0 flex-1"><SkeletonText className="h-6" bar="h-3.5" width="w-32" /><SkeletonText className="mt-0.5 h-4" bar="h-2.5" width="w-24" /></div>
+      <SkeletonText className="h-5" width="w-9" />
+    </div>
+    <Skeleton className="mt-4 h-2.5 w-full !rounded-full" />
+    <div className="mt-2 flex justify-between gap-2"><SkeletonText className="h-4" bar="h-2.5" width="w-28" /><SkeletonText className="h-4" bar="h-2.5" width="w-20" /></div>
+    <Skeleton className="mt-4 h-11 w-32 !rounded-xl" />
+  </div>;
+}
 function ProgressBar({ percent, tone }: { percent: number; tone: string }) {
   const { t } = useLanguage();
   return <div role="progressbar" aria-label={t('Savings progress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}
@@ -48,6 +62,7 @@ export default function SavingsPage({ goals, loading, hidden, accounts, onSave, 
   const { t } = useLanguage();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
+  const fade = useFadeIn(loading);
   const show = (vnd: number) => hidden ? HIDDEN_AMOUNT : money(vnd);
   const run = async (action: () => Promise<boolean>) => {
     setBusy(true);
@@ -65,18 +80,24 @@ export default function SavingsPage({ goals, loading, hidden, accounts, onSave, 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm text-muted"><PiggyBank className="size-4" aria-hidden="true" />{t('Total saved in active funds')}</p>
-          <p className="mt-3 text-[30px] font-semibold leading-none tracking-[-0.045em] tabular-nums sm:text-[36px]">{show(saved)}</p>
-          <p className="mt-3 text-xs text-muted">{t('{saved} of {target} · {count} active funds', { saved: show(saved), target: show(target), count: active.length })}</p>
+          {loading ? <>
+            <Skeleton className="mt-3 h-[30px] w-44 sm:h-[36px] sm:w-56" />
+            <SkeletonText className="mt-3 h-4" bar="h-2.5" width="w-48" />
+          </> : <div className={fade}>
+            <p className="mt-3 text-[30px] font-semibold leading-none tracking-[-0.045em] tabular-nums sm:text-[36px]">{show(saved)}</p>
+            <p className="mt-3 text-xs text-muted">{t('{saved} of {target} · {count} active funds', { saved: show(saved), target: show(target), count: active.length })}</p>
+          </div>}
         </div>
         <Button onClick={() => setDialog({ kind: 'form' })}><Plus className="size-4" />{t('Add savings fund')}</Button>
       </div>
-      {active.length > 0 && <div className="mt-5"><ProgressBar percent={overall} tone="bg-brand" /></div>}
+      {loading ? <Skeleton className="mt-5 h-2.5 w-full !rounded-full" />
+        : active.length > 0 && <div className={`mt-5 ${fade}`}><ProgressBar percent={overall} tone="bg-brand" /></div>}
     </Card>
 
     <Card className="p-5">
       <SectionHead title={t('Active savings funds')} subtitle={t('Add money toward each goal. You are notified when a fund reaches its target.')} />
-      {loading && !goals.length ? <p role="status" className="py-6 text-sm text-muted">{t('Loading your data...')}</p>
-        : active.length ? <div className="grid gap-3 md:grid-cols-2">{active.map(g => {
+      {loading ? <div className="grid gap-3 md:grid-cols-2"><LoadingStatus label={t('Loading your data...')} />{[0, 1].map(i => <GoalSkeleton key={i} />)}</div>
+        : active.length ? <div className={`grid gap-3 md:grid-cols-2 ${fade}`}>{active.map(g => {
           const days = g.deadline ? daysUntil(g.deadline) : null;
           const remaining = Math.max(0, g.targetAmount - g.currentAmount);
           return <div key={g.id} className="group rounded-2xl border border-line bg-base/40 p-4 transition-colors hover:border-brand/30">
