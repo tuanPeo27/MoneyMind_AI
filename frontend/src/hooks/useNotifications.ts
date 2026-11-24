@@ -18,6 +18,8 @@ const toItem = (n: NotificationResponse): AppNotification => ({
  */
 export function useNotifications(userId: string | undefined, onAlert?: (item: AppNotification) => void) {
   const [items, setItems] = useState<AppNotification[]>([]);
+  // False until the first list for this user arrives (or fails): the page shows skeleton rows meanwhile.
+  const [ready, setReady] = useState(false);
   const seen = useRef<Set<string> | null>(null); // null until the first load, so old notifications never pop up
   const alertRef = useRef(onAlert);
   alertRef.current = onAlert;
@@ -35,9 +37,10 @@ export function useNotifications(userId: string | undefined, onAlert?: (item: Ap
       seen.current = new Set([...(seen.current ?? []), ...page.items.map(n => n.id)]);
       setItems(page.items.map(toItem));
     } catch { /* keep the last known list; the next poll retries */ }
+    finally { setReady(true); }
   }, [userId]);
   useEffect(() => {
-    setItems([]);
+    setItems([]); setReady(false);
     seen.current = null;
     if (!userId) return;
     void refresh();
@@ -65,5 +68,5 @@ export function useNotifications(userId: string | undefined, onAlert?: (item: Ap
     setItems([]);
     Promise.all(ids.map(id => notificationsApi.deleteNotification(id))).catch(() => undefined).finally(() => void refresh());
   }, [items, refresh]);
-  return { items, unread, refresh, markAllRead, markRead, remove, clear };
+  return { items, unread, ready, refresh, markAllRead, markRead, remove, clear };
 }

@@ -11,7 +11,7 @@ export const LOGO_SRC = '/logo-96.png'; // 96 px covers the 32-40 px logo on 2-3
 export function BrandLogo({ className = 'size-8', rounded = 'rounded-lg' }: { className?: string; rounded?: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) {
-    return <span aria-hidden="true" className={`flex shrink-0 items-center justify-center bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] text-white ${rounded} ${className}`}>
+    return <span aria-hidden="true" className={`flex shrink-0 items-center justify-center bg-gradient-to-br from-accent to-accent-2 text-on-accent ${rounded} ${className}`}>
       <ChartNoAxesCombined className="size-[60%]" />
     </span>;
   }

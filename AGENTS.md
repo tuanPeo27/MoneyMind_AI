@@ -112,8 +112,13 @@ Hiện có 5 loại: thêm giao dịch, thêm danh mục, tạo ngân sách, t�
   hộp thoại dùng `Modal` (portal ra `body`, `z-[90]`, nằm trên trang AI). Không dùng `<select>` gốc hay
   `window.confirm`.
 - **Đang tải:** dùng skeleton (`components/Skeleton.tsx`: `Skeleton`, `SkeletonText`, `useFadeIn`, `PageSkeleton`), không
-  dùng spinner. Skeleton phải cùng kích thước với nội dung thật (đo bằng CLS). Cờ tải lần đầu là `data.ready` /
+  dùng spinner. Skeleton phải cùng kích thước với nội dung thật (đo bằng CLS). Mọi trang dữ liệu đều có skeleton. Cờ tải lần đầu là `data.ready` / `notifications.ready` /
   `savings.ready`; khi chưa sẵn sàng thì không hiện trạng thái rỗng ("Chưa có…").
+- **Màu:** thương hiệu là gradient indigo → tím `#6366F1` → `#A855F7` (`accent` → `accent-2`), nền trắng lạnh dịu `#EEF1F6` / đen xám `#1C1C1F`; trang AI theo gradient của nút AI (`.ai-theme`, `.ai-backdrop`),
+  nền trang có vòng tròn đồng tâm mảnh (từ góc trên phải) + vùng sáng tím để kính mờ hiện rõ (chế độ tối vẫn bật blur 16px; nếu vệt sáng quay lại trên Chromium thì tắt ở `index.css`).
+  Thẻ Tổng số dư dùng class `.hero-card`. Chỉ dùng biến trong `index.css` (`brand`, `accent`,
+  `accent-2`, `on-accent`, `ink`, `muted`, `line`…), không ghi cứng mã hex. Xanh/đỏ (`positive`/`negative`) chỉ dành cho thu/chi.
+  Gradient AI `ai-from` → `ai-to` → `ai-warm` (indigo → tím → vàng cam `#F59E0B`) chỉ cho nút mở AI, huy hiệu phân tích tự động và đường biểu đồ dự đoán.
 - **Hiệu năng (đã tối ưu, đừng làm hỏng):**
   - Mọi trang là `React.lazy` trong `App.tsx`; trang mới cũng phải lazy. `App.tsx` không import từ `pages/Overview`
     (dùng `lib/totals`), nếu không chunk Overview và biểu đồ sẽ vào bundle đầu.

@@ -3,6 +3,7 @@ import { ArrowLeftRight, Wallet, Shapes, Database, Bell, CheckCheck, PiggyBank, 
 import { useLanguage } from '../i18n';
 import { Button, Card, Empty, IconButton } from '../components/ui';
 import type { AppNotification, NotificationKind } from '../hooks/useNotifications';
+import { LoadingStatus, Skeleton, SkeletonText, useFadeIn } from '../components/Skeleton';
 
 const meta: Record<NotificationKind, { icon: LucideIcon; tone: string }> = {
   transaction: { icon: ArrowLeftRight, tone: 'text-brand bg-brand/10' },
@@ -25,11 +26,14 @@ function relativeTime(iso: string, locale: string, t: (s: string, v?: Record<str
   return new Date(iso).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 }
 
-export default function NotificationsPage({ items, onMarkAllRead, onMarkRead, onRemove, onClear }: {
+export default function NotificationsPage({ items, onMarkAllRead, onMarkRead, onRemove, onClear, loading = false }: {
   items: AppNotification[];
+  /** First load: skeleton rows instead of the list or the empty state. */
+  loading?: boolean;
   onMarkAllRead: () => void; onMarkRead: (id: string) => void; onRemove: (id: string) => void; onClear: () => void;
 }) {
   const { t, locale } = useLanguage();
+  const fade = useFadeIn(loading);
   const unread = items.filter(n => !n.read).length;
   const groups = useMemo(() => {
     const today: AppNotification[] = [], earlier: AppNotification[] = [];
@@ -40,14 +44,21 @@ export default function NotificationsPage({ items, onMarkAllRead, onMarkRead, on
 
   return <div className="mx-auto max-w-2xl space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="text-sm text-muted">{unread ? t('{n} unread', { n: unread }) : t('You are all caught up.')}</p>
+      {loading ? <SkeletonText className="h-5" width="w-32" /> : <p className={`text-sm text-muted ${fade}`}>{unread ? t('{n} unread', { n: unread }) : t('You are all caught up.')}</p>}
       <div className="flex gap-2">
-        <Button secondary onClick={onMarkAllRead} disabled={!unread}><CheckCheck className="size-4" aria-hidden="true" />{t('Mark all as read')}</Button>
-        <Button secondary onClick={onClear} disabled={!items.length}><Trash2 className="size-4" aria-hidden="true" />{t('Clear all')}</Button>
+        <Button secondary onClick={onMarkAllRead} disabled={loading || !unread}><CheckCheck className="size-4" aria-hidden="true" />{t('Mark all as read')}</Button>
+        <Button secondary onClick={onClear} disabled={loading || !items.length}><Trash2 className="size-4" aria-hidden="true" />{t('Clear all')}</Button>
       </div>
     </div>
-    {!items.length && <Card><Empty title={t('No notifications yet')} text={t('Activity in your workspace will show up here.')} /></Card>}
-    {groups.map(group => <section key={group.title} className="space-y-2">
+    {loading && <section className="space-y-2"><LoadingStatus label={t('Loading your data...')} />
+      <SkeletonText className="h-4 px-1" bar="h-2.5" width="w-16" />
+      <Card className="divide-y divide-line overflow-hidden">{[0, 1, 2, 3].map(i => <div key={i} aria-hidden="true" className="flex items-start gap-3 px-4 py-4">
+        <Skeleton className="mt-0.5 size-9 shrink-0 !rounded-xl" />
+        <span className="min-w-0 flex-1"><SkeletonText className="h-5" width={i % 2 ? 'w-48' : 'w-64'} /><SkeletonText className="mt-0.5 h-5" width="w-40" /><SkeletonText className="mt-0.5 h-4" bar="h-2.5" width="w-16" /></span>
+      </div>)}</Card>
+    </section>}
+    {!loading && !items.length && <Card><Empty title={t('No notifications yet')} text={t('Activity in your workspace will show up here.')} /></Card>}
+    {!loading && groups.map(group => <section key={group.title} className={`space-y-2 ${fade}`}>
       <h2 className="px-1 text-xs font-medium uppercase tracking-[0.12em] text-muted">{t(group.title)}</h2>
       <Card className="divide-y divide-line overflow-hidden">
         {group.items.map(n => {

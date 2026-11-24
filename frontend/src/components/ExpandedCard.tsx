@@ -37,7 +37,7 @@ function Surface({ id, title, closeLabel, onClose, children }: { id: string; tit
     return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', key, true); previous?.focus?.(); };
   }, [onClose]);
   return <m.div ref={ref} role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-[75]">
-    <m.div aria-hidden="true" className="absolute inset-0 backdrop-blur-md" style={{ background: 'light-dark(rgba(40, 25, 60, 0.45), rgba(11, 15, 25, 0.8))' }}
+    <m.div aria-hidden="true" className="absolute inset-0 backdrop-blur-md" style={{ background: 'light-dark(rgba(24, 24, 27, 0.4), rgba(20, 20, 23, 0.78))' }}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} onClick={onClose} />
     <m.div aria-hidden="true" layoutId={`card-${id}`} style={{ borderRadius: 0 }} transition={spring} exit={{ opacity: 0.99 }} className="glass-strong absolute inset-0 !border-0" />
     <m.div className="absolute inset-0 overflow-y-auto ai-scroll" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: 0.14, duration: 0.26 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>

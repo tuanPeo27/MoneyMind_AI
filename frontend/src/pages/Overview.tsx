@@ -31,8 +31,8 @@ export function SummaryCards({ totals, previous, hidden = false, onToggleHidden,
     { label: 'Savings', value: totals.savings, previous: previous.savings, icon: Landmark },
   ];
   return <div id="ai-summary" className={`grid grid-cols-2 gap-3 sm:gap-4 ${layout === 'row' ? 'xl:grid-cols-[1.15fr_1fr_1fr_1fr]' : ''}`}>{cards.map(({ label, value, previous: old, icon: Icon, inverse }, index) =>
-    <Card key={label} className={`relative px-3.5 py-3.5 sm:px-5 sm:py-5 transition-all duration-300 motion-safe:hover:-translate-y-0.5 ${index === 0 ? '!border-brand/25 !bg-balance' : ''} ${highlight === 'summary' && index === 3 ? 'ring-1 ring-[#8B5CF6]/75 brightness-110 shadow-[0_0_24px_-14px_#8B5CF6]' : ''}`}>
-      {highlight === 'summary' && index === 3 && <button onClick={() => openAssistant('How can I improve my savings?')} className="absolute -top-6 right-3 flex min-h-11 items-center gap-1.5 rounded-lg border border-[#8B5CF6]/50 bg-surface px-3 text-xs text-ai"><Sparkles className="h-3 w-3" />{t("AI Insight")}</button>}
+    <Card key={label} className={`relative px-3.5 py-3.5 sm:px-5 sm:py-5 transition-all duration-300 motion-safe:hover:-translate-y-0.5 ${index === 0 ? 'hero-card' : ''} ${highlight === 'summary' && index === 3 ? 'ring-1 ring-ai-from/75 brightness-110 shadow-[0_0_24px_-14px_var(--color-ai-from)]' : ''}`}>
+      {highlight === 'summary' && index === 3 && <button onClick={() => openAssistant('How can I improve my savings?')} className="absolute -top-6 right-3 flex min-h-11 items-center gap-1.5 rounded-lg bg-gradient-to-br from-ai-from via-ai-to to-ai-warm text-on-ai px-3 text-xs font-semibold shadow-md shadow-ai-from/30"><Sparkles className="h-3 w-3" />{t("AI Insight")}</button>}
       <div className="flex items-center justify-between gap-2"><span className="truncate text-xs text-muted sm:text-sm">{t(label)}</span>{index === 0 && onToggleHidden ? <button type="button" onClick={() => onToggleHidden(!hidden)} aria-pressed={hidden} aria-label={hidden ? t("Show account balance") : t("Hide account balance")} className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-brand/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">{hidden ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}</button> : <Icon className={`h-4 w-4 shrink-0 ${index === 1 ? 'text-positive' : index === 2 ? 'text-negative' : 'text-muted'}`} aria-hidden="true" />}</div>
       {loading ? <>
         {/* Same heights as the amount (its font size, leading-none) and the change line (16px). */}
@@ -289,10 +289,10 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
     <section aria-label={t("Overview sections")}>
       <div ref={tabList} role="tablist" aria-label={t("Overview sections")} onKeyDown={onTabKey} className="relative isolate mx-auto mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl bg-surface p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {/* Position and width are written by applyFocus on every scroll frame. */}
-        <span ref={tabPill} aria-hidden="true" style={{ opacity: 0 }} className="pointer-events-none absolute inset-y-1 left-0 -z-10 rounded-xl bg-gradient-to-br from-[#8B5CF6] to-[#EC4899] shadow-md shadow-[#8B5CF6]/30 will-change-transform" />
+        <span ref={tabPill} aria-hidden="true" style={{ opacity: 0 }} className="pointer-events-none absolute inset-y-1 left-0 -z-10 rounded-xl bg-gradient-to-br from-accent to-accent-2 shadow-md shadow-accent/30 will-change-transform" />
         {slides.map((s, i) =>
         <button key={s.id} ref={el => { tabs.current[i] = el; }} role="tab" id={`${uid}-tab-${s.id}`} aria-selected={i === index} aria-controls={`${uid}-panel-${s.id}`} tabIndex={i === index ? 0 : -1} onClick={() => go(i)}
-          className={`min-h-9 shrink-0 rounded-xl px-3.5 text-sm font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${i === index ? 'text-white' : 'text-muted hover:text-ink'}`}>{t(s.label)}</button>)}</div>
+          className={`min-h-9 shrink-0 rounded-xl px-3.5 text-sm font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${i === index ? 'text-on-accent' : 'text-muted hover:text-ink'}`}>{t(s.label)}</button>)}</div>
       <div ref={scroller} onScroll={() => { cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(applyFocus); }}
         style={{ ['--card-w' as string]: `${cardW}px`, perspective: '1400px', paddingInline: 'calc(50% - var(--card-w) / 2)' }}
         className="relative flex items-stretch gap-6 overflow-hidden py-3 sm:py-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -300,7 +300,7 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
           onClick={() => { if (i !== index) go(i); }}
           className={`relative flex w-[var(--card-w)] flex-none will-change-transform ${i === index ? '' : 'cursor-pointer'}`}>
           <m.div layoutId={`card-${s.id}`} style={{ borderRadius: 24 }} transition={reduceMotion ? { duration: 0 } : MORPH_SPRING} className="glass relative w-full p-4 sm:p-6">
-            <span aria-hidden="true" className={`pointer-events-none absolute -inset-px rounded-3xl shadow-[0_0_48px_-10px_rgba(139,92,246,0.7)] ring-1 ring-[#8B5CF6]/50 transition-opacity duration-500 ${i === index ? 'opacity-100' : 'opacity-0'}`} />
+            <span aria-hidden="true" className={`pointer-events-none absolute -inset-px rounded-3xl shadow-[0_0_48px_-10px_color-mix(in_oklab,var(--color-accent)_70%,transparent)] ring-1 ring-accent/50 transition-opacity duration-500 ${i === index ? 'opacity-100' : 'opacity-0'}`} />
             <m.div className="relative" animate={{ opacity: expanded === s.id ? 0 : 1 }} transition={{ duration: 0.1 }} {...(i === index ? {} : ({ inert: '' } as object))}>
               <div className="mb-4 flex items-center justify-between gap-2"><h3 className="text-[1rem] font-semibold tracking-tight">{t(s.label)}</h3>
                 {i === index && <IconButton icon={Maximize2} label={t('Expand')} onClick={() => setExpanded(s.id)} />}</div>
@@ -312,12 +312,12 @@ export default function Overview({ rows, allRows, previous, budgets, categories,
       <ExpandedCard id={expanded} title={open ? t(open.label) : ''} closeLabel={t('Close')} onClose={() => setExpanded(null)}>{expanded ? details[expanded] : null}</ExpandedCard>
       <div className="mt-2 flex justify-center" aria-hidden="true"><div className="relative flex items-center gap-2">
         {slides.map((s, i) => <button key={s.id} ref={el => { dots.current[i] = el; }} type="button" tabIndex={-1} onClick={() => go(i)} className="h-2 w-2 shrink-0 rounded-full bg-ink/25 transition-colors hover:bg-ink/45" />)}
-        <span ref={dotPill} className="pointer-events-none absolute left-0 top-0 h-2 w-6 rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#EC4899] shadow-[0_0_14px_2px_rgba(139,92,246,0.55)] will-change-transform" />
+        <span ref={dotPill} className="pointer-events-none absolute left-0 top-0 h-2 w-6 rounded-full bg-gradient-to-r from-accent to-accent-2 shadow-[0_0_14px_2px_color-mix(in_oklab,var(--color-accent)_55%,transparent)] will-change-transform" />
       </div></div>
     </section>    {showInsight && <div className="glass flex flex-wrap items-center gap-4 rounded-2xl px-5 py-4">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#8B5CF6]/20 bg-[#8B5CF6]/10"><Sparkles className="h-4 w-4 text-ai" aria-hidden="true" /></span>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-ai-from via-ai-to to-ai-warm text-on-ai shadow-md shadow-ai-from/30"><Sparkles className="h-4 w-4" aria-hidden="true" /></span>
       <div className="min-w-0 flex-1"><p className="mb-1 text-xs font-medium text-ai">{t("A SMALL INSIGHT")}</p><p className="text-sm">{oldDining ? t(diningChange >= 0 ? 'Dining expenses increased {change}% this period.' : 'Dining expenses decreased {change}% this period.', { change: Math.abs(diningChange).toFixed(0) }) : t("A clearer picture starts with your spending.")} <span className="ml-1 text-muted">{money(dining)}</span></p></div>
-      <button onClick={() => openAssistant('Why did my dining expenses change this month?')} className="flex min-h-11 items-center gap-2 text-sm font-medium text-ai hover:text-ink focus-visible:ring-2 focus-visible:ring-ai">{t("Analyze with AI")}<ArrowUpRight className="h-4 w-4" /></button>
+      <button onClick={() => openAssistant('Why did my dining expenses change this month?')} className="flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-br from-ai-from via-ai-to to-ai-warm text-on-ai px-4 text-sm font-medium shadow-md shadow-ai-from/30 transition-[filter] hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ai-from focus-visible:ring-offset-2">{t("Analyze with AI")}<ArrowUpRight className="h-4 w-4" /></button>
     </div>}
     {highlight && <div className="flex justify-end"><button onClick={clearHighlight} className="min-h-11 text-sm text-muted hover:text-ink">{t("Clear AI highlight & return to normal view")}</button></div>}
   </div>;

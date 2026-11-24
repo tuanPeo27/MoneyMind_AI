@@ -335,7 +335,7 @@ function Workspace() {
           onStatus={(goal, status) => attempt(() => savings.setStatus(goal.id, status), status === 'Active' ? 'Savings fund reopened.' : 'Savings fund cancelled.')}
           onDelete={goal => attempt(async () => { await savings.remove(goal.id); await data.refreshAccounts(); }, 'Savings fund deleted.')} />}
         {page === 'Transactions' && <Transactions loading={workspaceLoading} onManageCategories={() => navigate('Categories')} rows={filtered} categories={categories} search={search} setSearch={setSearch} onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} onEdit={editTransaction} onDelete={deleteTransaction} onExport={exportRows} />}
-        {page === 'Budgets' && <Budgets budgets={budgets} rows={filtered} categories={categories}
+        {page === 'Budgets' && <Budgets loading={workspaceLoading} budgets={budgets} rows={filtered} categories={categories}
           onAdd={() => setDialog({ kind: 'budget' })}
           onEdit={b => { setSelection({ category: b.category }); setDialog({ kind: 'budget', value: b }); }}
           onDelete={b => setDialog({
@@ -343,7 +343,7 @@ function Workspace() {
             action: () => { void attempt(() => data.removeBudget(b.id), 'Budget deleted.'); },
           })}
         />}
-        {page === 'Categories' && <Categories rows={filtered} categories={categories}
+        {page === 'Categories' && <Categories loading={workspaceLoading} rows={filtered} categories={categories}
           onAdd={() => setDialog({ kind: 'category' })}
           onEdit={c => { setSelection({ category: c.name }); setDialog({ kind: 'category', value: c }); }}
           onDelete={c => {
@@ -355,13 +355,13 @@ function Workspace() {
             } });
           }}
         />}
-        {page === 'Reports' && <Reports rows={filtered} allRows={rows} previous={previous} categories={categories} onExport={exportRows} hidden={hidden} />}
+        {page === 'Reports' && <Reports loading={workspaceLoading} rows={filtered} allRows={rows} previous={previous} categories={categories} onExport={exportRows} hidden={hidden} />}
         {page === 'AI Financial Assistant' && <AssistantHome />}
-        {page === 'Smart Insights' && <Insights rows={filtered} previous={previous} budgets={budgets} onNavigate={next => next === 'AI Financial Assistant' ? openAssistant() : navigate(next)} />}
+        {page === 'Smart Insights' && <Insights loading={workspaceLoading} rows={filtered} previous={previous} budgets={budgets} onNavigate={next => next === 'AI Financial Assistant' ? openAssistant() : navigate(next)} />}
         {page === 'Workspace' && <WorkspacePage profile={profile} onSave={async p => {
           if (await attempt(() => usersApi.updateProfile({ fullName: p.name, phoneNumber: p.phone || null }), 'Profile saved.')) setProfile({ ...storedProfile, avatar: p.avatar });
         }} totals={getTotals(filtered)} previous={getTotals(previous)} hidden={hidden} setHidden={setHidden} signedIn role={role} />}
-        {page === 'Notifications' && <NotificationsPage items={notifications.items} onMarkAllRead={notifications.markAllRead} onMarkRead={notifications.markRead} onRemove={notifications.remove} onClear={notifications.clear} />}
+        {page === 'Notifications' && <NotificationsPage loading={!notifications.ready} items={notifications.items} onMarkAllRead={notifications.markAllRead} onMarkRead={notifications.markRead} onRemove={notifications.remove} onClear={notifications.clear} />}
         {page === 'Settings' && <SettingsPage profile={profile} onSave={p => { setProfile({ ...storedProfile, notifications: p.notifications, insights: p.insights }); notify('Preferences saved on this browser.'); }} onExport={() => exportRows(rows)} role={role} theme={theme} setTheme={setTheme} />}
         </Suspense>
       </UserLayout></BalanceContext.Provider>}
