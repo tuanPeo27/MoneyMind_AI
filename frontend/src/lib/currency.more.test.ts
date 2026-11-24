@@ -155,7 +155,8 @@ describe('compact', () => {
   it('shortens USD amounts with a dollar sign', () => {
     setDisplayCurrency('USD', 26_000);
     expect(compact(26_000 * 1_200)).toBe('$1.2K');
-    expect(compact(26_000)).toBe('$1');
+    // ICU versions differ: Node 22 prints "$1.0", newer Node prints "$1".
+    expect(compact(26_000)).toMatch(/^\$1(\.0)?$/);
   });
 });
 
