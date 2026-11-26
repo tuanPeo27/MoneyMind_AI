@@ -114,7 +114,7 @@ MoneyMind_AI/
 | .NET SDK | 10.0 trở lên |
 | SQL Server | SQL Server 2019+ hoặc SQL Server Express |
 | Node.js | 20 trở lên |
-| pnpm | 9 trở lên |
+| npm | Đi kèm Node.js |
 | Python | 3.11 trở lên |
 | Git | Phiên bản mới |
 
@@ -159,9 +159,8 @@ Mở terminal thứ ba:
 
 ```powershell
 cd frontend
-corepack enable
-pnpm install --frozen-lockfile
-pnpm dev
+npm ci --legacy-peer-deps
+npm run dev
 ```
 
 Mở trình duyệt tại **<http://localhost:5173>**.
@@ -268,10 +267,10 @@ dotnet ef migrations remove
 
 ```powershell
 cd frontend
-pnpm install --frozen-lockfile
-pnpm dev
-pnpm build
-pnpm preview
+npm ci --legacy-peer-deps
+npm run dev
+npm run build
+npm run preview
 ```
 
 </details>

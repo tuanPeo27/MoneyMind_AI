@@ -121,7 +121,7 @@ public sealed class AIQuotaService(
     };
 
     /// <summary>The UTC range of the user's current local day. Midnight offsets follow the zone's daylight-saving rules.</summary>
-    private static (DateTime Start, DateTime End) DayWindow(string timeZoneId, DateTime nowUtc)
+    internal static (DateTime Start, DateTime End) DayWindow(string timeZoneId, DateTime nowUtc)
     {
         TimeZoneInfo zone;
         try { zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }

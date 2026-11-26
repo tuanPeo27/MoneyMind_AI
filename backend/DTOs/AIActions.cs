@@ -6,6 +6,7 @@ namespace backend.DTOs;
 public static class AIActionTypes
 {
     public const string CreateTransaction = "create_transaction";
+    public const string CreateAccount = "create_account";
     public const string CreateCategory = "create_category";
     public const string CreateBudget = "create_budget";
     public const string CreateSavingsGoal = "create_savings_goal";
@@ -19,7 +20,7 @@ public static class AIActionTypes
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>
     {
-        CreateTransaction, CreateCategory, CreateBudget, CreateSavingsGoal, ContributeToGoal, ProposeBudgets
+        CreateTransaction, CreateAccount, CreateCategory, CreateBudget, CreateSavingsGoal, ContributeToGoal, ProposeBudgets
     };
 }
 
@@ -47,7 +48,9 @@ public sealed record AIBudgetProposalItem(
 /// </summary>
 /// <param name="Type">create_transaction / create_category: "Expense" or "Income".</param>
 /// <param name="Date">create_transaction: the day of the transaction.</param>
-/// <param name="Name">create_category / create_savings_goal.</param>
+/// <param name="Name">create_account / create_category / create_savings_goal.</param>
+/// <param name="AccountType">create_account: "Cash", "Bank" or "EWallet".</param>
+/// <param name="InitialBalance">create_account: money already in the account (VND).</param>
 /// <param name="AccountId">contribute_to_goal: null means the money is only recorded in the fund.</param>
 /// <param name="Period">propose_budgets: the month, "yyyy-MM".</param>
 /// <param name="Summary">propose_budgets: one sentence from the AI on what the proposal is based on.</param>
@@ -70,6 +73,8 @@ public sealed record AIActionPayload(
     DateOnly? Deadline = null,
     Guid? GoalId = null,
     string? GoalName = null,
+    string? AccountType = null,
+    decimal? InitialBalance = null,
     string? Period = null,
     string? Summary = null,
     IReadOnlyList<AIBudgetProposalItem>? Budgets = null,

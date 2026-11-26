@@ -4,21 +4,30 @@ using backend.Models;
 namespace backend.DTOs.Requests;
 
 public sealed record CreateAccountRequest(
-    [Required, StringLength(100)] string Name,
+    [Required]
+    [StringLength(100)]
+    string Name,
     AccountType AccountType,
     decimal InitialBalance,
-    [StringLength(3, MinimumLength = 3)] string Currency = "VND");
+    [StringLength(3, MinimumLength = 3)]
+    string Currency = "VND");
 
 public sealed record UpdateAccountRequest(
-    [Required, StringLength(100)] string Name,
+    [Required]
+    [StringLength(100)]
+    string Name,
     AccountType AccountType,
     bool IsArchived);
 
 public sealed record UpsertCategoryRequest(
-    [Required, StringLength(100)] string Name,
+    [Required]
+    [StringLength(100)]
+    string Name,
     CategoryType Type,
-    [StringLength(50)] string? Icon,
-    [StringLength(50)] string? Color,
+    [StringLength(50)]
+    string? Icon,
+    [StringLength(50)]
+    string? Color,
     bool IsActive = true);
 
 public sealed record UpsertTransactionRequest(
@@ -41,7 +50,9 @@ public sealed class TransactionQuery : PagingQuery
 }
 
 public sealed record SuggestCategoryRequest(
-    [Required, StringLength(500)] string Description,
+    [Required]
+    [StringLength(500)]
+    string Description,
     TransactionType Type = TransactionType.Expense,
     decimal? Amount = null);
 
@@ -71,7 +82,9 @@ public sealed record BulkBudgetItem(
 
 /// <param name="ReminderDay">Day of the month (1-31) for a contribution reminder; null turns it off.</param>
 public sealed record UpsertGoalRequest(
-    [Required, StringLength(150)] string Name,
+    [Required]
+    [StringLength(150)]
+    string Name,
     [Range(typeof(decimal), "0.0001", "999999999999999")] decimal TargetAmount,
     DateOnly? Deadline,
     [Range(1, 31)] byte? ReminderDay = null);

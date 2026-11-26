@@ -4,10 +4,15 @@ using backend.Models;
 namespace backend.DTOs.Requests;
 
 /// <param name="Language">UI language of the user (`vi` or `en`); the assistant answers in it. Optional.</param>
+/// <param name="Mode">
+/// `chat` (default) or `capture`: quick entry such as "cà phê 35k". Capture turns the text into proposed transactions,
+/// stores them in the user's own quick-entry conversation (ConversationId is ignored) and sends no earlier history.
+/// </param>
 public sealed record SendChatMessageRequest(
     Guid? ConversationId,
     [Required, StringLength(4000)] string Message,
-    [RegularExpression("^(vi|en)$", ErrorMessage = "Language must be 'vi' or 'en'.")] string? Language = null);
+    [RegularExpression("^(vi|en)$", ErrorMessage = "Language must be 'vi' or 'en'.")] string? Language = null,
+    [RegularExpression("^(chat|capture)$", ErrorMessage = "Mode must be 'chat' or 'capture'.")] string? Mode = null);
 
 public sealed record RenameConversationRequest([Required, StringLength(200)] string Title);
 

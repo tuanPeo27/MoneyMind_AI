@@ -10,7 +10,7 @@ public interface IAIServiceClient
     /// <summary>Same as <see cref="ChatAsync"/>, calling <paramref name="onDelta"/> with each piece of text as it arrives.</summary>
     Task<AIChatResult> StreamChatAsync(AIChatPayload payload, Func<string, Task>? onDelta,
         CancellationToken cancellationToken = default);
-    Task<AICategorizeResult> CategorizeAsync(AICategorizePayload payload,
+    Task<AICategorizeReply> CategorizeAsync(AICategorizePayload payload,
         CancellationToken cancellationToken = default);
     Task<AIInsightResult> GenerateInsightsAsync(AIInsightPayload payload,
         CancellationToken cancellationToken = default);

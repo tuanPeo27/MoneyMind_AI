@@ -87,7 +87,7 @@ function PageLoading() {
 }
 
 type Dialog =
-  | { kind: 'transaction'; value?: Transaction }
+  | { kind: 'transaction'; value?: Transaction; draft?: Partial<Transaction> }
   | { kind: 'budget'; value?: Budget; category?: string }
   | { kind: 'category'; value?: Category }
   | { kind: 'delete'; title: string; text: string; action: () => void }
@@ -253,6 +253,10 @@ function Workspace() {
   // (for example while the AI page opens or closes).
   const navigateStable = useStableCallback(navigate);
   const editTransactionStable = useStableCallback(editTransaction);
+  const quickAddManualStable = useStableCallback((draft: Partial<Transaction>) => {
+    setSelection(undefined);
+    setDialog({ kind: 'transaction', draft });
+  });
   function exportRows(list: Transaction[]) {
     const escape = (s: unknown) => `"${String(s).replace(/"/g, '""')}"`;
     const csv = '\uFEFF' + [
@@ -326,7 +330,7 @@ function Workspace() {
         {data.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(data.error)}</span><Button secondary onClick={() => void data.reload()}>{t('Try again')}</Button></p>}
         {page === 'Savings Funds' && savings.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(savings.error)}</span><Button secondary onClick={() => void savings.reload()}>{t('Try again')}</Button></p>}
         <Suspense fallback={<PageLoading />}>
-        {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} accounts={data.activeAccounts} onNavigate={navigateStable} onEdit={editTransactionStable} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} loading={workspaceLoading} />}
+        {page === 'Overview' && <Overview rows={filtered} allRows={rows} previous={previous} budgets={budgets} categories={categories} accounts={data.activeAccounts} onNavigate={navigateStable} onEdit={editTransactionStable} onQuickAddManual={quickAddManualStable} hidden={hidden} setHidden={setHidden} rangeEnd={range.end} showInsight={profile.insights} loading={workspaceLoading} />}
         {page === 'Accounts' && <AccountsPage loading={workspaceLoading} accounts={data.activeAccounts} archived={data.archivedAccounts} hidden={hidden} setHidden={setHidden}
           onCreate={input => attempt(() => data.createAccount(input), 'Account added.')}
           onUpdate={(id, input) => attempt(() => data.updateAccount(id, input), 'Account saved.')}
@@ -397,7 +401,7 @@ function Workspace() {
       </UserLayout></BalanceContext.Provider>}
     </AmbientShell>
     <Suspense fallback={null}>
-    {dialog?.kind === 'transaction' && <TransactionForm transaction={dialog.value} categories={categories} accounts={data.accountNames} onClose={close}
+    {dialog?.kind === 'transaction' && <TransactionForm transaction={dialog.value} draft={dialog.draft} categories={categories} accounts={data.accountNames} onClose={close}
       onAnalyze={dialog.value ? () => { close(); openAssistant('Explain this selected transaction.'); } : undefined}
       onSave={async t => {
         const editing = !!dialog.value;

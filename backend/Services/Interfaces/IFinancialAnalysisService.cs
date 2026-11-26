@@ -10,6 +10,9 @@ public interface IFinancialAnalysisService
     /// <summary>Serialized summary (current month) used as context for AI prompts.</summary>
     Task<string> BuildContextAsync(Guid userId, CancellationToken cancellationToken = default);
 
+    /// <summary>Small context for quick entry: today, account names and category names only.</summary>
+    Task<string> BuildCaptureContextAsync(Guid userId, CancellationToken cancellationToken = default);
+
     /// <summary>Rule-based insights: budget overruns, spending spikes, goals near deadline.</summary>
     Task<IReadOnlyList<InsightCandidate>> DetectInsightsAsync(Guid userId,
         CancellationToken cancellationToken = default);

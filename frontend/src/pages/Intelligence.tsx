@@ -7,6 +7,7 @@ import { LoadingStatus, Skeleton, SkeletonText, useFadeIn } from '../components/
 import { analyse, MIN_TRANSACTIONS, type Insight, type InsightAction, type Severity, type Text } from '../lib/insights';
 import { percentChange } from '../lib/totals';
 import { monthlyData } from '../lib/chartData';
+import { WeeklySummary } from '../components/ambient-ai/WeeklySummary';
 
 // recharts only loads with this page's charts, and only when there is data to draw.
 const loadCharts = () => import('../components/charts');
@@ -122,6 +123,9 @@ export function Insights({ rows, allRows, previous, budgets, categories, range, 
 
     {/* C. Trends */}
     {a.enough && <Trends allRows={allRows} rows={rows} categories={categories} end={range.end} />}
+
+    {/* Last week, written by the AI from the user's numbers (generated server-side every Monday). */}
+    <WeeklySummary />
 
     {/* D. Ask the AI assistant */}
     <AskAI onAsk={onAsk} />

@@ -21,6 +21,70 @@ class ChatRequest(ApiModel):
     financial_context: str = Field(default="{}", max_length=30_000)
     # UI language of the user. When set, the answer must be written in it, whatever language the question uses.
     language: Literal["vi", "en"] | None = None
+    # "capture": quick entry from the home screen. The model only turns the text into transactions, no conversation.
+    mode: Literal["chat", "capture"] = "chat"
+
+
+class CategoryOption(ApiModel):
+    id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=100)
+
+
+class CategorizeRequest(ApiModel):
+    description: str = Field(min_length=1, max_length=500)
+    amount: float | None = None
+    type: Literal["Expense", "Income"] = "Expense"
+    categories: list[CategoryOption] = Field(min_length=1, max_length=200)
+
+
+class CategorizeResponse(ApiModel):
+    # One of the ids that were sent, or None when no category fits.
+    category_id: str | None = None
+    confidence: float = 0
+    reason: str | None = None
+    token_usage: int | None = None
+    provider: str = "gemini"
+    model: str | None = None
+
+
+class InsightRequest(ApiModel):
+    # Weekly numbers computed by the backend (JSON). The model only writes about them.
+    facts: str = Field(min_length=2, max_length=20_000)
+    language: Literal["vi", "en"] | None = None
+
+
+class InsightItem(ApiModel):
+    title: str
+    content: str
+    severity: Literal["info", "warning", "critical"] = "info"
+
+
+class InsightAction(ApiModel):
+    """Same argument names as the chat functions, so the backend can turn it into a confirmable action."""
+
+    name: Literal["create_budget", "contribute_to_goal", "create_savings_goal"]
+    category: str | None = None
+    amount: float | None = None
+    goal: str | None = None
+    # create_savings_goal: the name of the new fund ("name" is already the action name).
+    fund_name: str | None = None
+    target_amount: float | None = None
+    deadline: str | None = None
+
+
+class InsightRecommendation(ApiModel):
+    title: str
+    description: str
+    action: InsightAction | None = None
+
+
+class InsightResponse(ApiModel):
+    summary: str
+    items: list[InsightItem] = Field(default_factory=list)
+    recommendations: list[InsightRecommendation] = Field(default_factory=list)
+    token_usage: int | None = None
+    provider: str = "gemini"
+    model: str | None = None
 
 
 class ProposedAction(ApiModel):

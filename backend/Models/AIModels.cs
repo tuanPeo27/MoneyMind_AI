@@ -11,6 +11,14 @@ public sealed class AIConversation
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public bool IsArchived { get; set; }
     public DateTime? DeletedAt { get; set; }
+    /// <summary>QuickEntry: the one conversation per user that holds quick-entry texts; hidden from the chat list.</summary>
+    public AIConversationKind Kind { get; set; } = AIConversationKind.Chat;
+}
+
+public enum AIConversationKind : byte
+{
+    Chat,
+    QuickEntry
 }
 
 public sealed class AIChatMessage

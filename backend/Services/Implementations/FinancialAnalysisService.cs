@@ -85,60 +85,97 @@ public sealed class FinancialAnalysisService(AppDbContext db, FinancialContextCa
                               select new { a.Name, a.AccountType, Balance = a.InitialBalance + net - saved, a.Currency })
             .ToListAsync(cancellationToken);
 
-        // Names (and ids, for propose_budgets) the AI must use when it proposes an action; the backend checks both
-        // against the user's own records, so an id the model makes up is simply dropped.
-        var categories = await db.Categories.AsNoTracking()
-            .Where(c => c.IsActive && (c.IsSystem || c.UserId == userId))
-            .OrderBy(c => c.Type).ThenBy(c => c.Name)
-            .Select(c => new { c.Id, c.Name, c.Type })
-            .ToListAsync(cancellationToken);
+        var (expenseCategories, incomeCategories) = await LoadCategoryNamesAsync(userId, cancellationToken);
 
-        // Expense totals per category for the last 3 full months and this month so far: what budget proposals rest on.
-        // Amounts only (no descriptions); categories without spending in the window are left out.
+        // Expense totals per category name for the last 3 full months and this month so far: what budget proposals
+        // (propose_budgets) rest on. Whole VND per month, oldest first; categories with no spending are left out.
+        // (`from` is a keyword inside the query below, so both bounds are taken out first.)
         var historyFrom = from.AddMonths(-3);
-        var historyRows = await db.Transactions.AsNoTracking()
-            .Where(t => t.UserId == userId && t.Type == TransactionType.Expense
-                && t.TransactionDate >= historyFrom && t.TransactionDate < from.AddMonths(1))
-            .GroupBy(t => new { t.CategoryId, t.TransactionDate.Year, t.TransactionDate.Month })
-            .Select(g => new { g.Key.CategoryId, Month = g.Key.Year * 12 + g.Key.Month, Amount = g.Sum(t => t.Amount) })
+        var historyTo = from.AddMonths(1);
+        var historyRows = await (from t in db.Transactions.AsNoTracking()
+                                 join c in db.Categories on t.CategoryId equals c.Id
+                                 where t.UserId == userId && t.Type == TransactionType.Expense
+                                     && t.TransactionDate >= historyFrom && t.TransactionDate < historyTo
+                                 group t by new { c.Name, t.TransactionDate.Year, t.TransactionDate.Month } into g
+                                 select new { g.Key.Name, Month = g.Key.Year * 12 + g.Key.Month, Amount = g.Sum(x => x.Amount) })
             .ToListAsync(cancellationToken);
         var monthKeys = Enumerable.Range(0, 4).Select(i => from.AddMonths(i - 3)).ToList();
-        var expenseHistory = new
+        var expenseHistory = historyRows.Count == 0 ? null : new
         {
             months = monthKeys.Select(m => m.ToString("yyyy-MM")).ToList(),
-            note = "Last value is the current month so far (not complete).",
-            categories = categories.Where(c => c.Type == CategoryType.Expense)
-                .Select(c => new
-                {
-                    categoryId = c.Id,
-                    name = c.Name,
-                    amounts = monthKeys.Select(m => historyRows.Where(r => r.CategoryId == c.Id && r.Month == m.Year * 12 + m.Month)
-                        .Sum(r => r.Amount)).ToList()
-                })
-                .Where(c => c.amounts.Any(a => a > 0))
-                .ToList()
+            byCategory = expenseCategories
+                .Where(name => historyRows.Any(r => r.Name == name))
+                .ToDictionary(name => name, name => monthKeys
+                    .Select(m => Vnd(historyRows.Where(r => r.Name == name && r.Month == m.Year * 12 + m.Month).Sum(r => r.Amount)))
+                    .ToList())
         };
 
-        // No transaction descriptions or personal identifiers are sent to the AI provider.
+        // Every token here is paid on every chat message, so the context is kept compact: whole VND amounts, no ids,
+        // no repeated type fields, no nulls. No transaction descriptions or personal identifiers are sent.
         var context = JsonSerializer.Serialize(new
         {
             today = today.ToString("yyyy-MM-dd"),
-            timeZone = timeZoneId,
-            currency = "VND",
-            period = new { summary.From, summary.To },
-            accounts = balances,
-            categories,
-            summary.TotalIncome,
-            summary.TotalExpense,
-            netSavings = summary.TotalIncome - summary.TotalExpense,
-            summary.TopExpenseCategories,
-            summary.Budgets,
-            summary.Goals,
+            month = today.ToString("yyyy-MM"),
+            accounts = balances.Select(a => new { a.Name, type = a.AccountType.ToString(), balance = Vnd(a.Balance) }),
+            expenseCategories,
+            incomeCategories,
+            totalIncome = Vnd(summary.TotalIncome),
+            totalExpense = Vnd(summary.TotalExpense),
+            netSavings = Vnd(summary.TotalIncome - summary.TotalExpense),
+            topExpenseCategories = summary.TopExpenseCategories.Select(c => new { name = c.CategoryName, amount = Vnd(c.Amount) }),
+            budgets = summary.Budgets.Select(b => new
+            {
+                category = b.CategoryName, amount = Vnd(b.Amount), spent = Vnd(b.Spent), usedPercent = (int)Math.Round(b.UsedPercent)
+            }),
+            goals = summary.Goals.Select(g => new { g.Name, target = Vnd(g.TargetAmount), current = Vnd(g.CurrentAmount), g.Deadline }),
             expenseHistory
-        }, Json);
+        }, CompactJson);
 
         contextCache.Set(key, context);
         return context;
+    }
+
+    public async Task<string> BuildCaptureContextAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var key = contextCache.KeyFor(userId) + ":capture";
+        if (contextCache.TryGet(key, out var cached)) return cached;
+
+        var timeZoneId = await db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.TimeZoneId)
+            .FirstOrDefaultAsync(cancellationToken) ?? "UTC";
+        var accounts = await db.Accounts.AsNoTracking().Where(a => a.UserId == userId && !a.IsArchived)
+            .OrderBy(a => a.CreatedAt).Select(a => a.Name).ToListAsync(cancellationToken);
+        var (expenseCategories, incomeCategories) = await LoadCategoryNamesAsync(userId, cancellationToken);
+
+        // Quick entry only needs the names it may use and today's date; balances and budgets would be wasted tokens.
+        var context = JsonSerializer.Serialize(new
+        {
+            today = LocalToday(timeZoneId).ToString("yyyy-MM-dd"), accounts, expenseCategories, incomeCategories
+        }, CompactJson);
+        contextCache.Set(key, context);
+        return context;
+    }
+
+    private static readonly JsonSerializerOptions CompactJson = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        // Vietnamese letters stay as they are ("Ăn uống", not "\u0102n u\u1ED1ng": about 3x fewer tokens), while < > & ' "
+        // are still escaped, so a category name cannot close the <financial_context> block of the prompt.
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.Create(System.Text.Unicode.UnicodeRanges.All)
+    };
+
+    private static long Vnd(decimal amount) => (long)Math.Round(amount, MidpointRounding.AwayFromZero);
+
+    /// <summary>Names the AI must use when it proposes an action (the backend matches them to the user's records).</summary>
+    private async Task<(List<string> Expense, List<string> Income)> LoadCategoryNamesAsync(Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Categories.AsNoTracking()
+            .Where(c => c.IsActive && (c.IsSystem || c.UserId == userId))
+            .OrderBy(c => c.Name)
+            .Select(c => new { c.Name, c.Type })
+            .ToListAsync(cancellationToken);
+        return (rows.Where(c => c.Type == CategoryType.Expense).Select(c => c.Name).Distinct().ToList(),
+            rows.Where(c => c.Type == CategoryType.Income).Select(c => c.Name).Distinct().ToList());
     }
 
     public async Task<IReadOnlyList<InsightCandidate>> DetectInsightsAsync(Guid userId,

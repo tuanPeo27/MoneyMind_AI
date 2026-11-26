@@ -175,6 +175,9 @@ builder.Services.AddScoped<IFinancialAnalysisService, FinancialAnalysisService>(
 builder.Services.AddScoped<IAIOrchestrationService, AIOrchestrationService>();
 builder.Services.AddScoped<IAIChatService, AIChatService>();
 builder.Services.AddScoped<IAIActionService, AIActionService>();
+builder.Services.AddScoped<ITransactionCategorizationService, TransactionCategorizationService>();
+builder.Services.AddScoped<IInsightService, InsightService>();
+builder.Services.AddHostedService<WeeklyInsightService>();
 builder.Services.AddScoped<IAIQuotaService, AIQuotaService>();
 builder.Services.AddSingleton<UserRequestGate>();
 builder.Services.AddHttpClient<IAIServiceClient, AIServiceClient>((provider, client) =>

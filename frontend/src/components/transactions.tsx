@@ -1,6 +1,7 @@
 import { useLanguage } from '../i18n';
 import { accountLabel, categoryLabel } from '../i18n/labels';
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { transactionsApi, type CategorySuggestionResponse } from '../services';
 import { ArrowDownLeft, ArrowUpRight, Pencil, Trash2, ArrowDownUp, Sparkles, Wallet } from 'lucide-react';
 import { type Transaction, type Category, money, dateLabel, today } from '../data';
 import { Badge, Button, Empty, Field, IconButton, Modal, fieldClass } from './ui';
@@ -75,19 +76,43 @@ export function TransactionTable({ rows, categories, onEdit, onDelete, compact: 
   </div>;
 }
 
-export function TransactionForm({ transaction, categories, accounts, onSave, onClose, onAnalyze }: {
+export function TransactionForm({ transaction, draft, categories, accounts, onSave, onClose, onAnalyze }: {
   transaction?: Transaction; categories: Category[]; accounts: string[];
+  /** Starting values for a new transaction (e.g. the amount from a quick entry the AI could not read). */
+  draft?: Partial<Transaction>;
   onSave: (transaction: Transaction) => void | Promise<void>; onClose: () => void; onAnalyze?: () => void;
 }) {
   const { t, language, currency } = useLanguage();
   const formId = useId();
-  const [type, setType] = useState<Transaction['type']>(transaction?.type || 'Expense');
-  const [category, setCategory] = useState(transaction?.category || categories.find(c => c.type === type)?.name || '');
+  const initial = transaction ?? draft;
+  const [type, setType] = useState<Transaction['type']>(initial?.type || 'Expense');
+  const [category, setCategory] = useState(initial?.category || categories.find(c => c.type === type)?.name || '');
   const [account, setAccount] = useState(transaction?.account || accounts[0] || '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const accountNames = [...new Set([...accounts, ...(transaction ? [transaction.account] : [])])];
   const available = categories.filter(item => item.type === type);
+  const [description, setDescription] = useState(initial?.description ?? '');
+  // Category suggestion for new transactions, until the user picks a category themselves.
+  const [picked, setPicked] = useState(false);
+  const [suggestion, setSuggestion] = useState<CategorySuggestionResponse | null>(null);
+  const categoriesRef = useRef(categories);
+  categoriesRef.current = categories;
+  useEffect(() => {
+    const text = description.trim();
+    if (transaction || picked || text.length < 2) return;
+    const controller = new AbortController();
+    // Waits for a pause in typing: one request per pause, not per key (the AI step costs tokens).
+    const timer = window.setTimeout(() => {
+      transactionsApi.suggestCategory(text, type, undefined, controller.signal).then(result => {
+        const name = result.categoryName;
+        if (!name || !categoriesRef.current.some(item => item.type === type && item.name === name)) { setSuggestion(null); return; }
+        setSuggestion(result);
+        setCategory(name);
+      }).catch(() => undefined);
+    }, 700);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [description, type, picked, transaction]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -102,6 +127,9 @@ export function TransactionForm({ transaction, categories, accounts, onSave, onC
         amount: Number(data.get('amount')), type, category, account,
         date: String(data.get('date')), notes: String(data.get('notes')).trim(),
       });
+      // Tells the server whether the AI suggestion was kept, so its accuracy can be measured.
+      const finalId = categories.find(item => item.type === type && item.name === category)?.id;
+      if (suggestion?.logId && finalId) void transactionsApi.confirmCategorySuggestion(suggestion.logId, finalId).catch(() => undefined);
     } finally { setSaving(false); }
   }
   return <Modal wide title={t(transaction ? 'Edit transaction' : 'Add transaction')} onClose={onClose} footer={
@@ -115,11 +143,11 @@ export function TransactionForm({ transaction, categories, accounts, onSave, onC
   }>
     <form id={formId} onSubmit={submit} className="space-y-5">
       <Field label={t('Description')}>
-        <input required maxLength={150} name="description" defaultValue={transaction?.description} placeholder={t('e.g. Lunch at Phuc Long')} className={`${fieldClass} placeholder:text-muted/75`} />
+        <input required maxLength={150} name="description" value={description} onChange={e => setDescription(e.target.value)} placeholder={t('e.g. Lunch at Phuc Long')} className={`${fieldClass} placeholder:text-muted/75`} />
       </Field>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label={t('Amount ({currency})', { currency })}>
-          <AmountInput name="amount" required defaultValue={transaction?.amount} />
+          <AmountInput name="amount" required defaultValue={initial?.amount} />
         </Field>
         <Field label={t('Transaction type')}>
           <Select label={t('Transaction type')} value={type} onChange={value => {
@@ -135,10 +163,14 @@ export function TransactionForm({ transaction, categories, accounts, onSave, onC
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label={t('Category')}>
-          <Select label={t('Category')} value={category} onChange={setCategory} placeholder={t('No categories available')} options={available.map(item => ({
+          <Select label={t('Category')} value={category} onChange={value => { setCategory(value); setPicked(true); }} placeholder={t('No categories available')} options={available.map(item => ({
             value: item.name, label: categoryLabel(item.name, language),
             icon: <CategoryIcon name={item.name} icon={item.icon} small />,
           }))} />
+          {suggestion && !picked && suggestion.categoryName === category && <p className="mt-1.5 flex items-center gap-1 text-xs text-ai" title={suggestion.reason ?? undefined}>
+            <Sparkles aria-hidden="true" className="size-3.5" />
+            {t(suggestion.method === 'AI' ? 'Suggested by AI' : suggestion.method === 'History' ? 'Suggested from your history' : 'Suggested from keywords')}
+          </p>}
         </Field>
         <Field label={t('Account')}>
           <Select label={t('Account')} value={account} onChange={setAccount} options={accountNames.map(name => ({
@@ -147,7 +179,7 @@ export function TransactionForm({ transaction, categories, accounts, onSave, onC
           }))} />
         </Field>
       </div>
-      <Field label={t('Date')}><input required name="date" type="date" lang={language} defaultValue={transaction?.date || today} className={fieldClass} /></Field>
+      <Field label={t('Date')}><input required name="date" type="date" lang={language} defaultValue={initial?.date || today} className={fieldClass} /></Field>
       <Field label={t('Notes (optional)')}>
         <textarea name="notes" rows={2} maxLength={340} defaultValue={transaction?.notes} placeholder={t('Add a note...')} className={`${fieldClass} block min-h-[80px] resize-none py-3 placeholder:text-muted/75`} />
       </Field>

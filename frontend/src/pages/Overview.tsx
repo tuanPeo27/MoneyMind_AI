@@ -18,6 +18,7 @@ export { SummaryCards } from '../components/SummaryCards';
 import { LoadingStatus, Skeleton, SkeletonText, useFadeIn } from '../components/Skeleton';
 import { useAmbientAIView } from '../components/ambient-ai/AmbientAIProvider';
 import { getSession } from '../services';
+import { QuickEntry } from '../components/ambient-ai/QuickEntry';
 
 // Moved to lib/totals (used by App without loading this chunk); re-exported for existing imports.
 export { BalanceContext, getTotals, percentChange, type Totals } from '../lib/totals';
@@ -67,14 +68,17 @@ function SlideSkeleton({ id, compact }: { id: string; compact: boolean }) {
 }
 const ringMask = { mask: 'radial-gradient(circle closest-side, transparent 76%, #000 76.5%)', WebkitMask: 'radial-gradient(circle closest-side, transparent 76%, #000 76.5%)' };
 /** memo: the Overview stays still while the AI page opens and closes over it (all props from App are stable). */
-export default memo(function Overview({ rows, allRows, previous, budgets, categories, accounts = [], onNavigate, onEdit, hidden = false, setHidden, rangeEnd, showInsight = true, loading = false }: {
+export default memo(function Overview({ rows, allRows, previous, budgets, categories, accounts = [], onNavigate, onEdit, onQuickAddManual, hidden = false, setHidden, rangeEnd, showInsight = true, loading = false }: {
   rows: Transaction[]; allRows: Transaction[]; previous: Transaction[]; budgets: Budget[]; categories: Category[];
   /** True during the first load of the user's data: skeletons instead of empty states. */
   loading?: boolean;
   /** Active accounts with their current balance, for the short list under the summary cards. */
   accounts?: WalletAccount[];
   onNavigate: (page: 'Transactions' | 'Budgets' | 'Smart Insights' | 'AI Financial Assistant' | 'Accounts') => void;
-  onEdit: (t: Transaction) => void; hidden?: boolean; setHidden?: (value: boolean) => void; rangeEnd?: string; showInsight?: boolean;
+  onEdit: (t: Transaction) => void;
+  /** Opens the manual form prefilled from a quick entry the AI could not handle. */
+  onQuickAddManual?: (draft: Partial<Transaction>) => void;
+  hidden?: boolean; setHidden?: (value: boolean) => void; rangeEnd?: string; showInsight?: boolean;
 }) {
   const { t, locale } = useLanguage();
   const { openAssistant, highlight, clearHighlight } = useAmbientAIView();
@@ -260,6 +264,7 @@ export default memo(function Overview({ rows, allRows, previous, budgets, catego
     go(next); tabs.current[next]?.focus();
   }
   return <div className="space-y-5">
+    {onQuickAddManual && <QuickEntry onManual={onQuickAddManual} />}
     {loading && <LoadingStatus label={t('Loading your data...')} />}
     <SummaryCards totals={totals} previous={past} hidden={hidden} onToggleHidden={setHidden} loading={loading} layout="stack" />
     <AccountsStrip accounts={accounts} hidden={hidden} onManage={() => onNavigate('Accounts')} loading={loading} />

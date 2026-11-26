@@ -14,7 +14,7 @@ const toItem = (n: NotificationResponse): AppNotification => ({
 });
 /**
  * Server-side notifications for the signed-in user. Polls while signed in and refreshes on window focus.
- * `onAlert` is called once for each unread budget or savings-goal notification that appears after the first load.
+ * `onAlert` is called once for each unread budget, savings-goal or AI (weekly summary) notification that appears after the first load.
  */
 export function useNotifications(userId: string | undefined, onAlert?: (item: AppNotification) => void) {
   const [items, setItems] = useState<AppNotification[]>([]);
@@ -30,7 +30,7 @@ export function useNotifications(userId: string | undefined, onAlert?: (item: Ap
       if (seen.current) {
         const known = seen.current;
         page.items
-          .filter(n => !known.has(n.id) && !n.isRead && (n.source === 'Budget' || n.source === 'Goal'))
+          .filter(n => !known.has(n.id) && !n.isRead && (n.source === 'Budget' || n.source === 'Goal' || n.source === 'AI'))
           .reverse()
           .forEach(n => alertRef.current?.(toItem(n)));
       }

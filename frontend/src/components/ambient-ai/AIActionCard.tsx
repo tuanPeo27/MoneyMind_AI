@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowLeftRight, Check, CircleCheck, CircleX, Pencil, PiggyBank, Shapes, Target, Wallet, X, type LucideIcon } from 'lucide-react';
+import { ArrowLeftRight, Check, CircleCheck, CircleX, Landmark, Pencil, PiggyBank, Shapes, Target, Wallet, X, type LucideIcon } from 'lucide-react';
 import { useLanguage } from '../../i18n';
 import { money, dateLabel } from '../../data';
 import { AmountInput } from '../AmountInput';
@@ -7,7 +7,7 @@ import { FormSelect, Select } from '../Select';
 import { Button, fieldClass } from '../ui';
 import {
   accountsApi, categoriesApi, goalsApi, useSession,
-  type AccountResponse, type AIActionPayload, type AIActionResponse, type AIActionType, type CategoryResponse, type FinancialGoalResponse,
+  type AccountResponse, type AccountType, type AIActionPayload, type AIActionResponse, type AIActionType, type CategoryResponse, type FinancialGoalResponse,
 } from '../../services';
 import { useErrorText } from '../../pages/Auth';
 
@@ -51,6 +51,7 @@ export function useActionOptions() {
 
 const meta: Record<AIActionType, { title: string; icon: LucideIcon }> = {
   create_transaction: { title: 'Add a transaction', icon: ArrowLeftRight },
+  create_account: { title: 'Add an account', icon: Landmark },
   create_category: { title: 'Add a category', icon: Shapes },
   create_budget: { title: 'Create a budget', icon: Wallet },
   create_savings_goal: { title: 'Create a savings fund', icon: Target },
@@ -59,15 +60,26 @@ const meta: Record<AIActionType, { title: string; icon: LucideIcon }> = {
   propose_budgets: { title: 'Budget proposal', icon: Wallet },
 };
 
+const accountTypeLabels: Record<AccountType, string> = { Cash: 'Cash', Bank: 'Bank account', EWallet: 'E-wallet' };
+
+/** Same name, ignoring case and Vietnamese accents (the server matches names the same way). */
+export const foldName = (value?: string | null) =>
+  (value ?? '').trim().toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/\p{M}/gu, '').replace(/\s+/g, ' ');
+
+function byName<T extends { name: string }>(items: T[], name?: string | null): T | undefined {
+  const wanted = foldName(name);
+  return wanted ? items.find(item => foldName(item.name) === wanted) : undefined;
+}
+
 /** What still has to be chosen before the action can be saved (empty when it is ready). */
-function missing(type: AIActionType, p: AIActionPayload): string[] {
+export function missing(type: AIActionType, p: AIActionPayload): string[] {
   const out: string[] = [];
   const amount = type === 'create_savings_goal' ? p.targetAmount : p.amount;
-  if (type !== 'create_category' && !(amount && amount > 0)) out.push('amount');
+  if (type !== 'create_category' && type !== 'create_account' && !(amount && amount > 0)) out.push('amount');
   if ((type === 'create_transaction' || type === 'create_budget') && !p.categoryId) out.push('category');
   if (type === 'create_transaction' && !p.accountId) out.push('account');
   if (type === 'contribute_to_goal' && !p.goalId) out.push('fund');
-  if ((type === 'create_category' || type === 'create_savings_goal') && !p.name?.trim()) out.push('name');
+  if ((type === 'create_category' || type === 'create_savings_goal' || type === 'create_account') && !p.name?.trim()) out.push('name');
   return out;
 }
 
@@ -103,6 +115,10 @@ export function AIActionCard({ action, onConfirm, onCancel }: {
         ['Type', typeLabel(p.type)], ['Amount', p.amount ? money(p.amount) : '—'],
         ['Category', p.categoryName ?? '—'], ['Account', p.accountName ?? '—'],
         ['Date', p.date ? dateLabel(p.date, locale) : '—'], ...(p.description ? [['Note', p.description] as [string, ReactNode]] : []),
+      ];
+      case 'create_account': return [
+        ['Name', p.name ?? '—'], ['Type', t(accountTypeLabels[p.accountType ?? 'Bank'] ?? 'Bank account')],
+        ['Opening balance', money(p.initialBalance ?? 0)],
       ];
       case 'create_category': return [['Name', p.name ?? '—'], ['Type', typeLabel(p.type)]];
       case 'create_budget': return [
@@ -154,13 +170,17 @@ export function AIActionCard({ action, onConfirm, onCancel }: {
 function Fields({ type, payload: p, options }: { type: AIActionType; payload: AIActionPayload; options: Options | null }) {
   const { t, language } = useLanguage();
   const [kind, setKind] = useState<'Expense' | 'Income'>(p.type === 'Income' ? 'Income' : 'Expense');
+  const [accountType, setAccountType] = useState<AccountType>(p.accountType ?? 'Bank');
   const field = (label: string, input: ReactNode) => <label className="block space-y-1.5 text-sm font-medium"><span>{t(label)}</span>{input}</label>;
   const typeSelect = <Select name="type" label={t('Type')} value={kind} onChange={value => setKind(value as 'Expense' | 'Income')}
     options={[{ value: 'Expense', label: t('Expense') }, { value: 'Income', label: t('Income') }]} />;
-  const categorySelect = (only: 'Expense' | 'Income') => <FormSelect key={only} name="categoryId" label={t('Category')} defaultValue={p.categoryId ?? ''}
+  const categories = (options?.categories ?? []).filter(c => c.type === kind);
+  const categorySelect = (only: 'Expense' | 'Income') => <FormSelect key={`${only}-${options?.categories.length ?? 0}`} name="categoryId" label={t('Category')}
+    defaultValue={p.categoryId ?? (only === kind ? byName(categories, p.categoryName)?.id : undefined) ?? ''}
     placeholder={p.categoryName ? t('“{name}” not found, choose one', { name: p.categoryName }) : t('Choose a category')}
     options={(options?.categories ?? []).filter(c => c.type === only).map(c => ({ value: c.id, label: c.name }))} />;
-  const accountSelect = (allowNone: boolean) => <FormSelect name="accountId" label={t('Account')} defaultValue={p.accountId ?? ''}
+  const accountSelect = (allowNone: boolean) => <FormSelect key={options?.accounts.length ?? 0} name="accountId" label={t('Account')}
+    defaultValue={p.accountId ?? byName(options?.accounts ?? [], p.accountName)?.id ?? ''}
     placeholder={allowNone ? t('Not taken from an account') : t('Choose an account')}
     options={[...(allowNone ? [{ value: '', label: t('Not taken from an account') }] : []), ...(options?.accounts ?? []).map(a => ({ value: a.id, label: a.name }))]} />;
   const date = (name: string, value?: string | null, required = false) =>
@@ -175,6 +195,12 @@ function Fields({ type, payload: p, options }: { type: AIActionType; payload: AI
       {field('Account', accountSelect(false))}
       {field('Date', date('date', p.date, true))}
       {field('Note', <input name="description" maxLength={500} defaultValue={p.description ?? ''} className={fieldClass} />)}
+    </>);
+    case 'create_account': return grid(<>
+      {field('Name', <input name="name" required maxLength={100} defaultValue={p.name ?? ''} className={fieldClass} />)}
+      {field('Type', <Select name="accountType" label={t('Type')} value={accountType} onChange={value => setAccountType(value as AccountType)}
+        options={(Object.keys(accountTypeLabels) as AccountType[]).map(value => ({ value, label: t(accountTypeLabels[value]) }))} />)}
+      {field('Opening balance', <AmountInput name="initialBalance" defaultValue={p.initialBalance ?? undefined} />)}
     </>);
     case 'create_category': return grid(<>
       {field('Name', <input name="name" required maxLength={100} defaultValue={p.name ?? ''} className={fieldClass} />)}
@@ -221,6 +247,9 @@ function readForm(type: AIActionType, p: AIActionPayload, data: FormData, option
   set('deadline', text('deadline'));
   set('description', text('description'));
   set('name', text('name'));
+  set('accountType', text('accountType') as AIActionPayload['accountType']);
+  const opening = number('initialBalance');
+  if (opening !== undefined) out.initialBalance = opening ?? 0;
   const threshold = number('alertThreshold');
   if (threshold !== undefined) out.alertThreshold = threshold;
   if (data.has('categoryId')) out.categoryName = options?.categories.find(c => c.id === out.categoryId)?.name ?? null;

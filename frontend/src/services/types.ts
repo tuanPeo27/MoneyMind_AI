@@ -90,7 +90,7 @@ export type UpsertGoalRequest = { name: string; targetAmount: number; deadline?:
 export type AIConversationResponse = {
   id: string; title: string; createdAt: string; updatedAt: string; isArchived: boolean;
 };
-export type AIActionType = 'create_transaction' | 'create_category' | 'create_budget' | 'create_savings_goal' | 'contribute_to_goal' | 'propose_budgets';
+export type AIActionType = 'create_transaction' | 'create_account' | 'create_category' | 'create_budget' | 'create_savings_goal' | 'contribute_to_goal' | 'propose_budgets';
 /**
  * One category of a `propose_budgets` card. Amount and reason come from the AI; averageSpent, historyMonths and
  * currentSpent are computed by the backend from the user's transactions. budgetId is set once it has been created.
@@ -110,6 +110,8 @@ export type AIActionPayload = {
   date?: string | null; description?: string | null; name?: string | null;
   startDate?: string | null; endDate?: string | null; alertThreshold?: number | null;
   targetAmount?: number | null; deadline?: string | null; goalId?: string | null; goalName?: string | null;
+  /** create_account: the kind of account and the money already in it. */
+  accountType?: AccountType | null; initialBalance?: number | null;
   /** propose_budgets: the month ("yyyy-MM"), the AI's one-line basis, and the categories (on confirm: the kept ones). */
   period?: string | null; summary?: string | null; budgets?: AIBudgetProposalItem[] | null;
   /** propose_budgets: categories left out because they already have a budget in the period. */
@@ -127,6 +129,19 @@ export type AIChatMessageResponse = {
 };
 /** `dailyLimit` and `remaining` are null when the user has no limit. `resetsAt` is the user's next local midnight (UTC). */
 export type AIUsageResponse = { isUnlimited: boolean; dailyLimit: number | null; used: number; remaining: number | null; resetsAt: string };
+export type InsightSeverity = 'info' | 'warning' | 'critical';
+export type WeeklyRecommendation = {
+  id: string; recommendationType: string; title: string; description: string; dataJson?: string | null;
+  status: 'Pending' | 'Accepted' | 'Dismissed'; createdAt: string; expiresAt?: string | null;
+};
+/** Weekly summary of the last complete week. `writtenByAI` is false when only the numbers could be listed. */
+export type WeeklySummaryResponse = {
+  id: string; weekStart: string; weekEnd: string; title: string; summary: string;
+  severity: 'Info' | 'Warning' | 'Critical';
+  items: { title: string; content: string; severity: InsightSeverity }[];
+  recommendations: WeeklyRecommendation[]; writtenByAI: boolean; isRead: boolean; createdAt: string;
+};
+export type AcceptRecommendationResponse = { recommendation: WeeklyRecommendation; action?: AIActionResponse | null };
 export type SendAIChatMessageResponse = {
   conversationId: string; userMessage: AIChatMessageResponse; assistantMessage: AIChatMessageResponse; usage: AIUsageResponse;
 };
