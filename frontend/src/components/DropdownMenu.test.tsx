@@ -209,6 +209,9 @@ describe('DropdownMenu', () => {
     it('closes when Tab moves on', async () => {
       const { user } = setup();
       await user.click(trigger());
+      // Focus moves into the menu on the next animation frame; until then Tab would go to the trigger, not the menu.
+      // Without this wait the test failed on fast CI runners.
+      await waitFor(() => expect(screen.getByRole('menuitemradio', { name: 'Light' })).toHaveFocus());
       await user.keyboard('{Tab}');
       expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     });

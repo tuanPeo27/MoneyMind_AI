@@ -407,6 +407,9 @@ python -m unittest discover -s tests -v
 
 ## 10. Xử lý lỗi thường gặp
 
+Mục này chỉ gồm lỗi khi cài đặt lần đầu. Lỗi khi chạy, chat AI, test, merge và deploy: xem
+[TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
+
 ### ❌ Thiếu hoặc sai SDK .NET
 
 ```powershell

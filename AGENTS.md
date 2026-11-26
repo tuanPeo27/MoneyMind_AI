@@ -2,7 +2,8 @@
 
 File này được Kiro nạp tự động vào **mọi** phiên làm việc (cũng được nhiều công cụ AI khác đọc). Hãy giữ nó ngắn:
 chỉ ghi những điều dễ làm sai. Cách cài đặt và chạy chi tiết nằm ở [README.md](./README.md) và
-[DEVELOPMENT_SETUP.md](./DEVELOPMENT_SETUP.md); tài liệu AI service ở [ai-service/README.md](./ai-service/README.md).
+[DEVELOPMENT_SETUP.md](./DEVELOPMENT_SETUP.md); tài liệu AI service ở [ai-service/README.md](./ai-service/README.md);
+tra và sửa lỗi ở [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) (gặp lỗi mới đã giải quyết thì thêm vào đó).
 
 ## Dự án
 

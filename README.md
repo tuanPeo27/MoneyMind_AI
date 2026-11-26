@@ -292,6 +292,7 @@ python -m unittest discover -s tests -v
 ## 📚 Tài liệu
 
 - [Hướng dẫn cài đặt và phát triển](./DEVELOPMENT_SETUP.md)
+- [Tìm và sửa lỗi](./TROUBLESHOOTING.md)
 - [Tài liệu AI Service](./ai-service/README.md)
 
 ---
