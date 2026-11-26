@@ -11,6 +11,9 @@ vi.mock('../lib/auth', async () => {
   };
 });
 
+// Google sign-in depends on VITE_GOOGLE_CLIENT_ID, read when GoogleButton is imported. A developer's
+// frontend/.env.local usually sets it, so fix it here: these tests run as "no client id configured" everywhere.
+vi.mock('../components/GoogleButton', () => ({ googleSignInEnabled: false, GoogleButton: () => null }));
 import * as auth from '../lib/auth';
 import { AuthPages, ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, authPaths } from './Auth';
 

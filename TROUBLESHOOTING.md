@@ -339,7 +339,8 @@ Chạy một test: `dotnet test --filter "FullyQualifiedName~BulkBudgetTests"`,
 | Muốn dùng EF InMemory | `ExecuteUpdate`/`ExecuteDelete` cần provider quan hệ | Dùng SQLite in-memory như `DbTestBase` |
 | So sánh decimal lệch | SQLite lưu decimal dạng double | Dùng giá trị tròn hoặc so có sai số |
 | ai-service `test_action_names` / `test_arguments_the_backend_reads_are_declared` | Thêm tool mà chưa cập nhật danh sách trong test | Cập nhật cả test lẫn `AIActions.cs` |
-| `does not show the Google button without a configured client id` lỗi **chỉ ở máy bạn** | `frontend/.env.local` có `VITE_GOOGLE_CLIENT_ID` | Bình thường trên CI. Tạm đổi tên `.env.local` khi chạy test nếu cần |
+| Test chỉ lỗi trên máy có `frontend/.env.local` (từng gặp: `does not show the Google button…`) | Code đọc `import.meta.env.*` lúc import, nên giá trị trong `.env.local` của dev lọt vào test | Test phải tự cố định giá trị: `vi.mock` module đọc biến đó (xem đầu `Auth.test.tsx`) |
+| `Cannot find package 'jsdom'` / `Failed to start forks worker`, đường dẫn có `npm-cache\_npx` | Chạy `npx vitest` ngoài thư mục `frontend`, nên npx tải một bản Vitest khác không có jsdom | Chạy trong `frontend`: `npm.cmd test` hoặc `npx vitest run <file>` |
 | `npm test` bị chặn "running scripts is disabled" | Execution policy PowerShell | `npm.cmd test` |
 | Test component lỗi `document is not defined` | Thiếu môi trường DOM | Docblock `// @vitest-environment jsdom` đầu file, render qua `src/test/dom.tsx` |
 | CI đỏ, máy xanh | Thiếu `npm ci` / lock lệch / `.env` cục bộ che lỗi | Chạy đúng 4 lệnh trên; commit `package-lock.json` |
