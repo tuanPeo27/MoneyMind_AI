@@ -55,6 +55,9 @@
   --color-positive: light-dark(#087356, #6ee7b7);
   --color-negative: light-dark(#b3344f, #fca5ae);
   --color-on-negative: light-dark(#ffffff, #431628);
+  /* Finding severity (Smart Insights). Not green / red: those stay reserved for income and expense. */
+  --color-alert: light-dark(#c2410c, #fdba74);
+  --color-caution: light-dark(#a16207, #fcd34d);
   --color-chart-secondary: light-dark(#a855f7, #c084fc);
   --color-chart-tertiary: light-dark(#0ea5e9, #38bdf8);
   --color-chart-4: light-dark(#f59e0b, #fbbf24);
@@ -71,7 +74,7 @@
      blurs: crisp outside a card, smooth inside), then large indigo / violet light pools that tint the glass.
      Fixed, so the cards glide over them. */
   background-image:
-    repeating-radial-gradient(circle at 100% 0%, transparent 0 46px, light-dark(rgba(99, 102, 241, 0.16), rgba(255, 255, 255, 0.07)) 46px 47px),
+    repeating-radial-gradient(circle at 100% 0%, transparent 0 46px, light-dark(rgba(99, 102, 241, 0.1), rgba(255, 255, 255, 0.045)) 46px 47px),
     radial-gradient(900px 620px at 8% -8%, light-dark(rgba(99, 102, 241, 0.4), rgba(99, 102, 241, 0.42)), transparent 62%),
     radial-gradient(820px 600px at 100% 0%, light-dark(rgba(168, 85, 247, 0.34), rgba(168, 85, 247, 0.36)), transparent 62%),
     radial-gradient(900px 700px at 62% 112%, light-dark(rgba(139, 92, 246, 0.32), rgba(124, 58, 237, 0.34)), transparent 62%),

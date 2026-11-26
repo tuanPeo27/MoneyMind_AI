@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { emptyContext, getPrompts, type FinancialContext, type Highlight, type AIResponse } from './mockAssistant';
 import { aiChatApi, ApiError, useSession, type AIActionPayload, type AIActionResponse, type AIChatMessageResponse, type AIConversationResponse, type AIUsageResponse } from '../../services';
-import { FINANCE_CHANGED_EVENT } from './AIActionCard';
+import { FINANCE_CHANGED_EVENT } from './events';
 import { useLanguage } from '../../i18n';
 
 export type AIMessageData = AIResponse & {

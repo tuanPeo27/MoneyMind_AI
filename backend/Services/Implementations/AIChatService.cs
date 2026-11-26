@@ -139,21 +139,29 @@ public sealed class AIChatService(
             throw;
         }
 
-        var encryptedAssistant = await encryption.EncryptAsync(userId, content, cancellationToken);
         var assistantMessage = new AIChatMessage
         {
             ConversationId = conversation.Id,
             Sequence = userMessage.Sequence + 1,
             Role = ChatMessageRole.Assistant,
-            ContentCipher = encryptedAssistant.Cipher,
-            Nonce = encryptedAssistant.Nonce,
-            KeyVersion = encryptedAssistant.KeyVersion,
             Intent = result.Intent ?? IntentFor(proposals),
             Status = AIProcessingStatus.Completed,
             TokenUsage = result.TokenUsage
         };
         db.AIChatMessages.Add(assistantMessage);
         var proposed = await actions.ProposeAsync(userId, assistantMessage.Id, proposals, cancellationToken);
+        // The text is settled once the proposals have been checked: a budget proposal the backend had to drop (every
+        // category already has a budget, or none is valid) must not leave "see below" with nothing below.
+        var droppedBudgets = proposals.Any(p => p.Name == AIActionTypes.ProposeBudgets)
+            && !proposed.Any(p => p.Type == AIActionTypes.ProposeBudgets);
+        if (result.Content.Length == 0)
+            content = proposed.Count > 0 ? ActionsReady(proposed, request.Language) : NoBudgetProposal(request.Language);
+        else if (droppedBudgets)
+            content = $"{content.TrimEnd()}\n\n{NoBudgetProposal(request.Language)}";
+        var encryptedAssistant = await encryption.EncryptAsync(userId, content, cancellationToken);
+        assistantMessage.ContentCipher = encryptedAssistant.Cipher;
+        assistantMessage.Nonce = encryptedAssistant.Nonce;
+        assistantMessage.KeyVersion = encryptedAssistant.KeyVersion;
         conversation.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
@@ -239,6 +247,17 @@ public sealed class AIChatService(
         IReadOnlyList<AIActionResponse>? proposed = null) =>
         new(m.Id, m.ConversationId, m.Sequence, m.Role, content, m.Intent, m.Status, AsUtc(m.CreatedAt), proposed ?? []);
 
+    private static string ActionsReady(IReadOnlyList<AIActionResponse> proposed, string? language) =>
+        proposed is [{ Type: AIActionTypes.ProposeBudgets }]
+            ? language == "en"
+                ? "Here is a budget proposal based on your recent spending. Pick the categories, adjust any amount, then create them."
+                : "Mình đã lập đề xuất ngân sách dựa trên chi tiêu gần đây. Chọn danh mục, sửa số tiền nếu cần rồi bấm Tạo ngân sách đã chọn."
+            : ActionsReady(proposed.Count, language);
+
+    private static string NoBudgetProposal(string? language) => language == "en"
+        ? "I could not prepare a budget proposal: the matching categories already have a budget for this period, or there is not enough spending history yet."
+        : "Mình chưa lập được đề xuất ngân sách: các danh mục phù hợp đã có ngân sách trong kỳ này, hoặc chưa đủ dữ liệu chi tiêu.";
+
     private static string ActionsReady(int count, string? language) => language == "en"
         ? (count == 1 ? "I've prepared 1 action below. Check it, then press Confirm to save it."
             : $"I've prepared {count} actions below. Check each one, then press Confirm to save it.")
@@ -249,7 +268,7 @@ public sealed class AIChatService(
     private static string? IntentFor(IReadOnlyList<AIProposedAction> proposals) => proposals.FirstOrDefault()?.Name switch
     {
         AIActionTypes.CreateTransaction or AIActionTypes.CreateCategory => "transaction_help",
-        AIActionTypes.CreateBudget => "budget_advice",
+        AIActionTypes.CreateBudget or AIActionTypes.ProposeBudgets => "budget_advice",
         AIActionTypes.CreateSavingsGoal or AIActionTypes.ContributeToGoal => "saving_goal",
         _ => null
     };

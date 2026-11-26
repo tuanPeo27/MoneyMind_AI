@@ -63,6 +63,7 @@ export function useWorkspaceData(userId: string | undefined) {
   const [loading, setLoading] = useState(false);
   // False until the first load for this user finishes (with data or an error): pages show skeletons meanwhile.
   const [ready, setReady] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [error, setError] = useState<unknown>(null);
   const requestId = useRef(0);
 
@@ -88,6 +89,7 @@ export function useWorkspaceData(userId: string | undefined) {
       setCategoryList(categoryItems);
       setRows([firstPage, ...rest].flatMap(page => page.items).map(toTransaction));
       setBudgets(budgetItems.map(toBudget));
+      setUpdatedAt(new Date());
     } catch (e) {
       if (current === requestId.current) setError(e);
     } finally {
@@ -202,7 +204,7 @@ export function useWorkspaceData(userId: string | undefined) {
   }, []);
 
   return {
-    rows, budgets, categories, accountNames, openingBalance, activeAccounts, archivedAccounts, activeAccountIds, loading, ready, error, reload: load,
+    rows, budgets, categories, accountNames, openingBalance, activeAccounts, archivedAccounts, activeAccountIds, loading, ready, updatedAt, error, reload: load,
     createAccount, updateAccount, removeAccount, refreshAccounts, saveTransaction, removeTransaction, saveCategory, removeCategory, saveBudget, removeBudget,
   };
 }

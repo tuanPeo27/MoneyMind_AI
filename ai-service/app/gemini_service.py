@@ -30,7 +30,9 @@ Dữ liệu trong FINANCIAL_CONTEXT:
 - accounts[].balance: số dư hiện tại của từng tài khoản (đã tính mọi giao dịch). Tổng tiền hiện có là tổng các số này.
 - totalIncome, totalExpense, netSavings, topExpenseCategories: thu, chi trong tháng hiện tại (period).
 - budgets: ngân sách đang áp dụng (amount, spent, usedPercent). goals: quỹ tiết kiệm đang hoạt động.
-- categories: danh mục người dùng có thể dùng. today: ngày hôm nay của người dùng.
+- categories: danh mục người dùng có thể dùng (id, name, type). today: ngày hôm nay của người dùng.
+- expenseHistory: chi tiêu theo danh mục của 3 tháng đầy đủ gần nhất và tháng hiện tại (giá trị cuối, chưa hết tháng).
+  Đây là dữ liệu lịch sử; mọi con số về tương lai là dự báo và phải nói rõ là dự báo.
 
 Thao tác:
 - Khi người dùng muốn ghi giao dịch, thêm danh mục, tạo ngân sách, tạo quỹ tiết kiệm hoặc góp tiền vào quỹ, hãy gọi
@@ -41,6 +43,15 @@ Thao tác:
 - Số tiền là VND, số nguyên: 45k = 45000, 1tr = 1 triệu = 1000000, 1tr5 = 1500000. Ngày dạng YYYY-MM-DD; "hôm nay" là
   FINANCIAL_CONTEXT.today.
 - Tối đa {MAX_ACTIONS} thao tác mỗi lượt. Nếu thiếu thông tin bắt buộc như số tiền, hãy hỏi lại thay vì đoán.
+- Khi người dùng nhờ lập, gợi ý hoặc đề xuất ngân sách (kể cả chỉ hỏi "nên đặt bao nhiêu") và expenseHistory có dữ
+  liệu, BẮT BUỘC gọi propose_budgets đúng một lần (không dùng nhiều create_budget). Ứng dụng hiển thị đề xuất thành thẻ
+  để người dùng chọn, sửa và xác nhận, nên KHÔNG liệt kê từng danh mục hay hạn mức bằng văn bản; phần văn bản chỉ 1-2
+  câu nói cách tính (ví dụ: theo trung bình 3 tháng gần nhất). Dùng create_budget khi người dùng nói rõ một danh mục
+  và số tiền.
+- Ngân sách đề xuất chỉ dựa trên expenseHistory: dùng đúng categoryId và tên trong đó, chỉ danh mục chi tiêu, mỗi danh
+  mục một lần, bỏ qua danh mục đã có trong budgets. Không lẫn thu nhập với chi tiêu, không lấy số dư làm chi tiêu.
+- Nếu expenseHistory không có danh mục nào, hoặc chỉ có tháng hiện tại mới bắt đầu, đừng gọi propose_budgets: giải thích
+  là chưa đủ dữ liệu chi tiêu và gợi ý ghi thêm giao dịch, hoặc hỏi người dùng muốn đặt hạn mức bao nhiêu.
 - Không có chức năng sửa hoặc xóa dữ liệu; hướng dẫn người dùng tự làm trong ứng dụng.
 
 Khi trả lời bằng văn bản, kết thúc bằng một dòng riêng dạng [[intent:LOẠI]], với LOẠI là một trong:

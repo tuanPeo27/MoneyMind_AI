@@ -85,12 +85,39 @@ public sealed class FinancialAnalysisService(AppDbContext db, FinancialContextCa
                               select new { a.Name, a.AccountType, Balance = a.InitialBalance + net - saved, a.Currency })
             .ToListAsync(cancellationToken);
 
-        // Names the AI must use when it proposes an action (the backend matches them to the user's own records).
+        // Names (and ids, for propose_budgets) the AI must use when it proposes an action; the backend checks both
+        // against the user's own records, so an id the model makes up is simply dropped.
         var categories = await db.Categories.AsNoTracking()
             .Where(c => c.IsActive && (c.IsSystem || c.UserId == userId))
             .OrderBy(c => c.Type).ThenBy(c => c.Name)
-            .Select(c => new { c.Name, c.Type })
+            .Select(c => new { c.Id, c.Name, c.Type })
             .ToListAsync(cancellationToken);
+
+        // Expense totals per category for the last 3 full months and this month so far: what budget proposals rest on.
+        // Amounts only (no descriptions); categories without spending in the window are left out.
+        var historyFrom = from.AddMonths(-3);
+        var historyRows = await db.Transactions.AsNoTracking()
+            .Where(t => t.UserId == userId && t.Type == TransactionType.Expense
+                && t.TransactionDate >= historyFrom && t.TransactionDate < from.AddMonths(1))
+            .GroupBy(t => new { t.CategoryId, t.TransactionDate.Year, t.TransactionDate.Month })
+            .Select(g => new { g.Key.CategoryId, Month = g.Key.Year * 12 + g.Key.Month, Amount = g.Sum(t => t.Amount) })
+            .ToListAsync(cancellationToken);
+        var monthKeys = Enumerable.Range(0, 4).Select(i => from.AddMonths(i - 3)).ToList();
+        var expenseHistory = new
+        {
+            months = monthKeys.Select(m => m.ToString("yyyy-MM")).ToList(),
+            note = "Last value is the current month so far (not complete).",
+            categories = categories.Where(c => c.Type == CategoryType.Expense)
+                .Select(c => new
+                {
+                    categoryId = c.Id,
+                    name = c.Name,
+                    amounts = monthKeys.Select(m => historyRows.Where(r => r.CategoryId == c.Id && r.Month == m.Year * 12 + m.Month)
+                        .Sum(r => r.Amount)).ToList()
+                })
+                .Where(c => c.amounts.Any(a => a > 0))
+                .ToList()
+        };
 
         // No transaction descriptions or personal identifiers are sent to the AI provider.
         var context = JsonSerializer.Serialize(new
@@ -106,7 +133,8 @@ public sealed class FinancialAnalysisService(AppDbContext db, FinancialContextCa
             netSavings = summary.TotalIncome - summary.TotalExpense,
             summary.TopExpenseCategories,
             summary.Budgets,
-            summary.Goals
+            summary.Goals,
+            expenseHistory
         }, Json);
 
         contextCache.Set(key, context);

@@ -28,8 +28,11 @@ The service listens on `127.0.0.1:8001` by default. Internal calls require `X-Se
 
 ## Proposed actions
 
-The model can call five functions: `create_transaction`, `create_category`, `create_budget`, `create_savings_goal` and
-`contribute_to_goal` (at most 5 per message; any other function name is ignored). This service saves nothing. It
+The model can call six functions: `create_transaction`, `create_category`, `create_budget`, `create_savings_goal`,
+`contribute_to_goal` and `propose_budgets` (at most 5 per message; any other function name is ignored).
+`propose_budgets` carries a list (up to 10) of `{category_id, category, amount, reason}` for one month (`period`,
+`YYYY-MM`), based on `expenseHistory` in the financial context; the backend checks every id and adds the real history
+figures before the user sees it. This service saves nothing. It
 passes the calls on, and the backend shows each one to the user, who confirms it before it is saved. When the model
 only calls functions it writes no text, and the backend adds a short reply itself.
 

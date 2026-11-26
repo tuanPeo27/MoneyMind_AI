@@ -28,7 +28,7 @@ export function getPrompts(page: string) {
     return ['Summarize platform activity.', 'Explain the AI usage metrics.', 'What should an administrator review?'];
   const prompts: Record<string, string[]> = {
     Transactions: ['Analyze my largest expenses.', 'Find unusual transactions.', 'Where is my money going?'],
-    Budgets: ['Which budget is close to its limit?', 'Help me reduce spending.', 'Help me optimize my budget.'],
+    Budgets: ['Analyse my budget this month.', 'Which category am I spending the most on?', 'How can I save more on my budget?', 'Forecast my spending at the end of the month.'],
     Reports: ['Compare my income and expenses.', 'Explain my spending trends.', 'How has my savings rate changed?'],
     Categories: ['Where is my money going?', 'Which category costs the most?', 'Help me reduce dining expenses.'],
     Settings: ['How is my data stored?', 'How can I save more money?', 'Give me a financial health summary.'],

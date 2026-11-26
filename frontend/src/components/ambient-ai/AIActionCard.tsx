@@ -12,7 +12,8 @@ import {
 import { useErrorText } from '../../pages/Auth';
 
 /** Fired after an AI action is saved, so pages showing transactions, budgets or funds reload. */
-export const FINANCE_CHANGED_EVENT = 'mm-finance-changed';
+import { FINANCE_CHANGED_EVENT } from './events';
+export { FINANCE_CHANGED_EVENT };
 
 type Options = { categories: CategoryResponse[]; accounts: AccountResponse[]; goals: FinancialGoalResponse[] };
 let cached: { userId: string; options: Promise<Options> } | null = null;
@@ -32,7 +33,7 @@ function loadOptions(userId: string): Promise<Options> {
 }
 
 /** Categories, accounts and funds of the signed-in user for the pickers on the cards; reloaded when data changes. */
-function useActionOptions() {
+export function useActionOptions() {
   const { session } = useSession();
   const userId = session?.user.id;
   const [options, setOptions] = useState<Options | null>(null);
@@ -54,6 +55,8 @@ const meta: Record<AIActionType, { title: string; icon: LucideIcon }> = {
   create_budget: { title: 'Create a budget', icon: Wallet },
   create_savings_goal: { title: 'Create a savings fund', icon: Target },
   contribute_to_goal: { title: 'Add money to a fund', icon: PiggyBank },
+  // Rendered by BudgetProposalCard (several budgets in one card), listed here so every type has a title.
+  propose_budgets: { title: 'Budget proposal', icon: Wallet },
 };
 
 /** What still has to be chosen before the action can be saved (empty when it is ready). */
@@ -115,6 +118,7 @@ export function AIActionCard({ action, onConfirm, onCancel }: {
         ['Fund', p.goalName ?? '—'], ['Amount', p.amount ? money(p.amount) : '—'],
         ['From account', p.accountName ?? t('Not taken from an account')],
       ];
+      case 'propose_budgets': return [];
     }
   })();
 
@@ -195,6 +199,7 @@ function Fields({ type, payload: p, options }: { type: AIActionType; payload: AI
       {field('Amount', <AmountInput name="amount" required defaultValue={p.amount ?? undefined} />)}
       {field('From account', accountSelect(true))}
     </>);
+    case 'propose_budgets': return null;
   }
 }
 

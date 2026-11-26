@@ -1,50 +1,26 @@
 import { useLanguage } from '../i18n';
-import { memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { ArrowUpRight, ArrowRight, Wallet, TrendingUp, TrendingDown, Landmark, Sparkles, ChevronRight, Maximize2, Eye, EyeOff } from 'lucide-react';
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { ArrowUpRight, ArrowRight, Sparkles, ChevronRight, Maximize2 } from 'lucide-react';
 import { m, useReducedMotion } from 'framer-motion';
 import { type Transaction, type Budget, type Category, money, dateLabel } from '../data';
-import { currencySymbol, formatAmount, percent } from '../lib/currency';
-import { BalanceContext, getTotals, percentChange, type Totals } from '../lib/totals';
+import { percent } from '../lib/currency';
+import { getTotals, percentChange, usedPercent } from '../lib/totals';
 import type { WalletAccount } from '../hooks/useWorkspaceData';
 import { AccountIcon, accountTypes } from './Accounts';
-import { Card, Change, Progress, SectionHead, Badge, Empty, IconButton } from '../components/ui';
+import { Card, Progress, SectionHead, Empty, IconButton } from '../components/ui';
 import { ExpandedCard } from '../components/ExpandedCard';
 import { TrendChart, ExpenseDonut, monthlyData } from '../components/charts';
 import type { Highlight } from '../components/ambient-ai/mockAssistant';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { HighlightCard, MORPH_SPRING } from '../components/ambient-ai/AmbientAI';
+import { SummaryCards } from '../components/SummaryCards';
+export { SummaryCards } from '../components/SummaryCards';
 import { LoadingStatus, Skeleton, SkeletonText, useFadeIn } from '../components/Skeleton';
 import { useAmbientAIView } from '../components/ambient-ai/AmbientAIProvider';
+import { getSession } from '../services';
 
 // Moved to lib/totals (used by App without loading this chunk); re-exported for existing imports.
 export { BalanceContext, getTotals, percentChange, type Totals } from '../lib/totals';
-export function SummaryCards({ totals, previous, hidden = false, onToggleHidden, layout = 'row', loading = false }: { totals: Totals; previous: Totals; hidden?: boolean; onToggleHidden?: (next: boolean) => void; layout?: 'row' | 'grid'; loading?: boolean }) {
-  const { t } = useLanguage();
-  const fade = useFadeIn(loading);
-  const { highlight, openAssistant } = useAmbientAIView();
-  const balance = useContext(BalanceContext);
-  const symbol = currencySymbol();
-  const cards = [
-    { label: 'Total balance', value: balance?.current ?? totals.balance, previous: balance?.previous ?? previous.balance, icon: Wallet },
-    { label: 'Total income', value: totals.income, previous: previous.income, icon: TrendingUp },
-    { label: 'Total expenses', value: totals.expense, previous: previous.expense, icon: TrendingDown, inverse: true },
-    { label: 'Savings', value: totals.savings, previous: previous.savings, icon: Landmark },
-  ];
-  return <div id="ai-summary" className={`grid grid-cols-2 gap-3 sm:gap-4 ${layout === 'row' ? 'xl:grid-cols-[1.15fr_1fr_1fr_1fr]' : ''}`}>{cards.map(({ label, value, previous: old, icon: Icon, inverse }, index) =>
-    <Card key={label} className={`relative px-3.5 py-3.5 sm:px-5 sm:py-5 transition-all duration-300 motion-safe:hover:-translate-y-0.5 ${index === 0 ? 'hero-card' : ''} ${highlight === 'summary' && index === 3 ? 'ring-1 ring-ai-from/75 brightness-110 shadow-[0_0_24px_-14px_var(--color-ai-from)]' : ''}`}>
-      {highlight === 'summary' && index === 3 && <button onClick={() => openAssistant('How can I improve my savings?')} className="absolute -top-6 right-3 flex min-h-11 items-center gap-1.5 rounded-lg bg-gradient-to-br from-ai-from via-ai-to to-ai-warm text-on-ai px-3 text-xs font-semibold shadow-md shadow-ai-from/30"><Sparkles className="h-3 w-3" />{t("AI Insight")}</button>}
-      <div className="flex items-center justify-between gap-2"><span className="truncate text-xs text-muted sm:text-sm">{t(label)}</span>{index === 0 && onToggleHidden ? <button type="button" onClick={() => onToggleHidden(!hidden)} aria-pressed={hidden} aria-label={hidden ? t("Show account balance") : t("Hide account balance")} className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-brand/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">{hidden ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}</button> : <Icon className={`h-4 w-4 shrink-0 ${index === 1 ? 'text-positive' : index === 2 ? 'text-negative' : 'text-muted'}`} aria-hidden="true" />}</div>
-      {loading ? <>
-        {/* Same heights as the amount (its font size, leading-none) and the change line (16px). */}
-        <div className="mt-3 sm:mt-4"><Skeleton className={index === 0 ? 'h-[20px] w-28 sm:h-[29px] sm:w-36 2xl:h-[34px]' : 'h-[19px] w-24 sm:h-[26px] sm:w-32 2xl:h-[30px]'} /></div>
-        <SkeletonText className="mt-3 h-4 sm:mt-4" bar="h-2.5" width="w-20 sm:w-32" />
-      </> : <div className={fade}>
-      <div className="mt-3 flex items-baseline gap-1 sm:mt-4 sm:gap-1.5"><span className={`font-semibold leading-none tracking-[-0.045em] tabular-nums ${index === 0 ? 'text-[20px] sm:text-[29px] 2xl:text-[34px]' : 'text-[19px] sm:text-[26px] 2xl:text-[30px]'}`}>{formatAmount(value)}</span>{!hidden && <span className={`text-sm text-muted ${symbol.before ? '-order-1' : ''}`}>{symbol.symbol}</span>}</div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-0.5 sm:mt-4">{index === 0 && hidden ? <span className="text-xs text-muted">{t("Balance hidden")}</span> : <><Change value={percentChange(value, old)} inverse={inverse} /><span className="hidden text-xs text-muted sm:inline">{index === 3 ? t('{rate}% savings rate', { rate: totals.rate.toFixed(1) }) : t("vs. previous period")}</span></>}</div>
-      </div>}
-    </Card>,
-  )}</div>;
-}
 export function BudgetList({ budgets, rows, categories, onView }: { budgets: Budget[]; rows: Transaction[]; categories: Category[]; onView: () => void }) {
   const { t } = useLanguage();
   const sorted = budgets.map(b => ({
@@ -54,7 +30,7 @@ export function BudgetList({ budgets, rows, categories, onView }: { budgets: Bud
     <SectionHead title={t("Budget progress")} action={<button aria-label={t("View all budgets")} className="flex min-h-11 w-11 items-center justify-end text-muted hover:text-ink" onClick={onView}><ArrowUpRight className="h-4 w-4" /></button>} />
     <div className="flex-1 space-y-6">{sorted.map(b => {
       const value = b.spent / b.limit * 100;
-      return <div key={b.id}><div className="mb-2.5 flex items-center justify-between gap-2 text-sm"><span className="flex items-center gap-2"><CategoryIcon name={b.category} icon={categories.find(c => c.name === b.category)?.icon} small />{b.category}{value >= 85 && <span className="h-1.5 w-1.5 rounded-full bg-negative" />}</span><span className={value >= 85 ? 'text-negative' : 'text-muted'}>{Math.round(value)}%</span></div><Progress label={`${b.category} budget used`} value={value} color={value >= 85 ? 'var(--color-negative)' : undefined} /><div className="mt-2 flex justify-between gap-2 text-xs text-muted"><span>{money(b.spent)}</span><span>{t('of')} {money(b.limit)}</span></div></div>;
+      return <div key={b.id}><div className="mb-2.5 flex items-center justify-between gap-2 text-sm"><span className="flex items-center gap-2"><CategoryIcon name={b.category} icon={categories.find(c => c.name === b.category)?.icon} small />{b.category}{value >= 85 && <span className="h-1.5 w-1.5 rounded-full bg-negative" />}</span><span className={value >= 85 ? 'text-negative' : 'text-muted'}>{usedPercent(value)}</span></div><Progress label={`${b.category} budget used`} value={value} color={value >= 85 ? 'var(--color-negative)' : undefined} /><div className="mt-2 flex justify-between gap-2 text-xs text-muted"><span>{money(b.spent)}</span><span>{t('of')} {money(b.limit)}</span></div></div>;
     })}{!sorted.length && <Empty title={t("No budgets yet")} text={t("Give your spending a plan.")} />}</div>
     <button onClick={onView} className="mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-line text-sm text-muted transition-colors hover:bg-line hover:text-ink focus-visible:ring-2 focus-visible:ring-brand">{t("Manage budgets")}<ArrowRight className="h-3.5 w-3.5" /></button>
   </Card>;
@@ -244,7 +220,7 @@ export default memo(function Overview({ rows, allRows, previous, budgets, catego
     { id: 'budgets', label: 'Budget progress', target: 'budgets', onInspect: () => onNavigate('Budgets'), node: <div className="min-h-[220px] md:min-h-[360px] py-2">
       <div className="grid gap-x-12 gap-y-7 md:grid-cols-2">{shownBudgets.map(b => {
         const value = b.spent / b.limit * 100;
-        return <div key={b.id}><div className="mb-2.5 flex items-center justify-between gap-2 text-sm"><span className="flex items-center gap-2"><CategoryIcon name={b.category} icon={categories.find(c => c.name === b.category)?.icon} small />{b.category}{value >= 85 && <span className="h-1.5 w-1.5 rounded-full bg-negative" />}</span><span className={value >= 85 ? 'text-negative' : 'text-muted'}>{Math.round(value)}%</span></div><Progress label={`${b.category} budget used`} value={value} color={value >= 85 ? 'var(--color-negative)' : undefined} /><div className="mt-2 flex justify-between gap-2 text-xs text-muted"><span>{money(b.spent)}</span><span>{t('of')} {money(b.limit)}</span></div></div>;
+        return <div key={b.id}><div className="mb-2.5 flex items-center justify-between gap-2 text-sm"><span className="flex items-center gap-2"><CategoryIcon name={b.category} icon={categories.find(c => c.name === b.category)?.icon} small />{b.category}{value >= 85 && <span className="h-1.5 w-1.5 rounded-full bg-negative" />}</span><span className={value >= 85 ? 'text-negative' : 'text-muted'}>{usedPercent(value)}</span></div><Progress label={`${b.category} budget used`} value={value} color={value >= 85 ? 'var(--color-negative)' : undefined} /><div className="mt-2 flex justify-between gap-2 text-xs text-muted"><span>{money(b.spent)}</span><span>{t('of')} {money(b.limit)}</span></div></div>;
       })}</div>
       {!shownBudgets.length && <Empty title={t("No budgets yet")} text={t("Give your spending a plan.")} />}
       <button onClick={() => onNavigate('Budgets')} className="mt-7 inline-flex min-h-11 items-center gap-2 rounded-xl text-sm font-medium text-brand hover:underline focus-visible:ring-2 focus-visible:ring-brand">{t("Manage budgets")}<ArrowRight className="h-3.5 w-3.5" /></button>
@@ -271,7 +247,7 @@ export default memo(function Overview({ rows, allRows, previous, budgets, catego
         <tbody className="divide-y divide-line">{spendByCategory.map(([name, amount]) => <tr key={name}><td className={td}>{name}</td><td className={td}>{money(amount)}</td><td className={td}>{percent(amount, totals.expense)}</td></tr>)}</tbody></table></div>
     </div>,
     budgets: <div className="grid gap-x-12 gap-y-7 md:grid-cols-2">{budgetRows.map(b => { const value = b.spent / b.limit * 100;
-      return <div key={b.id}><div className="mb-2.5 flex items-center justify-between gap-2 text-sm"><span className="flex items-center gap-2"><CategoryIcon name={b.category} icon={categories.find(c => c.name === b.category)?.icon} small />{b.category}</span><span className={value >= 85 ? 'text-negative' : 'text-muted'}>{Math.round(value)}%</span></div><Progress label={`${b.category} budget used`} value={value} color={value >= 85 ? 'var(--color-negative)' : undefined} /><div className="mt-2 flex justify-between gap-2 text-xs text-muted"><span>{money(b.spent)}</span><span>{t('of')} {money(b.limit)}</span></div></div>; })}
+      return <div key={b.id}><div className="mb-2.5 flex items-center justify-between gap-2 text-sm"><span className="flex items-center gap-2"><CategoryIcon name={b.category} icon={categories.find(c => c.name === b.category)?.icon} small />{b.category}</span><span className={value >= 85 ? 'text-negative' : 'text-muted'}>{usedPercent(value)}</span></div><Progress label={`${b.category} budget used`} value={value} color={value >= 85 ? 'var(--color-negative)' : undefined} /><div className="mt-2 flex justify-between gap-2 text-xs text-muted"><span>{money(b.spent)}</span><span>{t('of')} {money(b.limit)}</span></div></div>; })}
       {!budgetRows.length && <Empty title={t("No budgets yet")} text={t("Give your spending a plan.")} />}</div>,
     transactions: <div className="overflow-x-auto rounded-2xl border border-line"><table className="w-full text-sm"><thead className="border-b border-line"><tr><th className={th}>{t('Date')}</th><th className={th}>{t('Transaction')}</th><th className={th}>{t('Category')}</th><th className={`${th} text-right`}>{t('Amount')}</th></tr></thead>
       <tbody className="divide-y divide-line">{[...rows].sort((x, y) => y.date.localeCompare(x.date)).slice(0, 20).map(tx => <tr key={tx.id}><td className={`${td} whitespace-nowrap text-muted`}>{dateLabel(tx.date, locale)}</td><td className="px-3 py-3">{tx.description}</td><td className="px-3 py-3 text-muted">{tx.category}</td><td className={`${td} text-right font-medium ${tx.type === 'Income' ? 'text-positive' : ''}`}>{tx.type === 'Income' ? '+' : '−'}{money(tx.amount)}</td></tr>)}</tbody></table>{!rows.length && <Empty title={t("No transactions in this period")} />}</div>,
@@ -285,7 +261,7 @@ export default memo(function Overview({ rows, allRows, previous, budgets, catego
   }
   return <div className="space-y-5">
     {loading && <LoadingStatus label={t('Loading your data...')} />}
-    <SummaryCards totals={totals} previous={past} hidden={hidden} onToggleHidden={setHidden} loading={loading} />
+    <SummaryCards totals={totals} previous={past} hidden={hidden} onToggleHidden={setHidden} loading={loading} layout="stack" />
     <AccountsStrip accounts={accounts} hidden={hidden} onManage={() => onNavigate('Accounts')} loading={loading} />
     <section aria-label={t("Overview sections")}>
       <div ref={tabList} role="tablist" aria-label={t("Overview sections")} onKeyDown={onTabKey} className="relative isolate mx-auto mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl bg-surface p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -332,6 +308,11 @@ function AccountsStrip({ accounts, hidden, onManage, loading = false }: { accoun
   const { t } = useLanguage();
   const fade = useFadeIn(loading);
   const shown = [...accounts].sort((a, b) => b.balance - a.balance).slice(0, STRIP_LIMIT);
+  // The skeleton draws as many tiles as the last visit showed (stored per user), so the strip keeps its height when
+  // the real tiles arrive: on a phone each tile is its own row and a wrong count pushed everything below (CLS).
+  const countKey = `mm-overview-account-tiles:${getSession()?.user.id ?? 'guest'}`;
+  const [tiles] = useState(() => Math.min(STRIP_LIMIT, Math.max(1, Number(localStorage.getItem(countKey)) || 1)));
+  useEffect(() => { if (!loading) localStorage.setItem(countKey, String(Math.max(1, shown.length))); }, [loading, shown.length, countKey]);
   return <section aria-labelledby="overview-accounts">
     <div className="mb-2.5 flex items-center justify-between gap-3 px-1">
       <h2 id="overview-accounts" className="text-sm font-semibold tracking-tight">{t('Your accounts')}</h2>
@@ -339,8 +320,8 @@ function AccountsStrip({ accounts, hidden, onManage, loading = false }: { accoun
         {accounts.length > STRIP_LIMIT ? t('View all {count}', { count: accounts.length }) : t('Manage accounts')}<ChevronRight className="size-3.5" aria-hidden="true" />
       </button>
     </div>
-    {/* Two tiles while loading: every user has at least the default wallet; heights match a real tile. */}
-    {loading ? <ul aria-hidden="true" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{[0, 1].map(i => <li key={i} className={`glass rounded-2xl px-4 py-3.5 ${i ? 'hidden sm:block' : ''}`}>
+    {/* Same number of tiles as last time (at least one: every user has the default wallet); heights match a real tile. */}
+    {loading ? <ul aria-hidden="true" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{Array.from({ length: tiles }, (_, i) => <li key={i} className="glass rounded-2xl px-4 py-3.5">
       <span className="flex items-center gap-3"><Skeleton className="size-8 shrink-0 !rounded-xl" /><span className="min-w-0 flex-1"><SkeletonText className="h-5" width="w-24" /><SkeletonText className="h-4" bar="h-2.5" width="w-16" /></span></span>
       <Skeleton className="mt-3 h-[18px] w-28" />
     </li>)}</ul>

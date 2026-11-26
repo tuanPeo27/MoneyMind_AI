@@ -1,3 +1,4 @@
+using System.Data;
 using backend.Data;
 using backend.DTOs.Requests;
 using backend.DTOs.Responses;
@@ -14,6 +15,8 @@ public sealed class BudgetService(
     ILogger<BudgetService> logger,
     FinancialContextCache contextCache) : IBudgetService
 {
+    private const decimal MaxAmount = 999_999_999_999_999m;
+
     public async Task<IReadOnlyList<BudgetResponse>> GetAllAsync(Guid userId, DateOnly? activeOn = null,
         CancellationToken cancellationToken = default)
     {
@@ -61,6 +64,97 @@ public sealed class BudgetService(
         await db.SaveChangesAsync(cancellationToken);
         await CheckAfterChangeAsync(userId, budget, cancellationToken);
         return await BuildAsync(userId, budget, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<BudgetResponse>> CreateManyAsync(Guid userId, IReadOnlyList<UpsertBudgetRequest> requests,
+        CancellationToken cancellationToken = default)
+    {
+        if (requests.Count == 0) throw new BadRequestException("Hãy chọn ít nhất một danh mục.");
+        if (requests.Count > BulkCreateBudgetsRequest.MaxItems)
+            throw new BadRequestException($"Tối đa {BulkCreateBudgetsRequest.MaxItems} ngân sách mỗi lần.");
+
+        // Attributes on the DTO only run on model binding; this is also called by the AI action service.
+        foreach (var r in requests)
+        {
+            if (r.Amount <= 0) throw new BadRequestException("Hạn mức phải lớn hơn 0.");
+            if (r.Amount > MaxAmount) throw new BadRequestException("Hạn mức quá lớn.");
+            if (r.AlertThreshold is < 1 or > 100) throw new BadRequestException("Ngưỡng cảnh báo phải từ 1 đến 100%.");
+            if (r.EndDate < r.StartDate) throw new BadRequestException("Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.");
+        }
+
+        var ids = requests.Select(r => r.CategoryId).Distinct().ToList();
+        var categories = await db.Categories.AsNoTracking()
+            .Where(c => ids.Contains(c.Id) && c.IsActive && (c.IsSystem || c.UserId == userId))
+            .ToDictionaryAsync(c => c.Id, cancellationToken);
+        if (categories.Count != ids.Count) throw new BadRequestException("Danh mục không tồn tại.");
+        var notExpense = categories.Values.Where(c => c.Type != CategoryType.Expense).Select(c => c.Name).ToList();
+        if (notExpense.Count > 0)
+            throw new BadRequestException($"Ngân sách chỉ áp dụng cho danh mục chi tiêu: {string.Join(", ", notExpense)}.");
+
+        // The same category twice with overlapping dates: the database check below cannot see unsaved rows.
+        for (var i = 0; i < requests.Count; i++)
+            for (var j = i + 1; j < requests.Count; j++)
+                if (requests[i].CategoryId == requests[j].CategoryId
+                    && requests[i].StartDate <= requests[j].EndDate && requests[j].StartDate <= requests[i].EndDate)
+                    throw new BadRequestException($"Danh mục {categories[requests[i].CategoryId].Name} bị trùng trong yêu cầu.");
+
+        var created = new List<Budget>(requests.Count);
+        // Serializable: a second request for the same categories waits instead of also passing the overlap check.
+        await using (var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken))
+        {
+            var existing = await db.Budgets.AsNoTracking()
+                .Where(b => b.UserId == userId && ids.Contains(b.CategoryId))
+                .Select(b => new { b.CategoryId, b.StartDate, b.EndDate })
+                .ToListAsync(cancellationToken);
+            var conflicts = requests
+                .Where(r => existing.Any(b => b.CategoryId == r.CategoryId && b.StartDate <= r.EndDate && b.EndDate >= r.StartDate))
+                .Select(r => categories[r.CategoryId].Name).Distinct().ToList();
+            // Nothing is overwritten: the caller decides what to do with the categories that already have a budget.
+            if (conflicts.Count > 0)
+                throw new ConflictException($"Đã có ngân sách trong kỳ này cho: {string.Join(", ", conflicts)}. Hãy bỏ chọn các danh mục đó.");
+
+            foreach (var r in requests)
+            {
+                var budget = new Budget
+                {
+                    UserId = userId, CategoryId = r.CategoryId, Amount = r.Amount,
+                    StartDate = r.StartDate, EndDate = r.EndDate, AlertThreshold = r.AlertThreshold
+                };
+                db.Budgets.Add(budget);
+                created.Add(budget);
+            }
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                // Not saved: detach the rows so a retry on the same context does not insert them twice.
+                foreach (var budget in created) db.Entry(budget).State = EntityState.Detached;
+                throw;
+            }
+        }
+
+        var result = new List<BudgetResponse>(created.Count);
+        foreach (var budget in created)
+        {
+            await CheckAfterChangeAsync(userId, budget, cancellationToken);
+            result.Add(Map(budget, categories[budget.CategoryId].Name, await GetSpentAsync(userId, budget, cancellationToken)));
+        }
+        return result;
+    }
+
+    public async Task<BulkCreateBudgetsResponse> CreateForPeriodAsync(Guid userId, BulkCreateBudgetsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var timeZoneId = await db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.TimeZoneId)
+            .FirstOrDefaultAsync(cancellationToken) ?? "UTC";
+        var (start, end) = BudgetPeriod.Require(request.Period, FinancialAnalysisService.LocalToday(timeZoneId));
+        var created = await CreateManyAsync(userId,
+            request.Budgets.Select(b => new UpsertBudgetRequest(b.CategoryId, b.LimitAmount, start, end, b.AlertThreshold)).ToList(),
+            cancellationToken);
+        return new BulkCreateBudgetsResponse(BudgetPeriod.Format(start), start, end, created);
     }
 
     public async Task<BudgetResponse> UpdateAsync(Guid userId, Guid id, UpsertBudgetRequest request,

@@ -1,7 +1,9 @@
 import { displayCurrency, percent } from '../lib/currency';
 import { useLanguage } from '../i18n';
 import { useId, useState } from 'react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area, PieChart, Pie, Cell, Sector } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area, PieChart, Pie, Cell, Sector, ComposedChart, Line } from 'recharts';
+import type { TrendPoint } from '../lib/budgets';
+import type { FlowPoint } from '../lib/cashflow';
 import type { PieSectorDataItem } from 'recharts/types/polar/Pie';
 import { money, compact, type Transaction, type Category } from '../data';
 
@@ -24,7 +26,8 @@ export function TrendChart({ data, line = false, height = 225 }: { data: ReturnT
     </ResponsiveContainer>
   </div>;
 }
-export function ExpenseDonut({ transactions, categories, size = 174 }: { transactions: Transaction[]; categories: Category[]; size?: number }) {
+/** `onSelect`: slices and legend rows become clickable (not the grouped "Other"), e.g. to jump to that category. */
+export function ExpenseDonut({ transactions, categories, size = 174, onSelect }: { transactions: Transaction[]; categories: Category[]; size?: number; onSelect?: (category: string) => void }) {
   const { t } = useLanguage();
   const [active, setActive] = useState<number | null>(null);
   const values = categories.filter(c => c.type === 'Expense').map(c => ({ name: c.name, value: transactions.filter(t => t.type === 'Expense' && t.category === c.name).reduce((s, t) => s + t.amount, 0) })).filter(c => c.value > 0).sort((a, b) => b.value - a.value);
@@ -40,6 +43,7 @@ export function ExpenseDonut({ transactions, categories, size = 174 }: { transac
       <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={total ? data : [{ name: 'No expenses', value: 1 }]} dataKey="value" innerRadius={size * 0.35} outerRadius={size * 0.46} paddingAngle={3} stroke="none" startAngle={90} endAngle={-270}
         activeIndex={total && active !== null ? active : undefined} activeShape={renderActive}
         onMouseEnter={(_, index) => { if (total) setActive(index); }} onMouseLeave={() => setActive(null)}
+        onClick={(_, index) => { const name = data[index]?.name; if (onSelect && total && name && name !== 'Other') onSelect(name); }}
         isAnimationActive={!window.matchMedia('(prefers-reduced-motion: reduce)').matches}>{(total ? data : [null]).map((c, i) => <Cell key={c?.name || 'empty'} fill={total ? colors[i] : 'var(--color-line)'} fillOpacity={active === null || active === i ? 1 : 0.35} className={total && i === 0 ? 'donut-top-glow' : undefined} style={{ transition: 'fill-opacity 200ms ease-out', outline: 'none', ...(total && i === 0 ? { '--glow': colors[0] } as React.CSSProperties : {}) }} />)}</Pie></PieChart></ResponsiveContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
         <span className="max-w-full truncate text-xs text-muted">{current ? current.name : t("Total spent")}</span>
@@ -50,12 +54,63 @@ export function ExpenseDonut({ transactions, categories, size = 174 }: { transac
     {/* @container: the "Highest" badge is hidden when the legend column is narrow; the row's glow still marks it. */}
     <div className="@container w-full min-w-0 flex-1 space-y-1">{data.map((c, i) => {
       const on = active === i, dim = active !== null && !on, top = i === 0 && !!total && active === null;
+      const selectable = !!onSelect && c.name !== 'Other';
       return <div key={c.name} tabIndex={0} onMouseEnter={() => setActive(i)} onFocus={() => setActive(i)} onBlur={() => setActive(null)}
+        role={selectable ? 'button' : undefined} onClick={selectable ? () => onSelect!(c.name) : undefined}
+        onKeyDown={selectable ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect!(c.name); } } : undefined}
         style={on ? { backgroundColor: `color-mix(in oklab, ${colors[i]} 16%, transparent)`, boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${colors[i]} 45%, transparent), 0 10px 26px -14px ${colors[i]}` } : top ? { backgroundImage: `radial-gradient(120% 160% at 0% 50%, color-mix(in oklab, ${colors[0]} 30%, transparent), transparent 72%)`, '--glow': colors[0] } as React.CSSProperties : undefined}
-        className={`flex origin-left cursor-default items-center justify-between gap-2 rounded-xl px-3 py-2 outline-none transition-[transform,opacity,background-color,box-shadow] duration-200 ease-out focus-visible:ring-2 focus-visible:ring-brand motion-reduce:transition-none ${on ? 'scale-[1.07] opacity-100' : 'scale-100'} ${dim ? 'opacity-45' : ''} ${top ? 'donut-top-row' : ''} ${size > 250 ? 'py-3' : ''}`}>
+        className={`flex origin-left ${selectable ? 'cursor-pointer' : 'cursor-default'} items-center justify-between gap-2 rounded-xl px-3 py-2 outline-none transition-[transform,opacity,background-color,box-shadow] duration-200 ease-out focus-visible:ring-2 focus-visible:ring-brand motion-reduce:transition-none ${on ? 'scale-[1.07] opacity-100' : 'scale-100'} ${dim ? 'opacity-45' : ''} ${top ? 'donut-top-row' : ''} ${size > 250 ? 'py-3' : ''}`}>
         <span className={`flex min-w-0 items-center gap-2 text-sm transition-colors ${on ? 'font-semibold text-ink' : 'text-muted'}`}><span className={`shrink-0 rounded-full transition-all duration-200 ${on ? 'h-2.5 w-2.5' : 'h-1.5 w-1.5'}`} style={{ backgroundColor: colors[i] }} /><span className="truncate">{c.name}</span>{i === 0 && total > 0 && <span className="hidden shrink-0 rounded-full bg-gradient-to-r @min-[16rem]:inline-block from-accent to-accent-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-on-accent">{t("Highest")}</span>}</span>
         <div className="shrink-0 text-right"><p className={`text-xs tabular-nums ${on ? 'font-semibold' : 'font-medium'}`}>{money(c.value)}</p><p className="mt-0.5 text-xs tabular-nums text-muted">{percent(c.value, total)}</p></div>
       </div>;
     })}{!total && <p className="text-sm text-muted">{t("No expenses in this period.")}</p>}</div>
+  </div>;
+}
+/**
+ * Income and expense bars for the Transactions page (7 days, 30 days or 6 months). No net line: per day it swings
+ * with every salary and the smoothed curve dipped below real values; the card header shows the window's totals.
+ */
+export function CashFlowChart({ data, height = 180 }: { data: FlowPoint[]; height?: number | string }) {
+  const { t } = useLanguage();
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const thin = data.length > 12;
+  return <div className="w-full min-w-0" style={{ height }} role="img" aria-label={`${t('Cash flow')}: ${data.map(d => `${d.label}, ${t('Income')} ${money(d.income)}, ${t('Expense')} ${money(d.expense)}`).join('; ')}`}>
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} barGap={thin ? 1 : 4} margin={{ top: 8, right: 4, left: -14, bottom: 0 }}>
+        <CartesianGrid stroke="var(--color-line)" vertical={false} strokeDasharray="3 5" />
+        <XAxis dataKey="label" tick={{ fill: 'var(--color-muted)', fontSize: 11 }} axisLine={false} tickLine={false} dy={6} interval="preserveStartEnd" minTickGap={14} />
+        <YAxis tickFormatter={compact} tick={{ fill: 'var(--color-muted)', fontSize: 11 }} axisLine={false} tickLine={false} width={56} />
+        <Tooltip animationDuration={150} contentStyle={tooltip} itemStyle={{ color: 'var(--color-ink)' }} formatter={(v: number) => money(v)} cursor={{ fill: 'var(--color-line)', fillOpacity: 0.4 }} />
+        <Bar dataKey="income" name={t('Income')} fill="var(--color-positive)" fillOpacity={0.85} radius={[3, 3, 0, 0]} maxBarSize={thin ? 7 : 18} isAnimationActive={!reduced} />
+        <Bar dataKey="expense" name={t('Expense')} fill="var(--color-negative)" fillOpacity={0.85} radius={[3, 3, 0, 0]} maxBarSize={thin ? 7 : 18} isAnimationActive={!reduced} />
+      </BarChart>
+    </ResponsiveContainer>
+  </div>;
+}
+/**
+ * Budgets page trend. month: running spending (area) against the even pace to the limit (dashed) and the forecast
+ * to the end of the period (AI colour, dashed). week: daily spending (bars) against the daily allowance (dashed).
+ */
+export function BudgetTrendChart({ data, mode, height = 220 }: { data: TrendPoint[]; mode: 'month' | 'week'; height?: number | string }) {
+  const { t } = useLanguage();
+  const id = useId();
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const labels: Record<string, string> = { actual: t(mode === 'month' ? 'Spent so far' : 'Spent'), pace: t(mode === 'month' ? 'Budget pace' : 'Daily allowance'), forecast: t('Forecast') };
+  return <div className="w-full min-w-0" style={{ height }} role="img" aria-label={`${t('Spending trend')}: ${data.filter(d => d.actual !== undefined).map(d => `${d.label} ${money(d.actual!)}`).join('; ')}`}>
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={data} margin={{ top: 8, right: 6, left: -14, bottom: 0 }}>
+        <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--color-brand)" stopOpacity={0.22} /><stop offset="100%" stopColor="var(--color-brand)" stopOpacity={0} /></linearGradient></defs>
+        <CartesianGrid stroke="var(--color-line)" vertical={false} strokeDasharray="3 5" />
+        <XAxis dataKey="label" tick={{ fill: 'var(--color-muted)', fontSize: 11 }} axisLine={false} tickLine={false} dy={6} interval="preserveStartEnd" minTickGap={16} />
+        <YAxis tickFormatter={compact} tick={{ fill: 'var(--color-muted)', fontSize: 11 }} axisLine={false} tickLine={false} width={56} />
+        <Tooltip animationDuration={150} contentStyle={tooltip} itemStyle={{ color: 'var(--color-ink)' }} cursor={{ stroke: 'var(--color-line)' }}
+          formatter={(v: number, name: string) => [money(v), labels[name] ?? name]} />
+        {mode === 'month'
+          ? <Area dataKey="actual" type="monotone" stroke="var(--color-brand)" strokeWidth={2} fill={`url(#${id})`} connectNulls={false} isAnimationActive={!reduced} activeDot={{ r: 3.5, strokeWidth: 2, stroke: 'var(--color-popover)' }} />
+          : <Bar dataKey="actual" fill="var(--color-brand)" fillOpacity={0.85} radius={[3, 3, 0, 0]} maxBarSize={26} isAnimationActive={!reduced} />}
+        <Line dataKey="pace" type="linear" stroke="var(--color-muted)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} activeDot={false} isAnimationActive={false} />
+        {mode === 'month' && <Line dataKey="forecast" type="linear" stroke="var(--color-ai-to)" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls={false} isAnimationActive={!reduced} />}
+      </ComposedChart>
+    </ResponsiveContainer>
   </div>;
 }

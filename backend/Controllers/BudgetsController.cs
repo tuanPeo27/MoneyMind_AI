@@ -26,6 +26,12 @@ public sealed class BudgetsController(IBudgetService service, ICurrentUserServic
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    /// <summary>Creates several monthly budgets at once; all or nothing. 409 lists categories that already have one.</summary>
+    [HttpPost("bulk")]
+    public async Task<ActionResult<BulkCreateBudgetsResponse>> CreateMany(BulkCreateBudgetsRequest request,
+        CancellationToken ct) =>
+        StatusCode(StatusCodes.Status201Created, await service.CreateForPeriodAsync(UserId, request, ct));
+
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<BudgetResponse>> Update(Guid id, UpsertBudgetRequest request,
         CancellationToken ct) =>

@@ -16,7 +16,7 @@ import { BrandLogo } from '../BrandLogo';
 
 export type Profile = { name: string; email: string; phone?: string; avatar?: string; notifications: boolean; insights: boolean };
 const groups = [
-  { label: 'WORKSPACE', items: [{ name: 'Overview', icon: LayoutDashboard }, { name: 'Accounts', icon: CreditCard }, { name: 'Transactions', icon: ArrowLeftRight }, { name: 'Budgets', icon: Wallet }, { name: 'Savings Funds', icon: PiggyBank }, { name: 'Categories', icon: Shapes }, { name: 'Reports', icon: ChartColumn }] },
+  { label: 'MY WORKSPACE', items: [{ name: 'Overview', icon: LayoutDashboard }, { name: 'Accounts', icon: CreditCard }, { name: 'Transactions', icon: ArrowLeftRight }, { name: 'Budgets', icon: Wallet }, { name: 'Savings Funds', icon: PiggyBank }, { name: 'Categories', icon: Shapes }, { name: 'Reports', icon: ChartColumn }] },
   { label: 'INTELLIGENCE', items: [{ name: 'Smart Insights', icon: Lightbulb }] },
 ] as const;
 const mini = 'md:group-data-[mini=true]/side:hidden';
@@ -89,7 +89,7 @@ export function UserLayout({ page, profile, onNavigate, search, setSearch, trans
           </DropdownMenu>
         </div>
       </header>
-      <main className="mx-auto max-w-[1640px] px-4 pb-28 pt-5 sm:px-5 md:pb-12 md:pt-7 lg:px-8">{children}<footer className="mt-6 flex flex-wrap items-center justify-between gap-2 text-xs text-muted"><span>{t("MoneyMind AI · Make room for what matters.")}</span><span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" />{t("Local demo · {currency}", { currency: displayCurrency() })}</span></footer></main>
+      <main className="mx-auto max-w-[1640px] px-4 pb-28 pt-5 sm:px-5 md:pb-12 md:pt-7 lg:px-8">{children}<footer className="mt-6 flex flex-wrap items-center justify-between gap-2 text-xs text-muted"><span>{t("MoneyMind AI · Make room for what matters.")}</span><span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" />{t("Amounts in {currency}", { currency: displayCurrency() })}</span></footer></main>
     </div>
     <BottomBar page={page} onNavigate={go} />  </div>;
 }

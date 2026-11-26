@@ -54,6 +54,21 @@ public sealed record UpsertBudgetRequest(
     DateOnly EndDate,
     [Range(1, 100)] byte AlertThreshold = 80);
 
+/// <summary>Several monthly budgets created together: all of them, or none if any one is invalid.</summary>
+/// <param name="Period">The month, "yyyy-MM" (e.g. "2026-11"): the current month or one of the next 12.</param>
+public sealed record BulkCreateBudgetsRequest(
+    [Required, RegularExpression(@"^\d{4}-(0[1-9]|1[0-2])$", ErrorMessage = "Kỳ ngân sách phải có dạng yyyy-MM.")] string Period,
+    [Required, MinLength(1, ErrorMessage = "Hãy chọn ít nhất một danh mục."), MaxLength(BulkCreateBudgetsRequest.MaxItems)]
+    IReadOnlyList<BulkBudgetItem> Budgets)
+{
+    public const int MaxItems = 20;
+}
+
+public sealed record BulkBudgetItem(
+    Guid CategoryId,
+    [Range(typeof(decimal), "0.0001", "999999999999999")] decimal LimitAmount,
+    [Range(1, 100)] byte AlertThreshold = 80);
+
 /// <param name="ReminderDay">Day of the month (1-31) for a contribution reminder; null turns it off.</param>
 public sealed record UpsertGoalRequest(
     [Required, StringLength(150)] string Name,

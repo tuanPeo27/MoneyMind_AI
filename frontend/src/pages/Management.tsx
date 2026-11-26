@@ -12,8 +12,8 @@ const TrendChart = lazy(() => loadCharts().then(m => ({ default: m.TrendChart })
 const ExpenseDonut = lazy(() => loadCharts().then(m => ({ default: m.ExpenseDonut })));
 /** Same height as the chart, so the card does not jump when it arrives. */
 const ChartSlot = ({ height }: { height: number }) => <Skeleton className="w-full !rounded-xl" style={{ height }} />;
-import { getTotals, percentChange } from '../lib/totals';
-import { SummaryCards } from './Overview';
+import { getTotals, percentChange, usedPercent } from '../lib/totals';
+import { SummaryCards } from '../components/SummaryCards';
 import { FormSelect, Select } from '../components/Select';
 import { AmountInput } from '../components/AmountInput';
 import { Pagination, usePagination } from '../components/Pagination';
@@ -21,16 +21,6 @@ import { SegmentedTabs } from '../components/SegmentedTabs';
 import { LoadingStatus, Skeleton, SkeletonText, useFadeIn } from '../components/Skeleton';
 import { accountLabel, categoryLabel } from '../i18n/labels';
 
-/** A budget card while loading: header row (icon + 44px buttons), amount, bar, limits, status badge. */
-function BudgetSkeleton() {
-  return <Card className="p-5"><div aria-hidden="true">
-    <div className="mb-5 flex h-11 items-center gap-3"><Skeleton className="size-9 shrink-0 !rounded-lg" /><SkeletonText className="h-6 flex-1" bar="h-3.5" width="w-28" /></div>
-    <div className="mb-3 flex items-center justify-between gap-2"><SkeletonText className="h-8" bar="h-6" width="w-32" /><SkeletonText className="h-5" width="w-9" /></div>
-    <Skeleton className="h-1.5 w-full !rounded-full" />
-    <div className="mt-3 flex justify-between"><SkeletonText className="h-4" bar="h-2.5" width="w-24" /><SkeletonText className="h-4" bar="h-2.5" width="w-20" /></div>
-    <div className="mt-6 border-t border-line pt-4"><Skeleton className="h-[22px] w-24 !rounded-full" /></div>
-  </div></Card>;
-}
 /** A category card while loading: icon, name and type, then the transaction count and total. */
 function CategorySkeleton() {
   return <Card className="p-5"><div aria-hidden="true">
@@ -38,68 +28,10 @@ function CategorySkeleton() {
     <div className="mt-5 flex justify-between border-t border-line pt-4"><SkeletonText className="h-5" width="w-24" /><SkeletonText className="h-5" width="w-20" /></div>
   </div></Card>;
 }
-export function Transactions({ rows, categories, search, setSearch, onAdd, onEdit, onDelete, onExport, onManageCategories, loading = false }: { rows: Transaction[]; categories: Category[]; search: string; setSearch: (s: string) => void; onAdd: () => void; onEdit: (t: Transaction) => void; onDelete: (t: Transaction) => void; onExport: (rows: Transaction[]) => void; onManageCategories: () => void; loading?: boolean }) {
-  const { t, language } = useLanguage();
-  const fade = useFadeIn(loading);
-  const [type, setType] = useState('All types'), [category, setCategory] = useState('All categories');
-  const [sort, setSort] = useState({ key: 'date', ascending: false });
-  const filtered = rows.filter(row => {
-    const searchable = `${row.description} ${row.category} ${row.account} ${categoryLabel(row.category, language)} ${accountLabel(row.account, language)}`.toLocaleLowerCase();
-    return (!search || searchable.includes(search.trim().toLocaleLowerCase()))
-      && (type === 'All types' || row.type === type)
-      && (category === 'All categories' || row.category === category);
-  }).sort((a, b) => {
-    const difference = sort.key === 'amount' ? a.amount - b.amount : a.date.localeCompare(b.date);
-    return sort.ascending ? difference : -difference;
-  });
-  const totals = getTotals(filtered);
-  const pager = usePagination(filtered, 10, `||||`);
-  return <div className="space-y-5">
-    <div className="grid gap-4 sm:grid-cols-3">{[
-      { label: 'Money in', value: totals.income, color: 'text-positive' },
-      { label: 'Money out', value: totals.expense, color: 'text-negative' },
-      { label: 'Net cash flow', value: totals.savings, color: 'text-ink' },
-    ].map(item => <Card key={item.label} className="p-5"><p className="text-sm text-muted">{t(item.label)}</p>{loading
-      ? <SkeletonText className="mt-3 h-8" bar="h-6" width="w-36" />
-      : <p className={`mt-3 text-2xl font-semibold tracking-tight tabular-nums ${item.color} ${fade}`}>{money(item.value)}</p>}</Card>)}</div>
-    {loading && <LoadingStatus label={t('Loading your data...')} />}
-    <Card className="overflow-hidden">
-      <div className="flex flex-wrap items-center gap-3 p-4">
-        <div className="relative min-w-[190px] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted" aria-hidden="true" />
-          <input value={search} onChange={e => setSearch(e.target.value)} aria-label={t('Search transactions')} placeholder={t('Search transactions...')} className={`${fieldClass} pl-10`} />
-        </div>
-        <Select label={t('Filter transaction type')} value={type} onChange={setType} className="w-full sm:w-[145px]" options={['All types', 'Income', 'Expense'].map(value => ({ value, label: t(value) }))} />
-        <Select label={t('Filter category')} value={category} onChange={setCategory} className="w-full sm:w-[190px]" options={[
-          { value: 'All categories', label: t('All categories') },
-          ...categories.map(item => ({ value: item.name, label: categoryLabel(item.name, language), icon: <CategoryIcon name={item.name} icon={item.icon} small /> })),
-        ]} />
-        {/* Categories has no tab in the phone taskbar: this is the way there from Transactions. */}
-        <Button secondary onClick={onManageCategories}><Shapes aria-hidden="true" className="size-4" />{t('Categories')}</Button>
-        <Button secondary onClick={() => onExport(filtered)}><Download aria-hidden="true" className="size-4" />{t('Export')}</Button>
-        <Button onClick={onAdd}><Plus aria-hidden="true" className="size-4" />{t('Add transaction')}</Button>
-      </div>
-      <TransactionTable loading={loading} rows={pager.items} categories={categories} onEdit={onEdit} onDelete={onDelete} onSort={key => setSort({ key, ascending: sort.key === key ? !sort.ascending : false })} />
-      <Pagination pager={pager} sizes={[10, 20, 50]} className="border-t border-line" />
-      <p className="border-t border-line px-5 py-3 text-xs text-muted">{t('Showing {count} of {total} transactions', { count: filtered.length, total: rows.length })} · {t('All amounts in VND · Stored on this browser')}</p>
-    </Card>
-  </div>;
-}
-export function Budgets({ budgets, rows, categories, onAdd, onEdit, onDelete, loading = false }: { budgets: Budget[]; rows: Transaction[]; categories: Category[]; onAdd: () => void; onEdit: (b: Budget) => void; onDelete: (b: Budget) => void; loading?: boolean }) {
-  const { t } = useLanguage();
-  const fade = useFadeIn(loading);
-  const items = budgets.map(b => ({ ...b, spent: rows.filter(t => t.category === b.category && t.type === 'Expense').reduce((s, t) => s + t.amount, 0) }));
-  const pager = usePagination(items, 6, items.length);
-  const limit = items.reduce((s, b) => s + b.limit, 0), spent = items.reduce((s, b) => s + b.spent, 0), utilization = limit ? spent / limit * 100 : 0;
-  return <div className="space-y-6"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[{ label: 'Total budget', value: money(limit) }, { label: 'Total spent', value: money(spent) }, { label: 'Remaining budget', value: money(limit - spent) }, { label: 'Budget utilization', value: `${utilization.toFixed(1)}%` }].map(s => <Card key={s.label} className="p-5"><p className="text-sm text-muted">{t(s.label)}</p>{loading ? <SkeletonText className="mt-3 h-8" bar="h-6" width="w-32" /> : <p className={`mt-3 text-2xl font-semibold tracking-tight tabular-nums ${fade}`}>{s.value}</p>}</Card>)}</div>{loading && <LoadingStatus label={t('Loading your data...')} />}<div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{t("Your category budgets")}</h2><p className="mt-1 text-sm text-muted">{t("Give every đồng a purpose. Keep your spending on track.")}</p></div><Button onClick={onAdd}><Plus className="h-4 w-4" />{t("Add budget")}</Button></div>{loading ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{[0, 1, 2].map(i => <BudgetSkeleton key={i} />)}</div> : <div className={`grid gap-5 md:grid-cols-2 xl:grid-cols-3 ${fade}`}>{pager.items.map(b => {
-    const used = b.spent / b.limit * 100, warning = used >= 85;
-    return <Card key={b.id} className="p-5"><div className="mb-5 flex items-center gap-3"><CategoryIcon name={b.category} icon={categories.find(c => c.name === b.category)?.icon} /><h3 className="flex-1 text-[1rem] font-semibold">{b.category}</h3><IconButton label={t('Edit budget {name}', { name: b.category })} icon={Pencil} onClick={() => onEdit(b)} /><IconButton label={t('Delete budget {name}', { name: b.category })} icon={Trash2} onClick={() => onDelete(b)} /></div><div className="mb-3 flex items-baseline justify-between gap-2"><span className="text-2xl font-semibold tracking-tight">{money(b.spent)}</span><span className="text-sm text-muted">{Math.round(used)}%</span></div><Progress value={used} label={`${b.category} utilization`} color={warning ? 'var(--color-negative)' : undefined} /><div className="mt-3 flex justify-between text-xs text-muted"><span>{t('of')} {money(b.limit)}</span><span>{t('{amount} left', { amount: money(b.limit - b.spent) })}</span></div><div className="mt-6 border-t border-line pt-4"><Badge tone={warning ? 'negative' : 'positive'}>{used > 100 ? t("Over budget") : warning ? t("Approaching limit") : t("On track")}</Badge></div></Card>;
-  })}</div>}{!loading && <Pagination pager={pager} sizes={[6, 12, 24]} className="glass rounded-2xl" />}{!loading && !items.length && <Card><Empty title={t("Your budget starts here")} text={t("Create a category budget to take control of your spending.")} /></Card>}<p className="text-xs text-muted">{t("Spending is calculated from transactions in your selected period. Budget limits apply to that period.")}</p></div>;
-}
-export function BudgetForm({ budget, categories, budgets, onClose, onSave }: { budget?: Budget; categories: Category[]; budgets: Budget[]; onClose: () => void; onSave: (b: Budget) => void }) {
+export function BudgetForm({ budget, category, categories, budgets, onClose, onSave }: { budget?: Budget; category?: string; categories: Category[]; budgets: Budget[]; onClose: () => void; onSave: (b: Budget) => void }) {
   const { t, language, currency } = useLanguage();
   const available = categories.filter(c => c.type === 'Expense' && !budgets.some(b => b.category === c.name && b.id !== budget?.id));
-  return <Modal title={budget ? t("Edit budget") : t("Create a budget")} onClose={onClose}><form className="space-y-5" onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); onSave({ id: budget?.id || crypto.randomUUID(), category: String(data.get('category')), limit: Number(data.get('limit')) }); }}><p className="text-sm leading-6 text-muted">{t("Set a realistic spending limit for a category. We’ll calculate your progress from your transactions.")}</p><Field label={t("Category")}><FormSelect name="category" label={t("Category")} defaultValue={budget?.category || available[0]?.name} placeholder={t("No categories available")} options={available.map(c => ({ value: c.name, label: categoryLabel(c.name, language), icon: <CategoryIcon name={c.name} icon={c.icon} small /> }))} /></Field><Field label={t("Budget limit ({currency})", { currency })}><AmountInput name="limit" required defaultValue={budget?.limit} /></Field>{!available.length && <p className="text-sm text-negative">{t("Every expense category already has a budget.")}</p>}<div className="flex justify-end gap-3 border-t border-line pt-5"><Button secondary type="button" onClick={onClose}>{t("Cancel")}</Button><Button disabled={!available.length}>{t("Save budget")}</Button></div></form></Modal>;
+  return <Modal title={budget ? t("Edit budget") : t("Create a budget")} onClose={onClose}><form className="space-y-5" onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); onSave({ id: budget?.id || crypto.randomUUID(), category: String(data.get('category')), limit: Number(data.get('limit')) }); }}><p className="text-sm leading-6 text-muted">{t("Set a realistic spending limit for a category. We’ll calculate your progress from your transactions.")}</p><Field label={t("Category")}><FormSelect name="category" label={t("Category")} defaultValue={budget?.category || (category && available.some(c => c.name === category) ? category : available[0]?.name)} placeholder={t("No categories available")} options={available.map(c => ({ value: c.name, label: categoryLabel(c.name, language), icon: <CategoryIcon name={c.name} icon={c.icon} small /> }))} /></Field><Field label={t("Budget limit ({currency})", { currency })}><AmountInput name="limit" required defaultValue={budget?.limit} /></Field>{!available.length && <p className="text-sm text-negative">{t("Every expense category already has a budget.")}</p>}<div className="flex justify-end gap-3 border-t border-line pt-5"><Button secondary type="button" onClick={onClose}>{t("Cancel")}</Button><Button disabled={!available.length}>{t("Save budget")}</Button></div></form></Modal>;
 }
 export function Categories({ categories, rows, onAdd, onEdit, onDelete, loading = false }: { categories: Category[]; rows: Transaction[]; onAdd: () => void; onEdit: (c: Category) => void; onDelete: (c: Category) => void; loading?: boolean }) {
   const { t } = useLanguage();

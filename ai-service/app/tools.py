@@ -3,6 +3,8 @@ who confirms it before it is executed."""
 from google.genai import types
 
 MAX_ACTIONS = 5
+# Same limit as AIActionTypes.MaxBudgetItems in the backend, which drops anything beyond it.
+MAX_BUDGET_ITEMS = 10
 
 _DATE = {"type": "string", "description": "Date as YYYY-MM-DD. Use FINANCIAL_CONTEXT.today for 'today'."}
 _VND = {"type": "number", "description": "Amount in VND as a whole number, e.g. 45k = 45000, 1tr5 = 1500000."}
@@ -49,6 +51,36 @@ _DECLARATIONS = [
                 "alert_threshold": {"type": "integer", "description": "Percent of the budget that triggers a warning, 1-100. Default 80."},
             },
             "required": ["category", "amount"],
+        },
+    ),
+    types.FunctionDeclaration(
+        name="propose_budgets",
+        description=(
+            "Always call this (instead of writing the amounts as text) whenever you suggest or plan budgets and "
+            "FINANCIAL_CONTEXT.expenseHistory has data. The app shows the proposal as a card where the user selects, "
+            "edits and confirms the categories. Base each amount on expenseHistory; do not call it without history."
+        ),
+        parameters_json_schema={
+            "type": "object",
+            "properties": {
+                "period": {"type": "string", "description": "Month as YYYY-MM. Default: the month of FINANCIAL_CONTEXT.today."},
+                "summary": {"type": "string", "description": "One short sentence (user's language) on what the amounts are based on."},
+                "budgets": {
+                    "type": "array",
+                    "description": f"1 to {MAX_BUDGET_ITEMS} expense categories, each at most once. Skip categories already in FINANCIAL_CONTEXT.budgets.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "category_id": {"type": "string", "description": "categoryId from FINANCIAL_CONTEXT.expenseHistory.categories (or id from categories). Never invent one."},
+                            "category": {"type": "string", "description": "The same category's exact name."},
+                            "amount": _VND,
+                            "reason": {"type": "string", "description": "Short reason citing the history, e.g. 'TB 3 tháng 1,8 tr; giảm 10%'."},
+                        },
+                        "required": ["category_id", "category", "amount", "reason"],
+                    },
+                },
+            },
+            "required": ["budgets"],
         },
     ),
     types.FunctionDeclaration(

@@ -93,12 +93,23 @@ AI không bao giờ tự lưu. Thêm một loại thao tác mới phải sửa *
 3. `backend/Services/Implementations/AIActionService.cs`: `Normalize`, `Resolve`, `ExecuteAsync` (gọi service có sẵn).
 4. `frontend/src/components/ambient-ai/AIActionCard.tsx`: tiêu đề, dòng tóm tắt, form sửa, `missing()`.
 
-Hiện có 5 loại: thêm giao dịch, thêm danh mục, tạo ngân sách, tạo quỹ, góp quỹ. Chưa có sửa hay xóa.
+Hiện có 6 loại: thêm giao dịch, thêm danh mục, tạo ngân sách, tạo quỹ, góp quỹ, **đề xuất nhiều ngân sách**
+(`propose_budgets`). Chưa có sửa hay xóa.
+
+**`propose_budgets`** (một thẻ `BudgetProposalCard`, không phải `AIActionCard`): AI gửi `categoryId` + số tiền + lý do;
+backend bỏ id không thuộc user, danh mục trùng, danh mục đã có ngân sách chồng kỳ (ghi vào `skippedCategories`), rồi
+**tự tính** `averageSpent` / `historyMonths` / `currentSpent` từ DB (không lấy số của model). Khi xác nhận, client chỉ gửi
+`categoryId` + `amount` của mục được chọn; `SelectBudgets` chỉ nhận danh mục có trong đề xuất đã lưu, rồi
+`BudgetService.CreateManyAsync` tạo tất cả trong **một transaction Serializable** (lỗi là rollback toàn bộ, không ghi đè;
+409 nêu tên danh mục đã có). `POST /api/budgets/bulk` dùng cùng hàm đó. Ngữ cảnh gửi Gemini có `categories[].id` và
+`expenseHistory` (3 tháng đầy đủ + tháng hiện tại); không đủ lịch sử thì AI phải giải thích, không gọi hàm.
+Nếu backend phải bỏ hết đề xuất, câu trả lời được thay bằng lời giải thích (`NoBudgetProposal`), không để "xem bên dưới".
 
 ## Quy ước frontend
 
 - Gọi API qua `src/services/` (`http` axios + `getData`); kiểu trong `src/services/types.ts` khớp DTO backend.
-  Streaming dùng `postStream` trong `client.ts` (axios không stream được trong trình duyệt).
+  Streaming dùng `postStream` trong `client.ts` (axios không stream được trong trình duyệt). Giữ axios: đã cân nhắc
+  đổi sang `fetch` (gói đầu nhẹ hơn ~22 KB gzip) nhưng chủ dự án chọn giữ thư viện.
 - **i18n:** chuỗi trong code viết tiếng Anh `t('Save changes')`, bản dịch tiếng Việt trong `src/i18n/vi.ts`.
   **Khóa trùng trong `vi.ts` làm hỏng build (TS1117)**: tìm khóa trước khi thêm.
 - Sau khi một thao tác ngoài trang hiện tại đổi dữ liệu, phát `window` event `mm-finance-changed`
@@ -111,6 +122,22 @@ Hiện có 5 loại: thêm giao dịch, thêm danh mục, tạo ngân sách, t�
 - **Thành phần dùng chung:** ô chọn dùng `Select` / `FormSelect` (`components/Select.tsx`), menu dùng `DropdownMenu`,
   hộp thoại dùng `Modal` (portal ra `body`, `z-[90]`, nằm trên trang AI). Không dùng `<select>` gốc hay
   `window.confirm`.
+- **Phân tích thông minh** (`pages/Intelligence.tsx`): mọi phát hiện tính bằng **luật** trong `lib/insights.ts`
+  (`analyse()`) từ giao dịch + ngân sách thật của user; ngưỡng ghi ở đầu file. Không hiển thị con số hay kết luận do
+  model sinh ra như dữ liệu; phần sinh nội dung chỉ nằm ở trợ lý AI (câu hỏi gợi ý mở trang AI). Dưới 3 giao dịch
+  trong kỳ thì hiện trạng thái "chưa đủ dữ liệu". Mức độ dùng token `alert` (cam) / `caution` (vàng), không dùng
+  `positive`/`negative`. Không ghi chữ kỹ thuật kiểu "mô phỏng", "dữ liệu mẫu" lên giao diện.
+- **Trang Giao dịch** (`pages/Transactions.tsx`, lazy riêng, không nằm trong `Management.tsx`): thẻ tổng và nhận xét
+  theo **kỳ ở đầu trang** (bộ chọn thời gian duy nhất); bộ lọc chỉ áp lên bảng. Biểu đồ 7 ngày / 30 ngày / 6 tháng
+  tính từ mọi giao dịch, kết thúc ở cuối kỳ nhưng không quá hôm nay. Hàm thuần ở `lib/cashflow.ts`. Khoản chi bất
+  thường dùng chung `unusualExpenses()` trong `lib/insights.ts` với trang Phân tích thông minh: sửa luật ở một chỗ.
+  `TransactionTable` trong `components/transactions.tsx` vẫn dùng cho Tổng quan.
+- **Trang Ngân sách** (`pages/Budgets.tsx`, lazy riêng; `BudgetForm` vẫn ở `Management.tsx`): số liệu thuần ở
+  `lib/budgets.ts` (`summarizeBudgets`, `budgetTrend`). Trạng thái: vượt (đỏ) > sắp vượt (cam, ≥90% hoặc theo đà sẽ
+  vượt) > cần chú ý (vàng, ≥ `alertThreshold`) > trong hạn mức (xanh). Dự báo cuối kỳ = chi đến nay ÷ phần kỳ đã qua,
+  chỉ khi đã qua ≥25% kỳ (cùng ngưỡng Phân tích thông minh), làm tròn 1.000 ₫. Thẻ "MoneyMind AI Insight" và đề xuất
+  là **luật**, không do model sinh; chỉ nút "Hỏi AI" gọi trợ lý thật. Không có ngân sách thì không hiện insight.
+- **Tailwind:** có token màu `--color-base`, nên `text-base` là **màu nền** chứ không phải cỡ chữ: dùng `text-[1rem]`.
 - **Đang tải:** dùng skeleton (`components/Skeleton.tsx`: `Skeleton`, `SkeletonText`, `useFadeIn`, `PageSkeleton`), không
   dùng spinner. Skeleton phải cùng kích thước với nội dung thật (đo bằng CLS). Mọi trang dữ liệu đều có skeleton. Cờ tải lần đầu là `data.ready` / `notifications.ready` /
   `savings.ready`; khi chưa sẵn sàng thì không hiện trạng thái rỗng ("Chưa có…").
@@ -129,6 +156,10 @@ Hiện có 5 loại: thêm giao dịch, thêm danh mục, tạo ngân sách, t�
   - Trang nằm sau trang AI dùng `useAmbientAIView()` (chỉ `highlight` + hàm ổn định), không dùng `useAmbientAI()`: context đầy đủ
     đổi mỗi lần mở/đóng AI và làm Overview + biểu đồ render lại giữa hiệu ứng. `Overview` là `memo`; callback từ App truyền xuống
     phải ổn định (`useStableCallback`).
+  - Component dùng chung cho nhiều trang không được đặt trong `pages/Overview.tsx` (ví dụ `components/SummaryCards.tsx`):
+    import từ Overview kéo cả recharts (~110 KB gzip) vào trang không có biểu đồ.
+  - Trang AI (`ambient-ai/AmbientAIPage.tsx`) là chunk lazy, tải khi rê chuột vào nút AI; `AmbientAI.tsx` chỉ giữ phần
+    luôn hiện (nút, `HighlightCard`). Hằng số sự kiện nằm ở `ambient-ai/events.ts`, không import từ `AIActionCard`.
   - `recharts` chỉ import trong component lazy (`components/charts.tsx`, `admin/AdminCharts.tsx`); dữ liệu biểu đồ thuần
     nằm ở `lib/chartData.ts`.
   - Font Inter tự host (`@fontsource-variable/inter`), chỉ khai báo subset latin + vietnamese trong `index.css`, preload
@@ -161,7 +192,11 @@ File liên quan: <đường dẫn>
 Quyết định đã chốt: <ví dụ: AI phải chờ user xác nhận>
 ```
 
-## Trạng thái gần nhất (cập nhật 24/11/2026)
+## Trạng thái gần nhất (cập nhật 26/11/2026)
+
+26/11: làm lại trang Phân tích thông minh (tóm tắt, phát hiện ưu tiên, xu hướng, hỏi AI) và trang Giao dịch (thẻ tổng
+có xu hướng nhỏ, biểu đồ dòng tiền, bộ lọc kết hợp, nhóm theo ngày, hộp chi tiết, nhận xét giao dịch) và trang Ngân
+sách (AI insight, 4 thẻ tổng, xu hướng + phân bổ, đề xuất, thẻ theo danh mục); lời chào theo giờ thật.
 
 Đã xong và đã kiểm tra (build + thử trên trình duyệt): trang Tài khoản; góp quỹ lấy tiền từ tài khoản và nhắc góp quỹ
 hằng tháng (migration `AddGoalContributionsAndReminders`); thống kê giao dịch tổng hợp và quản lý danh mục mặc định cho

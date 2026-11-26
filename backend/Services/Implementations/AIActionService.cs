@@ -44,6 +44,12 @@ public sealed class AIActionService(
         foreach (var proposal in accepted)
         {
             var payload = Normalize(proposal.Name, proposal.Args, lookup);
+            if (proposal.Name == AIActionTypes.ProposeBudgets)
+            {
+                payload = await PrepareBudgetProposalAsync(userId, payload, lookup, cancellationToken);
+                // Nothing left after the checks (unknown categories, budgets that already exist): no empty card.
+                if (payload.Budgets is not { Count: > 0 }) continue;
+            }
             var entity = new AIAction { UserId = userId, MessageId = messageId, ActionType = proposal.Name };
             await WritePayloadAsync(entity, payload, cancellationToken);
             db.AIActions.Add(entity);
@@ -91,9 +97,13 @@ public sealed class AIActionService(
         try
         {
             var lookup = await LoadLookupAsync(userId, cancellationToken);
-            // Names are matched again: a category proposed in the same reply may have been created since.
-            payload = Resolve(action.ActionType, edited ?? await ReadPayloadAsync(action, cancellationToken), lookup);
-            resultId = await ExecuteAsync(userId, action.ActionType, payload, lookup, cancellationToken);
+            var stored = await ReadPayloadAsync(action, cancellationToken);
+            payload = action.ActionType == AIActionTypes.ProposeBudgets
+                // The user may only keep, drop and re-price the proposed categories; everything else stays as stored.
+                ? SelectBudgets(stored, edited, lookup)
+                // Names are matched again: a category proposed in the same reply may have been created since.
+                : Resolve(action.ActionType, edited ?? stored, lookup);
+            (resultId, payload) = await ExecuteAsync(userId, action.ActionType, payload, lookup, cancellationToken);
         }
         catch
         {
@@ -127,7 +137,8 @@ public sealed class AIActionService(
             ? new ConflictException("Thao tác này đã được xử lý.")
             : new NotFoundException("Không tìm thấy thao tác.");
 
-    private async Task<Guid> ExecuteAsync(Guid userId, string type, AIActionPayload p, Lookup lookup,
+    /// <summary>Carries the action out. Returns the created record's id and the payload as saved.</summary>
+    private async Task<(Guid Id, AIActionPayload Payload)> ExecuteAsync(Guid userId, string type, AIActionPayload p, Lookup lookup,
         CancellationToken cancellationToken)
     {
         switch (type)
@@ -144,13 +155,13 @@ public sealed class AIActionService(
                     // Same time of day the web app uses for a date-only transaction.
                     (p.Date ?? lookup.Today).ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc),
                     TransactionSource.AIDraft);
-                return (await transactions.CreateAsync(userId, request, cancellationToken)).Id;
+                return ((await transactions.CreateAsync(userId, request, cancellationToken)).Id, p);
             }
             case AIActionTypes.CreateCategory:
             {
                 var request = new UpsertCategoryRequest(RequireText(p.Name, 100, "Hãy nhập tên danh mục."),
                     RequireType(p.Type), null, null);
-                return (await categories.CreateAsync(userId, request, cancellationToken)).Id;
+                return ((await categories.CreateAsync(userId, request, cancellationToken)).Id, p);
             }
             case AIActionTypes.CreateBudget:
             {
@@ -162,20 +173,33 @@ public sealed class AIActionService(
                     p.StartDate ?? throw new BadRequestException("Hãy chọn ngày bắt đầu."),
                     p.EndDate ?? throw new BadRequestException("Hãy chọn ngày kết thúc."),
                     threshold);
-                return (await budgets.CreateAsync(userId, request, cancellationToken)).Id;
+                return ((await budgets.CreateAsync(userId, request, cancellationToken)).Id, p);
+            }
+            case AIActionTypes.ProposeBudgets:
+            {
+                var (start, end) = BudgetPeriod.Require(p.Period, lookup.Today);
+                var items = p.Budgets ?? [];
+                if (items.Count == 0) throw new BadRequestException("Hãy chọn ít nhất một danh mục.");
+                var requests = items.Select(i => new UpsertBudgetRequest(
+                    i.CategoryId ?? throw new BadRequestException("Hãy chọn danh mục chi tiêu."),
+                    RequireAmount(i.Amount), start, end)).ToList();
+                // One transaction: every selected budget is created, or none.
+                var created = await budgets.CreateManyAsync(userId, requests, cancellationToken);
+                var saved = items.Select(i => i with { BudgetId = created.First(c => c.CategoryId == i.CategoryId).Id }).ToList();
+                return (created[0].Id, p with { Budgets = saved });
             }
             case AIActionTypes.CreateSavingsGoal:
             {
                 var request = new UpsertGoalRequest(RequireText(p.Name, 150, "Hãy nhập tên quỹ."),
                     RequireAmount(p.TargetAmount), p.Deadline);
-                return (await goals.CreateAsync(userId, request, cancellationToken)).Id;
+                return ((await goals.CreateAsync(userId, request, cancellationToken)).Id, p);
             }
             case AIActionTypes.ContributeToGoal:
             {
                 var goalId = p.GoalId ?? throw new BadRequestException("Hãy chọn quỹ tiết kiệm.");
                 await goals.ContributeAsync(userId, goalId, new GoalContributionRequest(RequireAmount(p.Amount), p.AccountId),
                     cancellationToken);
-                return goalId;
+                return (goalId, p);
             }
             default:
                 throw new BadRequestException("Loại thao tác không được hỗ trợ.");
@@ -210,8 +234,110 @@ public sealed class AIActionService(
             Amount: Num(args, "amount"),
             GoalName: Str(args, "goal"),
             AccountName: Str(args, "account")), lookup),
+        AIActionTypes.ProposeBudgets => NormalizeBudgetProposal(args, lookup),
         _ => new AIActionPayload()
     };
+
+    /// <summary>
+    /// The model's budget list, kept only where it names one of the user's active expense categories (by id, or by
+    /// exact name as a fallback). Unknown ids, duplicates and missing or invalid amounts are dropped: the AI cannot add
+    /// a category or an amount the user did not get from it in the card.
+    /// </summary>
+    private static AIActionPayload NormalizeBudgetProposal(JsonElement args, Lookup lookup)
+    {
+        var expense = lookup.Categories.Where(c => c.Type == CategoryType.Expense).ToList();
+        var thisMonth = new DateOnly(lookup.Today.Year, lookup.Today.Month, 1);
+        // A period that is missing, malformed, in the past or too far ahead becomes the current month.
+        var start = BudgetPeriod.TryParse(Str(args, "period"), out var parsed, out _)
+            && parsed >= thisMonth && parsed <= thisMonth.AddMonths(BudgetPeriod.MaxMonthsAhead) ? parsed : thisMonth;
+
+        var items = new List<AIBudgetProposalItem>();
+        if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty("budgets", out var list) && list.ValueKind == JsonValueKind.Array)
+            foreach (var element in list.EnumerateArray())
+            {
+                if (items.Count == AIActionTypes.MaxBudgetItems) break;
+                var id = Guid.TryParse(Str(element, "category_id"), out var g) ? g : (Guid?)null;
+                var category = (id is { } wanted ? expense.FirstOrDefault(c => c.Id == wanted) : null) ?? Match(expense, Str(element, "category"));
+                if (category is null || items.Any(i => i.CategoryId == category.Id)) continue;
+                var amount = Num(element, "amount");
+                if (amount is not > 0 || amount > MaxAmount) continue;
+                items.Add(new AIBudgetProposalItem(category.Id, category.Name, Math.Round(amount.Value, 0), Clip(Str(element, "reason"), 200)));
+            }
+
+        return new AIActionPayload(Period: BudgetPeriod.Format(start), Summary: Clip(Str(args, "summary"), 300), Budgets: items);
+    }
+
+    /// <summary>
+    /// Leaves out categories that already have a budget overlapping the period (nothing is created twice or overwritten),
+    /// then adds what each amount can be compared with: the category's average over the last full months with any
+    /// spending (up to 3) and its spending so far this month, both from the database.
+    /// </summary>
+    private async Task<AIActionPayload> PrepareBudgetProposalAsync(Guid userId, AIActionPayload p, Lookup lookup,
+        CancellationToken cancellationToken)
+    {
+        var items = p.Budgets ?? [];
+        if (items.Count == 0 || !BudgetPeriod.TryParse(p.Period, out var start, out var end)) return p with { Budgets = [] };
+
+        var ids = items.Select(i => i.CategoryId!.Value).ToList();
+        var taken = await db.Budgets.AsNoTracking()
+            .Where(b => b.UserId == userId && ids.Contains(b.CategoryId) && b.StartDate <= end && b.EndDate >= start)
+            .Select(b => b.CategoryId).Distinct().ToListAsync(cancellationToken);
+        // Named on the card, so the user knows why a category the AI mentioned is not in the list.
+        var skipped = items.Where(i => taken.Contains(i.CategoryId!.Value)).Select(i => i.CategoryName!).ToList();
+        items = items.Where(i => !taken.Contains(i.CategoryId!.Value)).ToList();
+        p = p with { SkippedCategories = skipped.Count > 0 ? skipped : null };
+        if (items.Count == 0) return p with { Budgets = items };
+
+        var thisMonth = new DateOnly(lookup.Today.Year, lookup.Today.Month, 1);
+        var from = DateRange.StartOfDay(thisMonth.AddMonths(-3));
+        var to = DateRange.StartOfDay(thisMonth.AddMonths(1));
+        var rows = await db.Transactions.AsNoTracking()
+            .Where(t => t.UserId == userId && t.Type == TransactionType.Expense && t.TransactionDate >= from && t.TransactionDate < to)
+            .GroupBy(t => new { t.CategoryId, t.TransactionDate.Year, t.TransactionDate.Month })
+            .Select(g => new { g.Key.CategoryId, Month = g.Key.Year * 12 + g.Key.Month, Amount = g.Sum(t => t.Amount) })
+            .ToListAsync(cancellationToken);
+        var current = thisMonth.Year * 12 + thisMonth.Month;
+        // Full months in which the user recorded any expense: someone who started last month has one month, not three.
+        var months = rows.Where(r => r.Month < current).Select(r => r.Month).Distinct().Count();
+
+        return p with
+        {
+            Budgets = items.Select(i =>
+            {
+                var mine = rows.Where(r => r.CategoryId == i.CategoryId).ToList();
+                return i with
+                {
+                    AverageSpent = months > 0 ? Math.Round(mine.Where(r => r.Month < current).Sum(r => r.Amount) / months, 0) : null,
+                    HistoryMonths = months,
+                    CurrentSpent = mine.Where(r => r.Month == current).Sum(r => r.Amount),
+                };
+            }).ToList()
+        };
+    }
+
+    /// <summary>
+    /// The categories the user kept, with their (possibly edited) amounts. Only categories from the stored proposal are
+    /// accepted, each once; names, reasons, history figures and the period come from the stored proposal.
+    /// </summary>
+    private static AIActionPayload SelectBudgets(AIActionPayload stored, AIActionPayload? edited, Lookup lookup)
+    {
+        var proposed = stored.Budgets ?? [];
+        var chosen = edited is null ? proposed : edited.Budgets ?? [];
+        if (chosen.Count == 0) throw new BadRequestException("Hãy chọn ít nhất một danh mục.");
+
+        var result = new List<AIBudgetProposalItem>(chosen.Count);
+        foreach (var item in chosen)
+        {
+            var original = proposed.FirstOrDefault(o => o.CategoryId == item.CategoryId)
+                ?? throw new BadRequestException("Chỉ tạo được ngân sách cho các danh mục trong đề xuất.");
+            if (result.Any(r => r.CategoryId == item.CategoryId))
+                throw new BadRequestException($"Danh mục {original.CategoryName} bị trùng.");
+            if (!lookup.Categories.Any(c => c.Id == item.CategoryId && c.Type == CategoryType.Expense))
+                throw new BadRequestException($"Danh mục {original.CategoryName} không còn dùng được.");
+            result.Add(original with { Amount = item.Amount });
+        }
+        return stored with { Budgets = result };
+    }
 
     /// <summary>Fills missing ids by matching names to the user's records. Ids already set are kept.</summary>
     private static AIActionPayload Resolve(string type, AIActionPayload p, Lookup lookup)

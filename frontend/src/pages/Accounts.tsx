@@ -65,7 +65,7 @@ export default function AccountsPage({ accounts, archived, hidden, setHidden, on
     <Card className="!border-brand/25 !bg-balance relative overflow-hidden p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="flex items-center gap-2 text-sm text-muted"><Wallet className="size-4" aria-hidden="true" />{t('Total across accounts')}
+          <p className="flex items-center gap-2 text-sm text-muted"><Wallet className="size-4" aria-hidden="true" />{t('Total assets')}
             <button type="button" onClick={() => setHidden(!hidden)} aria-pressed={!hidden} aria-label={t(hidden ? 'Show account balance' : 'Hide account balance')} title={t(hidden ? 'Show account balance' : 'Hide account balance')}
               className="flex size-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-line hover:text-ink focus-visible:ring-2 focus-visible:ring-brand">
               {hidden ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}

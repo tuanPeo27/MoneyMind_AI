@@ -19,3 +19,6 @@ export function getTotals(rows: Transaction[]): Totals {
 export const BalanceContext = createContext<{ current: number; previous: number } | null>(null);
 
 export const percentChange = (current: number, previous: number) => previous ? (current - previous) / previous * 100 : 0;
+
+/** Share of a budget used, as shown on budget cards: "85%", or ">999%" when far over (or the limit is 0). */
+export const usedPercent = (value: number) => !Number.isFinite(value) || value > 999 ? '>999%' : `${Math.round(value)}%`;

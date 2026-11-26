@@ -59,6 +59,13 @@ public sealed record BudgetResponse(
     bool IsOverThreshold,
     bool IsExceeded);
 
+/// <param name="Budgets">The created budgets, with their ids.</param>
+public sealed record BulkCreateBudgetsResponse(
+    string Period,
+    DateOnly StartDate,
+    DateOnly EndDate,
+    IReadOnlyList<BudgetResponse> Budgets);
+
 public sealed record FinancialGoalResponse(
     Guid Id,
     string Name,

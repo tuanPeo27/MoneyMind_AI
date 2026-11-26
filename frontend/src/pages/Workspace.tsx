@@ -5,7 +5,8 @@ import { Badge, Button, Card, SectionHead, fieldClass } from '../components/ui';
 import { Avatar } from '../components/Avatar';
 import { type Profile } from '../components/layout/UserLayout';
 import { type DemoRole } from '../routing';
-import { SummaryCards, type Totals } from './Overview';
+import { type Totals } from './Overview';
+import { SummaryCards } from '../components/SummaryCards';
 import { formatPhone, hasInvalidPhoneChars, normalizePhone } from '../lib/phone';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

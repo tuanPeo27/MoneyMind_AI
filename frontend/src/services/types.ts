@@ -90,7 +90,15 @@ export type UpsertGoalRequest = { name: string; targetAmount: number; deadline?:
 export type AIConversationResponse = {
   id: string; title: string; createdAt: string; updatedAt: string; isArchived: boolean;
 };
-export type AIActionType = 'create_transaction' | 'create_category' | 'create_budget' | 'create_savings_goal' | 'contribute_to_goal';
+export type AIActionType = 'create_transaction' | 'create_category' | 'create_budget' | 'create_savings_goal' | 'contribute_to_goal' | 'propose_budgets';
+/**
+ * One category of a `propose_budgets` card. Amount and reason come from the AI; averageSpent, historyMonths and
+ * currentSpent are computed by the backend from the user's transactions. budgetId is set once it has been created.
+ */
+export type AIBudgetProposalItem = {
+  categoryId?: string | null; categoryName?: string | null; amount?: number | null; reason?: string | null;
+  averageSpent?: number | null; historyMonths?: number | null; currentSpent?: number | null; budgetId?: string | null;
+};
 export type AIActionStatus = 'Pending' | 'Confirmed' | 'Cancelled';
 /**
  * Details of a change the AI proposed. Each type uses only its own fields. Names are what the AI said; ids are the
@@ -102,6 +110,10 @@ export type AIActionPayload = {
   date?: string | null; description?: string | null; name?: string | null;
   startDate?: string | null; endDate?: string | null; alertThreshold?: number | null;
   targetAmount?: number | null; deadline?: string | null; goalId?: string | null; goalName?: string | null;
+  /** propose_budgets: the month ("yyyy-MM"), the AI's one-line basis, and the categories (on confirm: the kept ones). */
+  period?: string | null; summary?: string | null; budgets?: AIBudgetProposalItem[] | null;
+  /** propose_budgets: categories left out because they already have a budget in the period. */
+  skippedCategories?: string[] | null;
 };
 export type AIActionResponse = {
   id: string; type: AIActionType; status: AIActionStatus; payload: AIActionPayload;

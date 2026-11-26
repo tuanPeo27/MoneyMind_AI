@@ -7,7 +7,7 @@ import {
 import { Button, Field, Modal, fieldClass } from './components/ui';
 import { Select } from './components/Select';
 import { PageSkeleton } from './components/Skeleton';
-import { TransactionForm } from './components/transactions';
+import { Greeting } from './components/Greeting';
 import { BalanceContext, getTotals } from './lib/totals';
 import { setAmountsHidden } from './lib/currency';
 import { formatPhone } from './lib/phone';
@@ -20,7 +20,7 @@ import { useRoute, pagePaths, type DemoRole } from './routing';
 import { LanguageProvider, useLanguage } from './i18n';
 import { AmbientAIProvider, useAmbientAI } from './components/ambient-ai/AmbientAIProvider';
 import { AmbientShell, AmbientAIOverlay, AmbientAIFab, AssistantHome } from './components/ambient-ai/AmbientAI';
-import { FINANCE_CHANGED_EVENT } from './components/ambient-ai/AIActionCard';
+import { FINANCE_CHANGED_EVENT } from './components/ambient-ai/events';
 import { type FinancialContext, type Highlight } from './components/ambient-ai/mockAssistant';
 import { AuthPages, authPaths, useErrorText } from './pages/Auth';
 import { useSession } from './lib/auth';
@@ -33,9 +33,13 @@ import type { AdminUserStats } from './admin/AdminPages';
 const loadMotionFeatures = () => import('./lib/motionFeatures').then(module => module.default);
 const loadOverview = () => import('./pages/Overview');
 const loadManagement = () => import('./pages/Management');
+const loadTransactionForm = () => import('./components/transactions');
+const TransactionForm = lazy(() => loadTransactionForm().then(m => ({ default: m.TransactionForm })));
 const Overview = lazy(loadOverview);
-const Transactions = lazy(() => loadManagement().then(m => ({ default: m.Transactions })));
-const Budgets = lazy(() => loadManagement().then(m => ({ default: m.Budgets })));
+const loadTransactions = () => import('./pages/Transactions');
+const Transactions = lazy(() => loadTransactions().then(m => ({ default: m.Transactions })));
+const loadBudgets = () => import('./pages/Budgets');
+const Budgets = lazy(() => loadBudgets().then(m => ({ default: m.Budgets })));
 const Categories = lazy(() => loadManagement().then(m => ({ default: m.Categories })));
 const Reports = lazy(() => loadManagement().then(m => ({ default: m.Reports })));
 const BudgetForm = lazy(() => loadManagement().then(m => ({ default: m.BudgetForm })));
@@ -52,7 +56,8 @@ const AdminApp = lazy(() => import('./admin/AdminApp').then(m => ({ default: m.A
 function usePrefetchPages(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
-    const prefetch = () => { void loadOverview(); void loadManagement(); void import('./pages/Accounts'); };
+    // Not Overview: its chunk brings recharts (~110 KB gzip), too heavy to fetch on another page's first load.
+    const prefetch = () => { void loadManagement(); void loadTransactions(); void loadBudgets(); void import('./pages/Accounts'); void loadTransactionForm(); };
     // Wait for the page's own resources (load event), then for an idle moment, so this never competes with the
     // first screen. requestIdleCallback is missing in older Safari: fall back to a short timeout.
     let idleId: number | undefined, timerId: ReturnType<typeof setTimeout> | undefined;
@@ -83,7 +88,7 @@ function PageLoading() {
 
 type Dialog =
   | { kind: 'transaction'; value?: Transaction }
-  | { kind: 'budget'; value?: Budget }
+  | { kind: 'budget'; value?: Budget; category?: string }
   | { kind: 'category'; value?: Category }
   | { kind: 'delete'; title: string; text: string; action: () => void }
   | { kind: 'date' } | null;
@@ -281,7 +286,6 @@ function Workspace() {
   // First load of the user's data: pages draw skeletons instead of empty states. An error ends it (the alert shows).
   const workspaceLoading = !data.ready && data.error == null;
   const nowMonth = new Date().toLocaleDateString(locale, { month: 'long', year: 'numeric' });
-  const firstName = profile.name.trim().split(' ').pop() || 'Chương';
   return <div className="min-h-screen overflow-x-clip font-sans text-sm text-ink antialiased">
     <AmbientShell>
       {admin && role === 'ADMIN' ? <Suspense fallback={<PageLoading />}><AdminApp
@@ -297,8 +301,10 @@ function Workspace() {
           <div>
             <p className="mb-2 text-xs text-muted">{new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
             <h1 className="text-[27px] font-semibold tracking-[-0.045em]">
-              {page === 'Overview' ? <>{t("Good morning,") + ' '}{firstName}<span className="ml-1 text-muted">.</span></> : page === 'Budgets' ? t("Budget Management") : page === 'Reports' ? t("Reports & Analytics") : t(page)}
+              {page === 'Overview' ? <Greeting fullName={profile.name} timeZone={session?.user.timeZoneId} /> : page === 'Reports' ? t("Reports & Analytics") : t(page)}
             </h1>
+            {page === 'Transactions' && <p className="mt-1.5 text-sm text-muted">{t('Track every flow of your money.')}</p>}
+            {page === 'Budgets' && <p className="mt-1.5 text-sm text-muted">{t('Track and optimise your spending with AI.')}</p>}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {page !== 'Settings' && page !== 'Accounts' && page !== 'Savings Funds' && <Select
@@ -314,6 +320,7 @@ function Workspace() {
               }))}
             />}
             {period === 'Custom' && page !== 'Settings' && page !== 'Accounts' && page !== 'Savings Funds' && <button className="min-h-11 text-xs text-muted hover:text-ink" onClick={() => setDialog({ kind: 'date' })}>{t("Edit dates")}</button>}
+            {page === 'Transactions' && <Button onClick={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }}><Plus aria-hidden="true" className="size-4" />{t('Add transaction')}</Button>}
           </div>
         </div>
         {data.error != null && <p role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-negative/30 bg-negative/10 p-4 text-sm text-negative"><span>{errorText(data.error)}</span><Button secondary onClick={() => void data.reload()}>{t('Try again')}</Button></p>}
@@ -344,9 +351,18 @@ function Workspace() {
           }}
           onStatus={(goal, status) => attempt(() => savings.setStatus(goal.id, status), status === 'Active' ? 'Savings fund reopened.' : 'Savings fund cancelled.')}
           onDelete={goal => attempt(async () => { await savings.remove(goal.id); await data.refreshAccounts(); }, 'Savings fund deleted.')} />}
-        {page === 'Transactions' && <Transactions loading={workspaceLoading} onManageCategories={() => navigate('Categories')} rows={filtered} categories={categories} search={search} setSearch={setSearch} onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} onEdit={editTransaction} onDelete={deleteTransaction} onExport={exportRows} />}
-        {page === 'Budgets' && <Budgets loading={workspaceLoading} budgets={budgets} rows={filtered} categories={categories}
+        {page === 'Transactions' && <Transactions loading={workspaceLoading} failed={data.error != null} onRetry={() => void data.reload()}
+          rows={filtered} allRows={rows} previous={previous} categories={categories} accounts={data.accountNames} range={range}
+          search={search} setSearch={setSearch} onManageCategories={() => navigate('Categories')}
+          onAdd={() => { setSelection(undefined); setDialog({ kind: 'transaction' }); }} onEdit={editTransaction} onDelete={deleteTransaction} onExport={exportRows}
+          onAsk={(question, transaction) => { setSelection(transaction ? { transaction, category: transaction.category } : undefined); openAssistant(question); }} />}
+        {page === 'Budgets' && <Budgets loading={workspaceLoading} failed={data.error != null} onRetry={() => void data.reload()}
+          budgets={budgets} rows={filtered} allRows={rows} previous={previous} categories={categories} range={range}
           onAdd={() => setDialog({ kind: 'budget' })}
+          onCreateBudget={category => setDialog({ kind: 'budget', category })}
+          onViewTransactions={category => { navigate('Transactions'); setSearch(category); }}
+          onOpenInsights={() => navigate('Smart Insights')}
+          onAsk={question => { setSelection(undefined); openAssistant(question); }}
           onEdit={b => { setSelection({ category: b.category }); setDialog({ kind: 'budget', value: b }); }}
           onDelete={b => setDialog({
             kind: 'delete', title: 'Delete this budget?', text: t('Remove the {name} budget? Transactions will not be affected.', { name: b.category }),
@@ -367,7 +383,11 @@ function Workspace() {
         />}
         {page === 'Reports' && <Reports loading={workspaceLoading} rows={filtered} allRows={rows} previous={previous} categories={categories} onExport={exportRows} hidden={hidden} />}
         {page === 'AI Financial Assistant' && <AssistantHome />}
-        {page === 'Smart Insights' && <Insights loading={workspaceLoading} rows={filtered} previous={previous} budgets={budgets} onNavigate={next => next === 'AI Financial Assistant' ? openAssistant() : navigate(next)} />}
+        {page === 'Smart Insights' && <Insights loading={workspaceLoading} failed={data.error != null} updatedAt={data.updatedAt} rows={filtered} allRows={rows} previous={previous}
+          budgets={budgets} categories={categories} range={range} onNavigate={navigate} onAsk={openAssistant}
+          onViewTransactions={query => { navigate('Transactions'); setSearch(query); }}
+          onEditTransaction={editTransaction}
+          onCreateBudget={category => setDialog({ kind: 'budget', category })} />}
         {page === 'Workspace' && <WorkspacePage profile={profile} onSave={async p => {
           if (await attempt(() => usersApi.updateProfile({ fullName: p.name, phoneNumber: p.phone || null }), 'Profile saved.')) setProfile({ ...storedProfile, avatar: p.avatar });
         }} totals={getTotals(filtered)} previous={getTotals(previous)} hidden={hidden} setHidden={setHidden} signedIn role={role} />}
@@ -376,18 +396,18 @@ function Workspace() {
         </Suspense>
       </UserLayout></BalanceContext.Provider>}
     </AmbientShell>
+    <Suspense fallback={null}>
     {dialog?.kind === 'transaction' && <TransactionForm transaction={dialog.value} categories={categories} accounts={data.accountNames} onClose={close}
       onAnalyze={dialog.value ? () => { close(); openAssistant('Explain this selected transaction.'); } : undefined}
       onSave={async t => {
         const editing = !!dialog.value;
         let saved: Transaction | undefined;
-        if (!await attempt(async () => { saved = await data.saveTransaction(t, editing); }, 'Transaction saved.')) return;
+        if (!await attempt(async () => { saved = await data.saveTransaction(t, editing); }, editing ? 'Transaction updated.' : 'Transaction added.')) return;
         if (saved) setSelection({ transaction: saved, category: saved.category });
         close();
       }}
     />}
-    <Suspense fallback={null}>
-    {dialog?.kind === 'budget' && <BudgetForm budget={dialog.value} categories={categories} budgets={budgets} onClose={close} onSave={async b => {
+    {dialog?.kind === 'budget' && <BudgetForm budget={dialog.value} category={dialog.category} categories={categories} budgets={budgets} onClose={close} onSave={async b => {
       const editing = !!dialog.value;
       if (await attempt(() => data.saveBudget({ ...dialog.value, ...b }, editing), 'Budget saved.')) close();
     }} />}

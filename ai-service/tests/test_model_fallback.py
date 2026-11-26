@@ -178,6 +178,31 @@ class StreamingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply.actions[0].args["amount"], 45000)
         self.assertEqual(reply.content, "")
 
+    async def test_budget_proposal_is_one_structured_action_with_its_items(self):
+        args = {"period": "2026-11", "summary": "Dựa trên 3 tháng gần nhất", "budgets": [
+            {"category_id": "c1", "category": "Ăn uống", "amount": 3000000, "reason": "TB 3 tháng 3,2 tr"},
+            {"category_id": "c2", "category": "Mua sắm", "amount": 1500000, "reason": "TB 3 tháng 1,7 tr"},
+        ]}
+        service, _, _ = make_service({"primary": [chunk(part("Đề xuất của mình:"), part(call=("propose_budgets", args)))],
+                                      "second": answer(), "third": answer()})
+        events = [e async for e in service.stream(REQUEST)]
+        actions = [e for e in events if e["type"] == "action"]
+        self.assertEqual(len(actions), 1, "the whole proposal is a single action")
+        self.assertEqual(actions[0]["name"], "propose_budgets")
+        self.assertEqual([b["category_id"] for b in actions[0]["args"]["budgets"]], ["c1", "c2"])
+        # The stream format is unchanged: text still arrives as delta events, the proposal never inside the text.
+        text = "".join(e["text"] for e in events if e["type"] == "delta")
+        self.assertEqual(text, "Đề xuất của mình:")
+        self.assertNotIn("category_id", text)
+
+    def test_budget_proposal_tool_is_declared_and_only_proposes(self):
+        from app.tools import ACTION_NAMES, MAX_BUDGET_ITEMS, TOOLS
+        self.assertIn("propose_budgets", ACTION_NAMES)
+        declaration = next(d for d in TOOLS[0].function_declarations if d.name == "propose_budgets")
+        items = declaration.parameters_json_schema["properties"]["budgets"]["items"]
+        self.assertEqual(set(items["required"]), {"category_id", "category", "amount", "reason"})
+        self.assertEqual(MAX_BUDGET_ITEMS, 10, "must match AIActionTypes.MaxBudgetItems in the backend")
+
     async def test_thought_parts_are_never_shown(self):
         service, _, _ = make_service({"primary": [chunk(part("secret plan", thought=True), part("Trả lời"))], "second": answer(), "third": answer()})
         self.assertEqual((await service.chat(REQUEST)).content, "Trả lời")

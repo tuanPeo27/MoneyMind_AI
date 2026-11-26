@@ -1,0 +1,214 @@
+/**
+ * The AI page itself (surface, conversation, input, action cards). Loaded on demand by AmbientAIOverlay in
+ * AmbientAI.tsx: when the pointer or focus reaches the AI button, when the app is idle, or when the page opens.
+ * Keeping it out of the first bundle saves the chat UI and the AI action forms on every page load.
+ */
+import { useLanguage } from '../../i18n';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { AnimatePresence, m, useReducedMotion } from 'framer-motion';
+import { Sparkles, ArrowUp, ArrowUpRight, ArrowLeft, Plus, ShieldCheck, ChevronRight, History, Trash2 } from 'lucide-react';
+import { useAmbientAI, type AIMessageData } from './AmbientAIProvider';
+import { AIActionCard } from './AIActionCard';
+import { BudgetProposalCard } from './BudgetProposalCard';
+import { useSession, type AIUsageResponse } from '../../services';
+import { Button, IconButton, Modal } from '../ui';
+import { playAiIntro } from './aiIntro';
+import { AI_CLOSED_EVENT } from './AmbientAI';
+/** True when this page load started on the AI page itself (a link or a refresh of /assistant). */
+const OPENED_BY_LINK = window.location.pathname === '/assistant';
+export function AIInput({ onSubmit, busy = false, initial = '', className = '' }: { onSubmit: (text: string) => void; busy?: boolean; initial?: string; className?: string }) {
+  const { t } = useLanguage();
+  const [input, setInput] = useState(initial);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { ref.current?.focus(); }, []);
+  return <form onSubmit={e => { e.preventDefault(); if (input.trim() && !busy) { onSubmit(input); setInput(''); } }} className={`glass-strong flex items-center gap-3 rounded-2xl !border-ai-to/35 px-4 py-2 transition-[box-shadow,border-color] duration-300 focus-within:!border-ai-to/70 focus-within:ring-4 focus-within:ring-ai-to/15 ${className}`}>
+    <Sparkles className="h-5 w-5 shrink-0 text-ai" aria-hidden="true" />
+    <input ref={ref} aria-label={t("Ask your financial assistant")} value={input} onChange={e => setInput(e.target.value)} maxLength={1500} placeholder={t("Ask anything about your money...")} className="min-h-12 min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted" />
+    <button type="submit" disabled={!input.trim() || busy} aria-label={t("Send message")} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-ai-from via-ai-to to-ai-warm text-on-ai shadow-md shadow-ai-to/35 transition-[scale,filter,background-color] duration-300 hover:brightness-110 active:scale-90 focus-visible:ring-2 focus-visible:ring-ai disabled:cursor-not-allowed disabled:bg-ink/10 disabled:bg-none disabled:text-ink/60 disabled:shadow-none"><ArrowUp className="h-5 w-5 shrink-0" strokeWidth={2.5} aria-hidden="true" /></button>
+  </form>;
+}
+function PromptChips({ limit = 4 }: { limit?: number }) {
+  const { prompts, send, busy } = useAmbientAI();
+  return <div className="flex flex-wrap justify-center gap-2">{prompts.slice(0, limit).map(prompt => <button key={prompt} onClick={() => send(prompt)} disabled={busy} className="flex min-h-11 items-center gap-2 glass rounded-xl px-3.5 py-2 text-left text-sm text-muted transition-[translate,box-shadow,color] duration-300 hover:-translate-y-0.5 hover:text-ink hover:shadow-[0_8px_30px_-12px_var(--color-ai-to)] focus-visible:ring-2 focus-visible:ring-ai disabled:cursor-not-allowed motion-reduce:transform-none">{prompt}<ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /></button>)}</div>;
+}
+export function AIMessage({ message }: { message: AIMessageData }) {
+  const { t } = useLanguage();
+  const { inspect, confirmAction, cancelAction } = useAmbientAI();
+  // Until the first words arrive the "reading your financial context" placeholder stands in for this message.
+  if (message.streaming && !message.text) return null;
+  return <article className={`motion-safe:animate-[message-in_250ms_ease-out] ${message.role === 'user' ? 'ml-auto max-w-[90%] glass rounded-2xl px-4 py-3' : 'space-y-3 py-3'}`}>
+    <div className="flex items-center gap-2 text-xs text-muted">{message.role === 'assistant' && <Sparkles className="h-3.5 w-3.5 shrink-0 text-ai" aria-hidden="true" />}<span>{message.role === 'user' ? t("You") : 'MoneyMind · Gemini'}</span><span className="ml-auto">{message.time}</span></div>
+    <p className="break-words text-sm leading-7 text-ink">{message.text}</p>
+    {message.metrics && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{message.metrics.map(metric => <div key={metric.label} className="glass rounded-xl px-4 py-3"><p className="text-xs text-muted">{metric.label}</p><p className="mt-1 text-[1rem] font-semibold tabular-nums">{metric.value}</p></div>)}</div>}
+    {message.actions?.length ? <div className="space-y-2">{message.actions.map(action => action.type === 'propose_budgets'
+      // Several budgets in one card: pick, edit and create them together.
+      ? <BudgetProposalCard key={action.id} action={action}
+        onConfirm={payload => confirmAction(message.id, action.id, payload)} onCancel={() => cancelAction(message.id, action.id)} />
+      : <AIActionCard key={action.id} action={action}
+        onConfirm={payload => confirmAction(message.id, action.id, payload)} onCancel={() => cancelAction(message.id, action.id)} />)}</div> : null}
+    {message.role === 'assistant' && !message.streaming && message.highlight && <button onClick={() => inspect(message.highlight!)} className="flex min-h-11 items-center gap-2 text-sm font-medium text-ai hover:text-ink focus-visible:ring-2 focus-visible:ring-ai">{t("Show me in my dashboard")}<ArrowUpRight className="h-4 w-4 shrink-0" /></button>}
+    {message.role === 'assistant' && !message.streaming && message.context && <p className="text-xs text-muted">{t(message.context)}</p>}
+  </article>;
+}
+export function EdgeGlow() {
+  return <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
+    <div className="absolute -left-[12%] -top-[18%] h-[62vmax] w-[62vmax] rounded-full bg-indigo-400/30 blur-[110px] motion-safe:animate-[ai-aurora-a_16s_ease-in-out_infinite] dark:bg-indigo-500/25" />
+    <div className="absolute -bottom-[22%] -right-[10%] h-[56vmax] w-[56vmax] rounded-full bg-purple-400/25 blur-[110px] motion-safe:animate-[ai-aurora-b_19s_ease-in-out_infinite] dark:bg-purple-500/20" />
+    <div className="absolute left-1/2 top-1/3 h-[34vmax] w-[34vmax] -translate-x-1/2 rounded-full bg-amber-300/20 blur-[120px] dark:bg-amber-500/10" />
+  </div>;
+}/** The AI page grows with the window: 1x at 1280x760, up to 1.5x on large displays. */
+function useViewportZoom() {
+  const calc = () => Math.round(Math.min(1.5, Math.max(1, Math.min(window.innerWidth / 1280, window.innerHeight / 760))) * 100) / 100;
+  const [zoom, setZoom] = useState(calc);
+  useEffect(() => { const update = () => setZoom(calc()); window.addEventListener('resize', update); return () => window.removeEventListener('resize', update); }, []);
+  return zoom;
+}
+/** "18 / 20 messages left today", "Unlimited messages", or when none are left, the time the count resets. */
+function UsageNote({ usage }: { usage: AIUsageResponse }) {
+  const { t, locale } = useLanguage();
+  const { session } = useSession();
+  if (usage.isUnlimited) return <span className="ml-1">· {t('Unlimited messages')}</span>;
+  if (usage.remaining === 0) {
+    const time = new Date(usage.resetsAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: session?.user.timeZoneId });
+    return <span role="status" className="ml-1 font-medium text-negative">· {t('No messages left today. More at {time}.', { time })}</span>;
+  }
+  return <span className="ml-1">· {t('{left} / {limit} messages left today', { left: usage.remaining ?? 0, limit: usage.dailyLimit ?? 0 })}</span>;
+}
+export function AmbientAIPage() {
+  const { t } = useLanguage();
+  const { open, closeAssistant, financial, messages, conversations, conversationId, historyBusy, selectConversation, removeConversation, busy, clear, storageError, send, usage } = useAmbientAI();
+  // Out of messages today: keep the history readable, but stop new questions until the count resets.
+  const exhausted = usage?.remaining === 0;
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const zoom = useViewportZoom();
+  // Entrance timeline (GSAP, loaded on demand). 0.38s lines it up with the content fade that follows the surface
+  // growing out of the button (FocusedAssistant).
+  // Opened straight from a /assistant link (page load): show the content at once, without the intro and without
+  // downloading GSAP. The intro is for opening from the AI button; it plays from the next open on.
+  const introRoot = useRef<HTMLDivElement>(null);
+  const skipIntro = useRef(OPENED_BY_LINK);
+  const wasOpen = useRef(false);
+  useLayoutEffect(() => {
+    if (!open) { if (wasOpen.current) skipIntro.current = false; return; }
+    wasOpen.current = true;
+    if (skipIntro.current || !introRoot.current) return;
+    return playAiIntro(introRoot.current, 0.38);
+  }, [open]);
+  // `custom` reaches the exiting surface at the moment of closing, so it shrinks into where the button is now
+  // (at rest), not where it was when the assistant opened (possibly lifted by hover or pressed in).
+  return <AnimatePresence custom={open ? undefined : aiButtonShape(true)} onExitComplete={() => window.dispatchEvent(new Event(AI_CLOSED_EVENT))}>{open && <FocusedAssistant key="ai" onClose={closeAssistant}>
+    <EdgeGlow />
+    <div ref={introRoot} style={{ zoom, height: `calc(100dvh / ${zoom})` }} className={`relative z-10 mx-auto flex w-full max-w-[780px] flex-col px-5 pb-5 pt-5 sm:px-8 sm:py-8`}>
+      <div data-ai-intro="header" className="mb-5 flex shrink-0 items-center justify-between gap-3"><span className="flex items-center gap-2 text-sm font-medium"><IconButton icon={ArrowLeft} label={t("Back")} onClick={closeAssistant} /><kbd className="-ml-1 mr-1 hidden rounded-md border border-line px-1.5 py-0.5 font-sans text-[11px] font-normal text-muted sm:block">esc</kbd><Sparkles className="h-4 w-4 text-ai" />MoneyMind<span className="text-muted">/</span><span className="text-muted">{t("AI Assistant")}</span></span><div className="flex items-center gap-2"><IconButton icon={History} label={t("Chat history")} onClick={() => setHistoryOpen(value => !value)} disabled={busy} /><IconButton icon={Plus} label={t("Start a new conversation")} onClick={() => { clear(); setHistoryOpen(false); }} disabled={busy} /></div></div>
+      {historyOpen && <div className="mb-4 max-h-60 shrink-0 overflow-y-auto rounded-2xl border border-line bg-surface/80 p-2 backdrop-blur-xl">
+        <div className="flex items-center justify-between px-2 py-2"><p className="text-sm font-semibold">{t('Chat history')}</p><span className="text-xs text-muted">{conversations.length}</span></div>
+        {!conversations.length ? <p className="px-2 py-4 text-sm text-muted">{t('No saved conversations yet.')}</p> : <div className="space-y-1">{conversations.map(item => <div key={item.id} className={`flex items-center gap-2 rounded-xl ${item.id === conversationId ? 'bg-brand/15' : 'hover:bg-base/60'}`}>
+          <button type="button" disabled={historyBusy} onClick={() => void selectConversation(item.id).then(() => setHistoryOpen(false))} className="min-w-0 flex-1 px-3 py-3 text-left text-sm focus-visible:ring-2 focus-visible:ring-ai"><span className="block truncate font-medium">{item.title}</span></button>
+          <button type="button" disabled={historyBusy} aria-label={t('Delete conversation')} onClick={() => setPendingDelete({ id: item.id, title: item.title })} className="mr-2 flex size-10 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-negative/10 hover:text-negative focus-visible:ring-2 focus-visible:ring-negative"><Trash2 className="size-4" /></button>
+        </div>)}</div>}
+      </div>}
+      <div data-ai-intro="context" className="mb-4 flex shrink-0 flex-wrap items-center justify-center gap-2 text-xs text-muted"><span className="h-1.5 w-1.5 rounded-full bg-positive" />{t(financial.page)}<ChevronRight className="h-3 w-3" /><span>{t(financial.period)}</span>{financial.selection?.transaction && <span>· {financial.selection.transaction.description}</span>}</div>
+      {!messages.length ? <div className="flex min-h-0 flex-1 flex-col justify-center"><div className="mb-8 text-center"><div data-ai-intro="icon" className="glass mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl !border-ai-to/30 bg-gradient-to-br from-ai-from/20 via-ai-to/15 to-ai-warm/15"><Sparkles className="h-7 w-7 text-ai" /></div><p data-ai-intro="kicker" className="mb-3 text-xs font-medium tracking-[0.16em] text-ai">{t("A LITTLE CLARITY GOES A LONG WAY")}</p><h2 id="ambient-title" className="text-[26px] font-medium leading-tight tracking-[-0.04em] sm:text-[32px]"><span data-ai-intro="title-line" className="inline-block">{t("How can I help with")}</span><br className="hidden sm:block" />{' '}<span data-ai-intro="title-line" className="inline-block">{t("your finances today?")}</span></h2><p data-ai-intro="subtitle" className="mt-4 text-sm text-muted">{t("Your numbers. Your context. A clearer perspective.")}</p></div><div data-ai-intro="input" className="mb-5"><AIInput onSubmit={send} busy={busy || exhausted} /></div><div data-ai-intro="chips"><PromptChips /></div></div> : <><h2 id="ambient-title" className="sr-only">{t("Your financial conversation")}</h2><Conversation /><div className="shrink-0 space-y-3 pt-4"><PromptChips limit={2} /><AIInput onSubmit={send} busy={busy || exhausted} /></div></>}
+      <p data-ai-intro="footer" className="mt-5 flex shrink-0 items-center justify-center gap-2 text-center text-xs leading-5 text-muted"><ShieldCheck className="h-3.5 w-3.5 shrink-0" />{storageError ? t("Storage unavailable · Conversation lasts until refresh.") : t("Gemini AI · Encrypted chat history · Not financial advice")}{usage && <UsageNote usage={usage} />}</p>
+      {pendingDelete && <Modal title={t('Delete this conversation?')} onClose={() => !deleting && setPendingDelete(null)}>
+        <p className="text-sm leading-6 text-muted">{t('“{title}” and all of its messages will be deleted permanently. This cannot be undone.', { title: pendingDelete.title })}</p>
+        <div className="mt-6 flex justify-end gap-3">
+          <Button secondary disabled={deleting} onClick={() => setPendingDelete(null)}>{t('Cancel')}</Button>
+          <Button className="!bg-negative !text-on-negative" disabled={deleting} onClick={() => {
+            setDeleting(true);
+            void removeConversation(pendingDelete.id).finally(() => { setDeleting(false); setPendingDelete(null); });
+          }}>{t('Delete')}</Button>
+        </div>
+      </Modal>}
+    </div>
+  </FocusedAssistant>}</AnimatePresence>;
+}
+/**
+ * `clip-path` matching the floating AI button: its box with fully rounded ends (circle, or pill when expanded).
+ * The size comes from offsetWidth/offsetHeight, which ignore the `active:scale-95` press, so a click does not
+ * shrink the shape. `collapsed` uses the resting circle (square, aligned to the right edge) for closing.
+ */
+type ButtonShape = { clip: string; left: number; top: number; width: number; height: number };
+function aiButtonShape(collapsed: boolean): ButtonShape {
+  const el = document.querySelector<HTMLElement>('[data-ai-trigger]');
+  // The overlay is `fixed inset-0`, so it spans the viewport *without* the scrollbar (reserved by scrollbar-gutter).
+  // innerWidth includes the scrollbar and would push the right inset ~15px too far, notching the circle.
+  const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
+  const box = el?.getBoundingClientRect();
+  const height = el?.offsetHeight || 56, width = collapsed ? height : (el?.offsetWidth || 56);
+  // Centre of the button as drawn (includes the hover lift), then the unscaled size around it.
+  const cy = box?.width ? box.top + box.height / 2 : h - 52;
+  const right = box?.width ? box.left + box.width / 2 + (el!.offsetWidth / 2) : w - 24;
+  const top = cy - height / 2, left = right - width;
+  return { clip: `inset(${top}px ${w - right}px ${h - (top + height)}px ${left}px round ${height / 2}px)`, left, top, width, height };
+}
+function FocusedAssistant({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+  // The surface is clipped to the button's own box with rounded corners (a circle, or a pill while the button is
+  // expanded on hover) and opens into the full-screen rectangle. Closing reverses it into the button's circle.
+  const [openFrom] = useState(() => aiButtonShape(false));
+  const full = 'inset(0px 0px 0px 0px round 0px)';
+  const ease = [0.22, 1, 0.36, 1] as const;
+  useEffect(() => {
+    const oldOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const focusable = () => Array.from(ref.current!.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [tabindex="0"]'));
+    // Focus the input after the surface has grown: focusing forces a layout (and scroll) that would land in the
+    // middle of the open animation. preventScroll: the page is fixed, there is nothing to scroll into view.
+    const focusTimer = window.setTimeout(() => (ref.current?.querySelector('input') as HTMLInputElement | null)?.focus({ preventScroll: true }), reduce ? 0 : 560);
+    const key = (e: KeyboardEvent) => {
+      // A confirm dialog opened on top of the assistant handles its own Escape and Tab.
+      if ([...document.querySelectorAll('[aria-modal="true"]')].some(el => el !== ref.current)) return;
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
+      if (e.key !== 'Tab') return;
+      const all = focusable(), first = all[0], last = all[all.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !ref.current?.contains(document.activeElement))) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', key);
+    return () => { window.clearTimeout(focusTimer); document.body.style.overflow = oldOverflow; document.removeEventListener('keydown', key); };
+  }, [onClose]);
+  return <m.div ref={ref} role="dialog" aria-modal="true" aria-labelledby="ambient-title" className="ai-theme fixed inset-0 z-[80]">
+    {/* dims and blurs the dashboard that is shrinking behind */}
+    <m.div aria-hidden="true" className="absolute inset-0 backdrop-blur-md" style={{ background: 'light-dark(rgba(24, 24, 27, 0.4), rgba(20, 20, 23, 0.78))' }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} />
+    {/* the surface: circle/pill at the button -> full-screen rectangle, and back into the circle on close */}
+    <m.div aria-hidden="true" className="ai-backdrop absolute inset-0" style={{ willChange: 'clip-path' }}
+      initial={{ clipPath: openFrom.clip }} animate={{ clipPath: full, transition: reduce ? { duration: 0 } : { duration: 0.55, ease } }}
+      variants={{ closed: (to?: ButtonShape) => ({ clipPath: (to ?? aiButtonShape(true)).clip, transition: reduce ? { duration: 0 } : { delay: 0.1, duration: 0.45, ease } }) }}
+      exit="closed">
+      {/* A copy of the button (gradient + icon) sitting exactly on it. It is gone within the first ~5% of opening
+          (0.03s of 0.55s) and fades back in during the last part of closing, so the page turns into the button. */}
+      <m.div className="absolute flex items-center justify-center bg-gradient-to-br from-ai-from via-ai-to to-ai-warm text-on-ai"
+        style={{ left: openFrom.left, top: openFrom.top, width: openFrom.width, height: openFrom.height, borderRadius: 9999 }}
+        initial={{ opacity: 1 }} animate={{ opacity: 0, transition: { duration: reduce ? 0 : 0.03 } }}
+        variants={{ closed: (to?: ButtonShape) => {
+          const b = to ?? aiButtonShape(true);
+          const jump = { duration: 0 };
+          return { opacity: 1, left: b.left, top: b.top, width: b.width, height: b.height,
+            transition: { left: jump, top: jump, width: jump, height: jump, opacity: reduce ? jump : { delay: 0.3, duration: 0.25 } } };
+        } }}
+        exit="closed">
+        <Sparkles className="h-6 w-6" aria-hidden="true" />
+      </m.div>
+    </m.div>
+    {/* Opening is the close played backwards: the surface first grows out of the button to full screen, and only
+        then the page fades in (closing fades the page out first, then shrinks the surface). The staggered
+        ai-rise entrance is switched off here so the content does not scale up on its own while the surface grows. */}
+    <m.div className="absolute inset-0 overflow-y-auto ai-scroll [&_.ai-rise]:![animation:none] [&_.ai-rise]:!opacity-100" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: reduce ? 0 : 0.4, duration: 0.1 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>{children}</m.div>
+  </m.div>;
+}function Conversation() {
+  const { t } = useLanguage();
+  const { messages, busy } = useAmbientAI();
+  const ref = useRef<HTMLDivElement>(null);
+  const last = messages[messages.length - 1];
+  // Waiting for the first words: nothing of the reply is on screen yet.
+  const waiting = busy && !(last?.role === 'assistant' && last.text);
+  useEffect(() => {
+    ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+  }, [messages.length, busy, last?.text.length, last?.actions?.length]);
+  return <div ref={ref} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-2"><div aria-live="polite" aria-relevant="additions" className="space-y-4">{messages.map(message => <AIMessage key={message.id} message={message} />)}</div>{waiting && <div role="status" className="space-y-3 py-5"><span className="flex items-center gap-2 text-xs text-ai"><Sparkles className="h-4 w-4 motion-safe:animate-pulse" />{t("Reading your financial context")}<span className="flex gap-1">{[0, 1, 2].map(i => <span key={i} className="h-1 w-1 rounded-full bg-ai motion-safe:animate-pulse" style={{ animationDelay: `${i * 180}ms` }} />)}</span></span><div className="h-2.5 w-5/6 rounded bg-line motion-safe:animate-pulse" /><div className="h-2.5 w-2/3 rounded bg-line motion-safe:animate-pulse" /></div>}</div>;
+}
